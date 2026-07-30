@@ -12,7 +12,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "electron:start": "electron .",
-    "electron:build": "npm run build && electron-builder -m"
+    "electron:build": "npm run build && electron-builder -m",
+    "validate": "tsx scripts/validate-formulas.ts"
   },
   "build": {
     "appId": "com.d10g.math-harmonics",

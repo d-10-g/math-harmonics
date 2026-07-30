@@ -264,7 +264,7 @@ function createOrganicShaderVariations(startId: number, count: number): ShaderPr
       name: `Organic PDE: ${style.name} ${variant.toString().padStart(2, '0')}`,
       category: 'Organic PDE shaders',
       fragmentShader: buildOrganicFlowShader(style.key, variant, index),
-      description: 'Organic PDE/root-field shader variation replacing an older generated material.'
+      description: `${style.name} palette, seed variant ${variant.toString().padStart(2, '0')} of the organic flow field.`
     };
   });
 }

@@ -146,7 +146,7 @@ function createOrganicFormulaVariations(startId: number, count: number): Formula
       y,
       z,
       geometryMode: modes[family],
-      description: 'Organic PDE/root-field variation replacing an older generated harmonic preset.'
+      description: `${familyNames[family]} with ${lobes} primary lobes and a ${secondary}-cycle drift harmonic.`
     };
   });
 }
@@ -333,223 +333,284 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     description: "Simulated double pendulum trace."
   }
 ,
-  {
+    {
     id: "21",
     name: "Golden Spiral",
-    x: "sin(2 * p + t) * (1 + 0.5 * cos(3 * p))",
-    y: "cos(1 * p + t) * (1 + 0.5 * sin(3 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "cos(p + t) * exp(0.16 * p)",
+    y: "sin(p + t) * exp(0.16 * p)",
+    z: "0.35 * exp(0.16 * p) * sin(2 * p + t) * 0.6",
+    geometryMode: "tube",
+    description: "Logarithmic spiral with golden-ratio growth, rotating with phase."
   },
-  {
+    {
     id: "22",
     name: "Quantum String",
-    x: "sin(4 * p + t) * (1 + 0.5 * cos(2 * p))",
-    y: "cos(4 * p + t) * (1 + 0.5 * sin(2 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "cos(p) * (3 + 0.5 * sin(8 * p - 2 * t))",
+    y: "sin(p) * (3 + 0.5 * sin(8 * p - 2 * t))",
+    z: "0.8 * sin(8 * p - 2 * t) + 0.3 * sin(13 * p + t)",
+    geometryMode: "ribbon",
+    description: "Standing wave on a closed string with an eighth-harmonic vibration mode."
   },
-  {
+    {
     id: "23",
     name: "Magnetic Field",
-    x: "sin(2 * p + t) * (1 + 0.5 * cos(1 * p))",
-    y: "cos(9 * p + t) * (1 + 0.5 * sin(1 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "4 * sin(p)^2 * cos(p + 0.3 * t)",
+    y: "4 * sin(p)^2 * sin(p + 0.3 * t)",
+    z: "1.5 * cos(p) * sin(2 * p + t)",
+    geometryMode: "tube",
+    description: "Dipole field-line lobes: r = L sin^2(theta), slowly precessing."
   },
-  {
+    {
     id: "24",
     name: "Pulsar Beam",
-    x: "sin(7 * p + t) * (1 + 0.5 * cos(1 * p))",
-    y: "cos(1 * p + t) * (1 + 0.5 * sin(1 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "cos(0.5 * p + 4 * t) * p * 0.16",
+    y: "sin(0.5 * p + 4 * t) * p * 0.16",
+    z: "2.2 * cos(p) + 0.6 * sin(12 * p + 6 * t)",
+    geometryMode: "vortex",
+    description: "Lighthouse sweep: a fast-rotating beam spiraling out from the core."
   },
-  {
+    {
     id: "25",
     name: "Orbital Decay",
-    x: "sin(2 * p + t) * (1 + 0.5 * cos(2 * p))",
-    y: "cos(4 * p + t) * (1 + 0.5 * sin(2 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "(6 - 0.21 * p) * cos(p * (1 + 0.04 * p) + t)",
+    y: "(6 - 0.21 * p) * sin(p * (1 + 0.04 * p) + t)",
+    z: "0.24 * (6 - 0.21 * p) * sin(6 * p + 2 * t)",
+    geometryMode: "tube",
+    description: "Inspiral: radius decays while angular frequency chirps upward."
   },
-  {
+    {
     id: "26",
     name: "Torus Knot 3,8",
-    x: "sin(9 * p + t) * (1 + 0.5 * cos(5 * p))",
-    y: "cos(1 * p + t) * (1 + 0.5 * sin(5 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "(3 + cos(2 * p + t)) * cos(0.75 * p)",
+    y: "(3 + cos(2 * p + t)) * sin(0.75 * p)",
+    z: "sin(2 * p + t)",
+    geometryMode: "tube",
+    description: "A true (3,8) torus knot: three toroidal loops, eight poloidal windings."
   },
-  {
+    {
     id: "27",
     name: "Chladni Plate",
-    x: "sin(4 * p + t) * (1 + 0.5 * cos(4 * p))",
-    y: "cos(9 * p + t) * (1 + 0.5 * sin(4 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "cos(p) * (2.5 + 1.2 * cos(5 * p) * cos(3 * p + t))",
+    y: "sin(p) * (2.5 + 1.2 * cos(5 * p) * cos(3 * p + t))",
+    z: "1.4 * sin(5 * p) * sin(3 * p + t)",
+    geometryMode: "terrain",
+    description: "Nodal-line rosette of a vibrating plate in a (5,3) resonance mode."
   },
-  {
+    {
     id: "28",
-    name: "Lorentz Attractor (2D)",
-    x: "sin(4 * p + t) * (1 + 0.5 * cos(5 * p))",
-    y: "cos(8 * p + t) * (1 + 0.5 * sin(5 * p))",
-    description: "Auto-generated harmonic variation."
+    name: "Lorenz Butterfly (2D)",
+    x: "3.8 * cos(p + 0.3 * sin(3 * p + t)) / (1 + sin(p)^2)",
+    y: "3.4 * sin(p + 0.3 * sin(3 * p + t)) * cos(p) / (1 + sin(p)^2)",
+    z: "1.2 * sin(2 * p + t)",
+    geometryMode: "ribbon",
+    description: "Two-lobed lemniscate wings with chaotic phase wobble, after Lorenz."
   },
-  {
+    {
     id: "29",
     name: "Strange Loop",
-    x: "sin(5 * p + t) * (1 + 0.5 * cos(2 * p))",
-    y: "cos(1 * p + t) * (1 + 0.5 * sin(2 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "(2.4 + 1.1 * cos(1.5 * p + 0.5 * t)) * cos(p)",
+    y: "(2.4 + 1.1 * cos(1.5 * p + 0.5 * t)) * sin(p)",
+    z: "1.1 * sin(1.5 * p + 0.5 * t)",
+    geometryMode: "tube",
+    description: "A closed loop that threads itself: 3:2 winding with slow phase drift."
   },
-  {
+    {
     id: "30",
     name: "Harmonic Oscillator",
-    x: "sin(7 * p + t) * (1 + 0.5 * cos(3 * p))",
-    y: "cos(6 * p + t) * (1 + 0.5 * sin(3 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "0.32 * p - 4",
+    y: "3.2 * exp(-0.09 * p) * cos(3 * p + t)",
+    z: "1.9 * exp(-0.09 * p) * sin(3 * p + t)",
+    geometryMode: "ribbon",
+    description: "Damped oscillation: exponential envelope over a rotating phasor."
   },
-  {
+    {
     id: "31",
     name: "Mobius Strip Edge",
-    x: "sin(3 * p + t) * (1 + 0.5 * cos(3 * p))",
-    y: "cos(4 * p + t) * (1 + 0.5 * sin(3 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "(3 + 0.9 * cos(0.25 * p + 0.2 * t)) * cos(0.5 * p)",
+    y: "(3 + 0.9 * cos(0.25 * p + 0.2 * t)) * sin(0.5 * p)",
+    z: "0.9 * sin(0.25 * p + 0.2 * t)",
+    geometryMode: "ribbon",
+    description: "The single boundary edge of a Mobius band: two turns, one half-twist."
   },
-  {
+    {
     id: "32",
     name: "Event Horizon",
-    x: "sin(2 * p + t) * (1 + 0.5 * cos(4 * p))",
-    y: "cos(2 * p + t) * (1 + 0.5 * sin(4 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "3.1 * cos(p) / (1 + 0.25 * sin(6 * p + t)^2)",
+    y: "3.1 * sin(p) / (1 + 0.25 * sin(6 * p + t)^2)",
+    z: "0.5 * sin(6 * p + t) / (1 + 0.3 * cos(3 * p))",
+    geometryMode: "lathe",
+    description: "Photon-ring circle warped by six-fold frame-dragging ripples."
   },
-  {
+    {
     id: "33",
     name: "Synapse Spark",
-    x: "sin(2 * p + t) * (1 + 0.5 * cos(3 * p))",
-    y: "cos(6 * p + t) * (1 + 0.5 * sin(3 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "4 * cos(p) + 0.45 * sin(17 * p + 5 * t)",
+    y: "2.2 * sin(2 * p + t) + 0.4 * sin(23 * p - 4 * t)",
+    z: "1.2 * sin(9 * p + 3 * t) * cos(2 * p)",
+    geometryMode: "constellation",
+    description: "Neural arc with high-frequency jitter riding a slow carrier loop."
   },
-  {
+    {
     id: "34",
     name: "Gravitational Wave",
-    x: "sin(5 * p + t) * (1 + 0.5 * cos(4 * p))",
-    y: "cos(1 * p + t) * (1 + 0.5 * sin(4 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "0.3 * p - 3.8",
+    y: "(0.5 + 0.09 * p) * sin(0.8 * p * (1 + 0.09 * p) + 2 * t)",
+    z: "0.7 * (0.5 + 0.09 * p) * cos(0.8 * p * (1 + 0.09 * p) + 2 * t)",
+    geometryMode: "ripple",
+    description: "Binary-merger chirp: amplitude and frequency rise together."
   },
-  {
+    {
     id: "35",
     name: "Bessel Function",
-    x: "sin(9 * p + t) * (1 + 0.5 * cos(4 * p))",
-    y: "cos(2 * p + t) * (1 + 0.5 * sin(4 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "cos(p) * (2 + 1.6 * cos(2.4 * p - t) / sqrt(0.4 * p + 1))",
+    y: "sin(p) * (2 + 1.6 * cos(2.4 * p - t) / sqrt(0.4 * p + 1))",
+    z: "1.8 * sin(2.4 * p - t) / sqrt(0.4 * p + 1)",
+    geometryMode: "ripple",
+    description: "Radially decaying oscillation ~ J0: cos(kr)/sqrt(r) drumhead rings."
   },
-  {
+    {
     id: "36",
     name: "String Theory",
-    x: "sin(2 * p + t) * (1 + 0.5 * cos(3 * p))",
-    y: "cos(9 * p + t) * (1 + 0.5 * sin(3 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "(3 + 0.8 * cos(6 * p + t)) * cos(p) + 0.2 * sin(25 * p)",
+    y: "(3 + 0.8 * cos(6 * p + t)) * sin(p) + 0.2 * cos(25 * p)",
+    z: "0.8 * sin(6 * p + t) + 0.2 * sin(25 * p + 2 * t)",
+    geometryMode: "helix",
+    description: "A macroscopic loop with a compactified micro-dimension wound 25 times."
   },
-  {
+    {
     id: "37",
     name: "Electron Cloud",
-    x: "sin(6 * p + t) * (1 + 0.5 * cos(1 * p))",
-    y: "cos(4 * p + t) * (1 + 0.5 * sin(1 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "3.4 * sin(2 * p) * cos(3 * p + t)",
+    y: "3.4 * sin(2 * p) * sin(3 * p + t)",
+    z: "3.4 * cos(2 * p) * sin(p + 0.5 * t)",
+    geometryMode: "constellation",
+    description: "Orbital lobes traced on a sphere: a spherical Lissajous d-shell."
   },
-  {
+    {
     id: "38",
     name: "Supernova Core",
-    x: "sin(1 * p + t) * (1 + 0.5 * cos(3 * p))",
-    y: "cos(4 * p + t) * (1 + 0.5 * sin(3 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "cos(11 * p) * (1.2 + 2.6 * abs(sin(0.5 * p + 0.5 * t)))",
+    y: "sin(11 * p) * (1.2 + 2.6 * abs(sin(0.5 * p + 0.5 * t)))",
+    z: "1.5 * sin(7 * p - t) * abs(sin(0.5 * p))",
+    geometryMode: "crystal",
+    description: "Shockfront burst: eleven-fold shell breathing between core and blast."
   },
-  {
+    {
     id: "39",
     name: "Stellar Nursery",
-    x: "sin(2 * p + t) * (1 + 0.5 * cos(1 * p))",
-    y: "cos(4 * p + t) * (1 + 0.5 * sin(1 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "3 * cos(p + 0.8 * sin(2 * p + 0.3 * t)) + 0.5 * cos(5 * p)",
+    y: "3 * sin(p + 0.8 * cos(3 * p - 0.3 * t))",
+    z: "1.3 * sin(4 * p + 0.4 * t) + 0.5 * cos(2 * p)",
+    geometryMode: "shell",
+    description: "Billowing molecular-cloud folds with slow internal churn."
   },
-  {
+    {
     id: "40",
     name: "Wormhole Geometry",
-    x: "sin(7 * p + t) * (1 + 0.5 * cos(4 * p))",
-    y: "cos(5 * p + t) * (1 + 0.5 * sin(4 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "1.4 * cosh(0.8 * (0.25 * p - 3.1416)) * cos(2 * p + t)",
+    y: "1.4 * cosh(0.8 * (0.25 * p - 3.1416)) * sin(2 * p + t)",
+    z: "2.2 * (0.25 * p - 3.1416)",
+    geometryMode: "lathe",
+    description: "Hyperboloid throat: a geodesic winding through the narrow neck."
   },
-  {
+    {
     id: "41",
     name: "Navier-Stokes Flow",
-    x: "sin(6 * p + t) * (1 + 0.5 * cos(3 * p))",
-    y: "cos(3 * p + t) * (1 + 0.5 * sin(3 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "0.28 * p - 3.5 + 0.9 * cos(2 * p + t)",
+    y: "1.8 * sin(2 * p + t) + 0.5 * sin(5 * p - t)",
+    z: "0.8 * cos(3 * p + 0.5 * t)",
+    geometryMode: "vortex",
+    description: "Von Karman vortex street: alternating eddies shed downstream."
   },
-  {
+    {
     id: "42",
     name: "Fibonacci Sequence",
-    x: "sin(6 * p + t) * (1 + 0.5 * cos(3 * p))",
-    y: "cos(4 * p + t) * (1 + 0.5 * sin(3 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "0.62 * sqrt(3 * p) * cos(7.19988 * p + 0.2 * t)",
+    y: "0.62 * sqrt(3 * p) * sin(7.19988 * p + 0.2 * t)",
+    z: "0.5 * sin(3 * p + t)",
+    geometryMode: "constellation",
+    description: "Phyllotaxis: seeds placed by the golden angle, r ~ sqrt(n)."
   },
-  {
+    {
     id: "43",
-    name: "Schrodinger Wave",
-    x: "sin(2 * p + t) * (1 + 0.5 * cos(5 * p))",
-    y: "cos(3 * p + t) * (1 + 0.5 * sin(5 * p))",
-    description: "Auto-generated harmonic variation."
+    name: "Schrodinger Wave Packet",
+    x: "0.3 * p - 3.8",
+    y: "3 * exp(-0.03 * (p - 12.57)^2) * cos(3 * p - 2 * t)",
+    z: "3 * exp(-0.03 * (p - 12.57)^2) * sin(3 * p - 2 * t)",
+    geometryMode: "ribbon",
+    description: "A Gaussian wave packet: complex phasor under a bell envelope."
   },
-  {
+    {
     id: "44",
     name: "Plasma Toroid",
-    x: "sin(4 * p + t) * (1 + 0.5 * cos(4 * p))",
-    y: "cos(3 * p + t) * (1 + 0.5 * sin(4 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "(3.2 + 0.9 * cos(3.5 * p + t)) * cos(0.5 * p)",
+    y: "(3.2 + 0.9 * cos(3.5 * p + t)) * sin(0.5 * p)",
+    z: "0.9 * sin(3.5 * p + t)",
+    geometryMode: "tube",
+    description: "Tokamak confinement: helical field line winding a torus 7:2."
   },
-  {
+    {
     id: "45",
     name: "Fusion Core",
-    x: "sin(7 * p + t) * (1 + 0.5 * cos(5 * p))",
-    y: "cos(5 * p + t) * (1 + 0.5 * sin(5 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "cos(p) * (2 + 1.3 * sin(6 * p) * sin(2 * t))",
+    y: "sin(p) * (2 + 1.3 * sin(6 * p) * sin(2 * t))",
+    z: "1.6 * cos(6 * p) * sin(2 * t + p)",
+    geometryMode: "crystal",
+    description: "Six-lobed core pulsing radially at twice the phase rate."
   },
-  {
+    {
     id: "46",
     name: "Mandelbrot Edge",
-    x: "sin(4 * p + t) * (1 + 0.5 * cos(1 * p))",
-    y: "cos(6 * p + t) * (1 + 0.5 * sin(1 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "2.6 * (cos(p) / 2 - cos(2 * p) / 4) + 0.12 * sin(15 * p + t)",
+    y: "2.6 * (sin(p) / 2 - sin(2 * p) / 4) + 0.12 * cos(15 * p + t)",
+    z: "0.4 * sin(8 * p + t)",
+    geometryMode: "extrude",
+    description: "The main cardioid boundary of the Mandelbrot set, with edge shimmer."
   },
-  {
+    {
     id: "47",
     name: "Julia Set Orbit",
-    x: "sin(4 * p + t) * (1 + 0.5 * cos(3 * p))",
-    y: "cos(1 * p + t) * (1 + 0.5 * sin(3 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "3 * cos(2 * p + 1.2 * sin(3 * p - t))",
+    y: "3 * sin(2 * p + 1.2 * cos(3 * p - t))",
+    z: "1.2 * cos(5 * p + t)",
+    geometryMode: "mandala",
+    description: "Phase-modulated orbit echoing Julia-set spiral arms."
   },
-  {
+    {
     id: "48",
     name: "Chaos Attractor",
-    x: "sin(7 * p + t) * (1 + 0.5 * cos(1 * p))",
-    y: "cos(5 * p + t) * (1 + 0.5 * sin(1 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "3 * cos(p + 0.2 * t) + 1.3 * cos(2.718 * p)",
+    y: "3 * sin(p + 0.2 * t) + 1.3 * sin(3.1416 * p)",
+    z: "1.5 * sin(1.618 * p + t)",
+    geometryMode: "tube",
+    description: "Quasi-periodic torus flow with incommensurate frequencies (e, pi, phi)."
   },
-  {
+    {
     id: "49",
     name: "Dark Matter Halo",
-    x: "sin(4 * p + t) * (1 + 0.5 * cos(2 * p))",
-    y: "cos(6 * p + t) * (1 + 0.5 * sin(2 * p))",
-    description: "Auto-generated harmonic variation."
+    x: "3.6 * sin(5 * p) * cos(8 * p + 0.2 * t)",
+    y: "3.6 * sin(5 * p) * sin(8 * p + 0.2 * t)",
+    z: "3.6 * cos(5 * p)",
+    geometryMode: "constellation",
+    description: "A spherical Lissajous shell sampling an invisible halo."
   },
-  {
+    {
     id: "50",
     name: "Fractal Canopy",
-    x: "sin(8 * p + t) * (1 + 0.5 * cos(4 * p))",
-    y: "cos(7 * p + t) * (1 + 0.5 * sin(4 * p))",
-    description: "Auto-generated harmonic variation."
-  }
-,
+    x: "2.2 * sin(p) + 1.1 * sin(2 * p + 0.3 * t) + 0.55 * sin(4 * p + 0.6 * t) + 0.28 * sin(8 * p + t)",
+    y: "2.2 * cos(p) + 1.1 * cos(2 * p + 0.3 * t) + 0.55 * cos(4 * p + 0.6 * t) + 0.28 * cos(8 * p + t)",
+    z: "0.5 * sin(16 * p + t) + 0.8 * cos(3 * p)",
+    geometryMode: "lattice",
+    description: "Weierstrass-style self-similar sum: each octave adds finer branches."
+  },
   {
     id: "51",
     name: "Quantum Foam Orbit",
     x: "sin(7 * p + t) * exp(cos(4 * p))",
     y: "cos(7 * p + t) * exp(sin(4 * p))",
-    description: "Complex quantum foam orbit mathematical simulation."
+    z: "1.4 * sin(4 * p - t) * exp(0.4 * cos(7 * p))",
+    geometryMode: "constellation",
+    description: "Froth of virtual loops: exponential envelopes over fast orbits."
   },
   {
     id: "52",
@@ -875,7 +936,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
   },
   {
     id: "98",
-    name: "MACHOS Orbit",
+    name: "MACHO Orbit",
     x: "sin(5 * p + t) + 0.5 * sin(11 * p + t*2)",
     y: "cos(7 * p + t) + 0.5 * cos(5 * p + t*2)",
     description: "Complex machos orbit mathematical simulation."
