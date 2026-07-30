@@ -80,6 +80,8 @@ interface ControlsProps {
   setShaderQuant: (q: number) => void;
   autoStyle: boolean;
   setAutoStyle: (auto: boolean) => void;
+  cycleFavoritesOnly: boolean;
+  setCycleFavoritesOnly: (only: boolean) => void;
   showEnvironment: boolean;
   setShowEnvironment: (show: boolean) => void;
   lineWidth: number;
@@ -162,6 +164,13 @@ function ShaderField({ value, onChange }: { value: string; onChange: (v: string)
           {error.slice(0, 400)}
         </div>
       )}
+      <div className="flex flex-wrap gap-1.5 pt-1">
+        {['uniform time', 'uniform uBass', 'uniform uMid', 'uniform uTreble', 'vUv', 'vPosition', 'vNormal', 'vViewPosition'].map((hint) => (
+          <span key={hint} className="rounded bg-white/[0.05] border border-white/10 px-2 py-0.5 text-[8px] font-mono text-white/40">
+            {hint}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -239,6 +248,8 @@ export default function Controls({
   setShaderQuant,
   autoStyle,
   setAutoStyle,
+  cycleFavoritesOnly,
+  setCycleFavoritesOnly,
   showEnvironment,
   setShowEnvironment,
   lineWidth,
@@ -902,6 +913,28 @@ export default function Controls({
                 <div className={cn(
                   "w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm",
                   audioSync ? "translate-x-5" : "translate-x-0"
+                )} />
+              </button>
+            </div>
+
+            {/* Favorites-only cycling */}
+            <div className="flex items-center justify-between group">
+              <div>
+                <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Cycle ★ Favorites Only</div>
+                <div className="text-[9px] text-white/30 font-mono">Arrows + Auto-Pilot Stay In Starred Sets</div>
+              </div>
+              <button
+                onClick={() => setCycleFavoritesOnly(!cycleFavoritesOnly)}
+                aria-label="Cycle favorites only"
+                aria-pressed={cycleFavoritesOnly}
+                className={cn(
+                  "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center px-1",
+                  cycleFavoritesOnly ? "bg-amber-500" : "bg-white/10"
+                )}
+              >
+                <div className={cn(
+                  "w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm",
+                  cycleFavoritesOnly ? "translate-x-5" : "translate-x-0"
                 )} />
               </button>
             </div>

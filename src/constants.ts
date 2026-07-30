@@ -75,7 +75,8 @@ export type ShaderCategory =
   | 'WebGPU TSL shaders'
   | 'Volumetric harmonic fields'
   | 'HTMLTexture scene shaders'
-  | 'WebGPU XR lighting shaders';
+  | 'WebGPU XR lighting shaders'
+  | 'Audio-reactive shaders';
 
 function formulaNumber(value: number) {
   return value.toFixed(3).replace(/\.?0+$/, '');
@@ -1647,8 +1648,105 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
   }
 ];
 
+// Superformula content: r(v) = (|cos(m v/4)|^n2 + |sin(m v/4)|^n3)^(-1/n1).
+const SUPERSHAPE_FORMULAS: Formula[] = [
+  {
+    id: "surf-16",
+    name: "Supershape Starfruit",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [-3.1416, 3.1416],
+    qRange: [-1.5708, 1.5708],
+    x: "3 * ((abs(cos(1.25 * p)))^2.2 + (abs(sin(1.25 * p)))^1.7)^(-1 / (4 + 2 * sin(0.3 * t))) * cos(p) * ((abs(cos(q)))^1.6 + (abs(sin(q)))^1.6)^(-1 / 6) * cos(q)",
+    y: "3 * ((abs(cos(1.25 * p)))^2.2 + (abs(sin(1.25 * p)))^1.7)^(-1 / (4 + 2 * sin(0.3 * t))) * sin(p) * ((abs(cos(q)))^1.6 + (abs(sin(q)))^1.6)^(-1 / 6) * cos(q)",
+    z: "3 * ((abs(cos(q)))^1.6 + (abs(sin(q)))^1.6)^(-1 / 6) * sin(q)",
+    style: { material: "jade", lighting: "caustic" },
+    description: "A five-ribbed superformula solid whose sharpness breathes with t."
+  },
+  {
+    id: "surf-17",
+    name: "Supershape Urchin",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [-3.1416, 3.1416],
+    qRange: [-1.5708, 1.5708],
+    x: "2.8 * ((abs(cos(2 * p)))^5 + (abs(sin(2 * p)))^5)^(-1 / (1 + 0.35 * sin(0.4 * t))) * cos(p) * ((abs(cos(0.5 * q)))^2 + (abs(sin(0.5 * q)))^2)^(-1 / 3) * cos(q)",
+    y: "2.8 * ((abs(cos(2 * p)))^5 + (abs(sin(2 * p)))^5)^(-1 / (1 + 0.35 * sin(0.4 * t))) * sin(p) * ((abs(cos(0.5 * q)))^2 + (abs(sin(0.5 * q)))^2)^(-1 / 3) * cos(q)",
+    z: "2.8 * ((abs(cos(0.5 * q)))^2 + (abs(sin(0.5 * q)))^2)^(-1 / 3) * sin(q)",
+    style: { material: "obsidian", lighting: "underlight" },
+    description: "Eight-spined urchin: pointed lobes flex as the exponent oscillates."
+  },
+  {
+    id: "surf-18",
+    name: "Supershape Blossom",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [-3.1416, 3.1416],
+    qRange: [-1.5708, 1.5708],
+    x: "3 * ((abs(cos(1.5 * p)))^(2.5 + 1.5 * sin(0.5 * t)) + (abs(sin(1.5 * p)))^(2.5 - 1.5 * sin(0.5 * t)))^(-1 / 2.4) * cos(p) * ((abs(cos(q)))^2 + (abs(sin(q)))^2)^(-1 / 2) * cos(q)",
+    y: "3 * ((abs(cos(1.5 * p)))^(2.5 + 1.5 * sin(0.5 * t)) + (abs(sin(1.5 * p)))^(2.5 - 1.5 * sin(0.5 * t)))^(-1 / 2.4) * sin(p) * ((abs(cos(q)))^2 + (abs(sin(q)))^2)^(-1 / 2) * cos(q)",
+    z: "3 * ((abs(cos(q)))^2 + (abs(sin(q)))^2)^(-1 / 2) * sin(q)",
+    style: { material: "pearl", lighting: "sunset" },
+    description: "Six petals trade fullness in antiphase, like a blossom opening and closing."
+  },
+  {
+    id: "surf-19",
+    name: "Supershape Gem",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [-3.1416, 3.1416],
+    qRange: [-1.5708, 1.5708],
+    x: "3 * ((abs(cos(0.75 * p)))^3 + (abs(sin(0.75 * p)))^3)^(-1 / 1.2) * cos(p) * ((abs(cos(1.5 * q)))^3 + (abs(sin(1.5 * q)))^3)^(-1 / (5 + 2 * sin(0.25 * t))) * cos(q)",
+    y: "3 * ((abs(cos(0.75 * p)))^3 + (abs(sin(0.75 * p)))^3)^(-1 / 1.2) * sin(p) * ((abs(cos(1.5 * q)))^3 + (abs(sin(1.5 * q)))^3)^(-1 / (5 + 2 * sin(0.25 * t))) * cos(q)",
+    z: "3 * ((abs(cos(1.5 * q)))^3 + (abs(sin(1.5 * q)))^3)^(-1 / (5 + 2 * sin(0.25 * t))) * sin(q)",
+    style: { material: "ruby", lighting: "gallery" },
+    description: "Triangular superformula cut with ridged latitudes — a slowly re-faceting gem."
+  },
+  {
+    id: "ss-01",
+    name: "Supershape Rose 7",
+    x: "((abs(cos(1.75 * p)))^2.8 + (abs(sin(1.75 * p)))^1.4)^(-1 / 2.2) * 3 * cos(p + 0.15 * t)",
+    y: "((abs(cos(1.75 * p)))^2.8 + (abs(sin(1.75 * p)))^1.4)^(-1 / 2.2) * 3 * sin(p + 0.15 * t)",
+    z: "0.8 * sin(3 * p + t)",
+    geometryMode: "tube",
+    style: { material: "velvet", lighting: "sunset" },
+    description: "Seven-petaled superformula rose, slowly precessing."
+  },
+  {
+    id: "ss-02",
+    name: "Supershape Star 5",
+    x: "((abs(cos(1.25 * p)))^4 + (abs(sin(1.25 * p)))^4)^(-1 / (1 + 0.5 * sin(t))) * 3 * cos(p)",
+    y: "((abs(cos(1.25 * p)))^4 + (abs(sin(1.25 * p)))^4)^(-1 / (1 + 0.5 * sin(t))) * 3 * sin(p)",
+    z: "0.6 * cos(5 * p - t)",
+    geometryMode: "ribbon",
+    style: { material: "neon", lighting: "prism" },
+    description: "Five-pointed star whose spikes sharpen and relax with the beat of t."
+  },
+  {
+    id: "ss-03",
+    name: "Supershape Polygon Drift",
+    x: "((abs(cos((1 + 0.5 * sin(0.2 * t)) * p)))^6 + (abs(sin((1 + 0.5 * sin(0.2 * t)) * p)))^6)^(-1 / 9) * 3 * cos(p)",
+    y: "((abs(cos((1 + 0.5 * sin(0.2 * t)) * p)))^6 + (abs(sin((1 + 0.5 * sin(0.2 * t)) * p)))^6)^(-1 / 9) * 3 * sin(p)",
+    z: "0.5 * sin(2 * p + 0.5 * t)",
+    geometryMode: "extrude",
+    style: { material: "ceramic", lighting: "gallery" },
+    description: "A near-polygon whose symmetry count drifts, so the outline never repeats."
+  },
+  {
+    id: "ss-04",
+    name: "Supershape Gear 12",
+    x: "((abs(cos(3 * p)))^5 + (abs(sin(3 * p)))^5)^(-1 / 8) * (2.6 + 0.2 * sin(12 * p)) * cos(p)",
+    y: "((abs(cos(3 * p)))^5 + (abs(sin(3 * p)))^5)^(-1 / 8) * (2.6 + 0.2 * sin(12 * p)) * sin(p)",
+    z: "0.7 * sin(6 * p + t)",
+    geometryMode: "lathe",
+    style: { material: "carbon", lighting: "noir" },
+    description: "Twelve-toothed superformula gear with a wobbling axial ripple."
+  }
+];
+
 export const PRESET_FORMULAS: Formula[] = [
   ...PARAMETRIC_SURFACE_FORMULAS,
+  ...SUPERSHAPE_FORMULAS,
   ...BASE_PRESET_FORMULAS,
   ...ORGANIC_FLOW_FORMULAS,
   ...SELF_MODIFYING_FORMULAS

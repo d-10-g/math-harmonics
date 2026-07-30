@@ -31,7 +31,7 @@ function HudText(props: React.ComponentProps<typeof Text>) {
 }
 import { lightingRigSettings } from '../lib/lighting';
 import { createPhysicalMaterial } from '../lib/materials';
-import { buildParametricGeometry, surfaceMidQ } from '../lib/parametricSurface';
+import { buildParametricGeometry, surfaceMidQ, SURFACE_SEGMENTS_DESKTOP, SURFACE_SEGMENTS_XR } from '../lib/parametricSurface';
 
 // 3D geometry is rebuilt on this cadence instead of every frame; the material
 // time uniform and group motion still animate at full framerate in between.
@@ -1020,6 +1020,12 @@ function FormulaLine({
   // Track the right hand / controller input sources in VR/AR
   const rightController = useXRInputSourceState('controller', 'right');
   const rightHand = useXRInputSourceState('hand', 'right');
+  // Adaptive detail: smaller meshes and a slower rebuild cadence while a
+  // headset is presenting, to protect the 90 Hz frame budget.
+  const xrSession = useXR((state) => state.session);
+  const curveResolution3D = xrSession ? 320 : 500;
+  const surfaceSegments = xrSession ? SURFACE_SEGMENTS_XR : SURFACE_SEGMENTS_DESKTOP;
+  const parametricCadence = xrSession ? 300 : PARAMETRIC_REBUILD_MS;
 
   const scalarTarget = useMemo(() => resolveFormulaScalarTarget(formula), [formula]);
   const scalarValueRef = useRef(scalarTarget.baseScalar);
@@ -1160,13 +1166,13 @@ function FormulaLine({
     }
     const t = getClockTime();
     if (formula.parametric) {
-      if (compiled.valid) setGeometry3D(buildParametricGeometry(formula, compiled, t, scalarValue));
+      if (compiled.valid) setGeometry3D(buildParametricGeometry(formula, compiled, t, scalarValue, surfaceSegments));
     } else {
-      const points = sampleFormulaPoints(compiled, t, scalarValue, resolution);
+      const points = sampleFormulaPoints(compiled, t, scalarValue, curveResolution3D);
       setGeometry3D(buildFormulaGeometry(points, geometryMode, formula.name, t));
     }
     lastRebuildRef.current = performance.now();
-  }, [compiled, formula, geometryMode, scalarValue, show3D]);
+  }, [compiled, formula, geometryMode, scalarValue, show3D, surfaceSegments, curveResolution3D]);
 
   useEffect(() => {
     if (geometry3D) reportVerts(geometry3D.getAttribute('position')?.count ?? 0);
@@ -1213,13 +1219,13 @@ function FormulaLine({
 
     if (show3D) {
       const now = performance.now();
-      const cadence = formula.parametric ? PARAMETRIC_REBUILD_MS : GEOMETRY_REBUILD_MS;
+      const cadence = formula.parametric ? parametricCadence : GEOMETRY_REBUILD_MS;
       if (now - lastRebuildRef.current >= cadence) {
         lastRebuildRef.current = now;
         if (formula.parametric) {
-          if (compiled.valid) setGeometry3D(buildParametricGeometry(formula, compiled, time, nextScalar));
+          if (compiled.valid) setGeometry3D(buildParametricGeometry(formula, compiled, time, nextScalar, surfaceSegments));
         } else {
-          const points = sampleFormulaPoints(compiled, time, nextScalar, resolution);
+          const points = sampleFormulaPoints(compiled, time, nextScalar, curveResolution3D);
           setGeometry3D(buildFormulaGeometry(points, geometryMode, formula.name, time));
         }
       }
@@ -1230,7 +1236,9 @@ function FormulaLine({
 
     if (useRibbon) {
       const positions = ribbonGeometry.attributes.position.array as Float32Array;
-      const halfWidth = lineWidth * 0.5 * 26; // scene units (curve spans ~±13)
+      // Ribbon breathes with the bass while audio sync is running.
+      const audioBoost = clock.audioSync ? 1 + clock.bass * 0.9 : 1;
+      const halfWidth = lineWidth * 0.5 * 26 * audioBoost; // scene units (curve spans ~±13)
       for (let i = 0; i <= resolution; i++) {
         const prev = points[Math.max(0, i - 1)];
         const next = points[Math.min(resolution, i + 1)];
@@ -1658,7 +1666,7 @@ function SpatialWrapper({
 
   return (
     <>
-      {!isPresenting && <OrbitControls makeDefault enableDamping />}
+      {!isPresenting && <DesktopOrbitControls />}
 
       <group
         ref={groupRef}
@@ -1674,6 +1682,21 @@ function SpatialWrapper({
       </group>
     </>
   );
+}
+
+// Orbit controls with sane zoom bounds; double-click anywhere on the canvas
+// snaps the camera back to its starting framing.
+function DesktopOrbitControls() {
+  const { gl } = useThree();
+  const controlsRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleDoubleClick = () => controlsRef.current?.reset();
+    gl.domElement.addEventListener('dblclick', handleDoubleClick);
+    return () => gl.domElement.removeEventListener('dblclick', handleDoubleClick);
+  }, [gl]);
+
+  return <OrbitControls ref={controlsRef} makeDefault enableDamping minDistance={6} maxDistance={70} />;
 }
 
 function HUDButton({ 

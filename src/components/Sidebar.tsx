@@ -47,6 +47,7 @@ function saveFavorites(favorites: Set<string>) {
 
 function categoryLabel(category?: string) {
   if (!category) return 'Core';
+  if (category.includes('Audio-reactive')) return 'Audio';
   if (category.includes('Parametric surfaces')) return 'Surfaces';
   if (category.includes('Parameter-evolving')) return 'Evolving';
   if (category.includes('Coordinate-dependent')) return 'Coordinate';

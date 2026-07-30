@@ -7,7 +7,9 @@ let sharedGL: WebGLRenderingContext | null | undefined;
 function getValidationGL(): WebGLRenderingContext | null {
   if (sharedGL === undefined) {
     try {
-      sharedGL = document.createElement('canvas').getContext('webgl');
+      const canvas = document.createElement('canvas');
+      // WebGL2 to match the app renderer's shader dialect.
+      sharedGL = (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) as WebGLRenderingContext | null;
     } catch {
       sharedGL = null;
     }

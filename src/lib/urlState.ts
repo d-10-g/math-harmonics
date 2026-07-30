@@ -30,6 +30,7 @@ export type SharedState = {
   autoStyle?: boolean;
   showEnvironment?: boolean;
   lineWidth?: number;
+  cycleFavoritesOnly?: boolean;
 };
 
 const GEOMETRY_VALUES: WebGPUGeometryProfile[] = ['auto', 'tube', 'ribbon', 'extrude', 'lathe', 'crystal', 'surface', 'helix', 'shell', 'terrain', 'constellation', 'knot', 'mandala', 'lattice', 'ripple', 'prism', 'vortex'];
@@ -61,6 +62,7 @@ function parseParams(params: URLSearchParams): SharedState {
   if (lighting !== undefined && Number.isFinite(parseFloat(lighting))) state.webgpuLighting = Math.min(3.5, Math.max(0.45, parseFloat(lighting)));
   state.autoStyle = flag('as');
   state.showEnvironment = flag('env');
+  state.cycleFavoritesOnly = flag('cf');
   const lineWidth = read('lw');
   if (lineWidth !== undefined && Number.isFinite(parseFloat(lineWidth))) state.lineWidth = Math.min(0.5, Math.max(0, parseFloat(lineWidth)));
   return state;
@@ -101,6 +103,7 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('as', state.autoStyle ? '1' : '0');
   params.set('env', state.showEnvironment ? '1' : '0');
   params.set('lw', state.lineWidth.toFixed(2));
+  params.set('cf', state.cycleFavoritesOnly ? '1' : '0');
 
   try {
     history.replaceState(null, '', `#${params.toString()}`);

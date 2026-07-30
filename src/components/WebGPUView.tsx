@@ -66,8 +66,10 @@ type WebGPURefs = {
 
 type WebGPUXRStatus = 'checking' | 'available' | 'unavailable' | 'starting' | 'presenting';
 
-const POINT_COUNT = 260;
-const TWO_TURNS = Math.PI * 4;
+// Match the WebGL path's curve domain: p spans [0, 8pi] so multi-loop
+// presets (torus knots, Mobius edges) close instead of being cut short.
+const POINT_COUNT = 320;
+const TWO_TURNS = Math.PI * 8;
 const WEBGPU_XR_REQUEST_EVENT = 'math-harmonics:webgpu-xr-request';
 const WEBGPU_XR_UNAVAILABLE_EVENT = 'math-harmonics:webgpu-xr-unavailable';
 const WEBGPU_XR_DEADZONE = 0.18;
@@ -133,6 +135,7 @@ function paletteForShader(shader: ShaderPreset) {
     [0x180f06, 0xf59e0b, 0x38bdf8]
   ];
 
+  if (shader.category === 'Audio-reactive shaders') return [0x050510, 0x22d3ee, 0xf472b6];
   if (shader.category === 'R185 TSL Lab shaders') return [0x07051a, 0x8b5cf6, 0x22d3ee];
   if (shader.id === 'webgpu-tsl-solar-granulation') return [0x1a0700, 0xff7a18, 0xfff2a3];
   if (shader.id === 'webgpu-tsl-neural-rain') return [0x03110d, 0x22c55e, 0x67e8f9];
@@ -180,6 +183,7 @@ function resolveMaterialProfile(shader: ShaderPreset, profile: WebGPUMaterialPro
   if (shader.id === 'webgpu-tsl-nebula-foam') return 'ruby';
   if (shader.id === 'webgpu-tsl-carbon-spark') return 'carbon';
   if (shader.id === 'webgpu-tsl-quartz-resonator') return 'ice';
+  if (shader.category === 'Audio-reactive shaders') return 'neon';
   if (shader.category === 'R185 TSL Lab shaders') return 'plasma';
   if (shader.category === 'WebGPU TSL shaders') return 'hologram';
   if (shader.category === 'Volumetric harmonic fields') return 'glass';

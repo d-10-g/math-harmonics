@@ -122,6 +122,35 @@ function FooterVerts() {
 // Read once at module load: URL hash > localStorage > defaults.
 const initialShared = loadSharedState();
 
+// Favorites live in the Sidebar's localStorage set as `formula-<id>` /
+// `shader-<id>` keys; cycling reads them fresh each step so stars toggled
+// mid-session take effect immediately.
+const FAVORITES_KEY = 'harmonics.favorites.v1';
+
+function favoriteIdSet(kind: 'formula' | 'shader'): Set<string> {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    if (raw) {
+      return new Set(
+        (JSON.parse(raw) as string[])
+          .filter((key) => key.startsWith(`${kind}-`))
+          .map((key) => key.slice(kind.length + 1))
+      );
+    }
+  } catch {
+    // Unreadable favorites fall back to the full library.
+  }
+  return new Set();
+}
+
+function cyclePool<T extends { id: string }>(all: T[], favoritesOnly: boolean, kind: 'formula' | 'shader'): T[] {
+  if (!favoritesOnly) return all;
+  const favorites = favoriteIdSet(kind);
+  if (favorites.size === 0) return all;
+  const pool = all.filter((item) => favorites.has(item.id));
+  return pool.length > 0 ? pool : all;
+}
+
 export default function App() {
   const [selectedFormula, setSelectedFormula] = useState<Formula>(() => resolveInitialFormula(initialShared));
   const [selectedShader, setSelectedShader] = useState<ShaderPreset>(() => resolveInitialShader(initialShared));
@@ -140,6 +169,9 @@ export default function App() {
   const [webgpuGeometry, setWebgpuGeometry] = useState<WebGPUGeometryProfile>(initialShared.webgpuGeometry ?? 'auto');
   const [webgpuMaterial, setWebgpuMaterial] = useState<WebGPUMaterialProfile>(initialShared.webgpuMaterial ?? 'auto');
   const [autoStyle, setAutoStyle] = useState(initialShared.autoStyle ?? true);
+  const [cycleFavoritesOnly, setCycleFavoritesOnly] = useState(initialShared.cycleFavoritesOnly ?? false);
+  const cycleFavoritesOnlyRef = useRef(cycleFavoritesOnly);
+  useEffect(() => { cycleFavoritesOnlyRef.current = cycleFavoritesOnly; }, [cycleFavoritesOnly]);
   const [showEnvironment, setShowEnvironment] = useState(initialShared.showEnvironment ?? true);
   const [lineWidth, setLineWidth] = useState(initialShared.lineWidth ?? 0.14);
   const [autoCycleWebgpuLighting, setAutoCycleWebgpuLighting] = useState(false);
@@ -391,33 +423,33 @@ export default function App() {
 
   const handleNextFormula = () => {
     setSelectedFormula(prev => {
-      const currentIndex = PRESET_FORMULAS.findIndex(f => f.id === prev.id);
-      const nextIndex = (currentIndex + 1) % PRESET_FORMULAS.length;
-      return PRESET_FORMULAS[nextIndex];
+      const pool = cyclePool(PRESET_FORMULAS, cycleFavoritesOnlyRef.current, 'formula');
+      const currentIndex = pool.findIndex(f => f.id === prev.id);
+      return pool[(currentIndex + 1) % pool.length];
     });
   };
 
   const handlePrevFormula = () => {
     setSelectedFormula(prev => {
-      const currentIndex = PRESET_FORMULAS.findIndex(f => f.id === prev.id);
-      const prevIndex = (currentIndex - 1 + PRESET_FORMULAS.length) % PRESET_FORMULAS.length;
-      return PRESET_FORMULAS[prevIndex];
+      const pool = cyclePool(PRESET_FORMULAS, cycleFavoritesOnlyRef.current, 'formula');
+      const currentIndex = pool.findIndex(f => f.id === prev.id);
+      return pool[(currentIndex - 1 + pool.length) % pool.length];
     });
   };
 
   const handleNextShader = () => {
     setSelectedShader(prev => {
-      const currentIndex = PRESET_SHADERS.findIndex(s => s.id === prev.id);
-      const nextIndex = (currentIndex + 1) % PRESET_SHADERS.length;
-      return PRESET_SHADERS[nextIndex];
+      const pool = cyclePool(PRESET_SHADERS, cycleFavoritesOnlyRef.current, 'shader');
+      const currentIndex = pool.findIndex(s => s.id === prev.id);
+      return pool[(currentIndex + 1) % pool.length];
     });
   };
 
   const handlePrevShader = () => {
     setSelectedShader(prev => {
-      const currentIndex = PRESET_SHADERS.findIndex(s => s.id === prev.id);
-      const prevIndex = (currentIndex - 1 + PRESET_SHADERS.length) % PRESET_SHADERS.length;
-      return PRESET_SHADERS[prevIndex];
+      const pool = cyclePool(PRESET_SHADERS, cycleFavoritesOnlyRef.current, 'shader');
+      const currentIndex = pool.findIndex(s => s.id === prev.id);
+      return pool[(currentIndex - 1 + pool.length) % pool.length];
     });
   };
 
@@ -450,9 +482,10 @@ export default function App() {
       webgpuLighting,
       autoStyle,
       showEnvironment,
-      lineWidth
+      lineWidth,
+      cycleFavoritesOnly
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -462,6 +495,13 @@ export default function App() {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       switch (e.key) {
+        case '?':
+          e.preventDefault();
+          setShowHelp(h => !h);
+          break;
+        case 'Escape':
+          setShowHelp(false);
+          break;
         case ' ':
           e.preventDefault();
           setIsPlaying(p => !p);
@@ -507,6 +547,7 @@ export default function App() {
     }
   };
 
+  const [showHelp, setShowHelp] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const copyShareLink = async () => {
     try {
@@ -541,6 +582,13 @@ export default function App() {
           <h1 className="text-xl font-medium tracking-tight">Harmonic.OS <span className="text-white/30 font-mono text-xs ml-2 uppercase tracking-widest">{APP_VERSION}</span></h1>
         </div>
         <div className="flex gap-4 items-center">
+          <button
+            onClick={() => setShowHelp(true)}
+            className="h-7 w-7 rounded-full border border-white/10 hover:bg-white/5 text-[11px] font-mono text-white/50 hover:text-white transition-colors"
+            title="Help & shortcuts (?)"
+          >
+            ?
+          </button>
           <button
             onClick={saveSnapshot}
             disabled={rendererMode === 'webgpu'}
@@ -730,6 +778,8 @@ export default function App() {
           setShaderQuant={setShaderQuant}
           autoStyle={autoStyle}
           setAutoStyle={setAutoStyle}
+          cycleFavoritesOnly={cycleFavoritesOnly}
+          setCycleFavoritesOnly={setCycleFavoritesOnly}
           showEnvironment={showEnvironment}
           setShowEnvironment={setShowEnvironment}
           lineWidth={lineWidth}
@@ -748,6 +798,57 @@ export default function App() {
         </div>
         <FooterStats />
       </footer>
+
+      {showHelp && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowHelp(false)}
+          role="dialog"
+          aria-label="Help and shortcuts"
+        >
+          <div
+            className="w-[min(92vw,640px)] max-h-[84vh] overflow-y-auto custom-scrollbar rounded-2xl border border-indigo-400/25 bg-[#0b0e17] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-indigo-300">Help & Shortcuts</h2>
+              <button onClick={() => setShowHelp(false)} className="text-white/40 hover:text-white text-xs font-mono">ESC ✕</button>
+            </div>
+
+            <div className="mt-4 grid gap-5 sm:grid-cols-2 text-[11px] leading-5 text-white/70">
+              <div>
+                <div className="mb-1.5 font-bold uppercase tracking-widest text-[9px] text-white/40">Keyboard</div>
+                <div><span className="text-indigo-300 font-mono">Space</span> — play / pause</div>
+                <div><span className="text-indigo-300 font-mono">← →</span> — previous / next formula</div>
+                <div><span className="text-indigo-300 font-mono">↑ ↓</span> — previous / next shader</div>
+                <div><span className="text-indigo-300 font-mono">F</span> — fullscreen</div>
+                <div><span className="text-indigo-300 font-mono">?</span> — this overlay</div>
+                <div className="mt-2 text-white/45">Double-click the 3D view to reset the camera.</div>
+              </div>
+              <div>
+                <div className="mb-1.5 font-bold uppercase tracking-widest text-[9px] text-white/40">Formula variables</div>
+                <div><span className="text-indigo-300 font-mono">p</span> — curve parameter (0 … 8π)</div>
+                <div><span className="text-indigo-300 font-mono">q</span> — second parameter on surfaces</div>
+                <div><span className="text-indigo-300 font-mono">t</span> — time phase (0 … 4π)</div>
+                <div><span className="text-indigo-300 font-mono">s</span> — XR hand-height scalar</div>
+                <div className="mt-2 text-white/45">Shaders may declare <span className="font-mono">uBass / uMid / uTreble</span> for live band energies.</div>
+              </div>
+              <div>
+                <div className="mb-1.5 font-bold uppercase tracking-widest text-[9px] text-white/40">Vision Pro (gaze + pinch)</div>
+                <div>One pinch on the shape drags it.</div>
+                <div>Two-hand pinch: spread to scale, orbit to turn.</div>
+                <div>Pinch buttons on the floating console to control playback; drag its handle to move it.</div>
+              </div>
+              <div>
+                <div className="mb-1.5 font-bold uppercase tracking-widest text-[9px] text-white/40">Quest (controllers)</div>
+                <div>Left stick moves you; trigger-drag moves the shape.</div>
+                <div>Two triggers scale &amp; turn it. Squeeze resets the view.</div>
+                <div>With Beat Sync on, controllers pulse on the beat.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

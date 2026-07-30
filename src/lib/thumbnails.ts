@@ -88,6 +88,9 @@ type ShaderGL = {
 
 let shaderGL: ShaderGL | null | undefined;
 
+// The quad fakes a sphere patch: normals curve toward the edges so
+// fresnel/normal-driven shaders (most of the authored library) render their
+// actual character instead of a flat facing-only color.
 const THUMB_VERTEX_SHADER = `
 attribute vec2 aPos;
 varying vec2 vUv;
@@ -96,9 +99,12 @@ varying vec3 vNormal;
 varying vec3 vViewPosition;
 void main() {
   vUv = aPos * 0.5 + 0.5;
-  vPosition = vec3(aPos * 6.0, 0.0);
-  vNormal = vec3(0.0, 0.0, 1.0);
-  vViewPosition = vec3(0.0, 0.0, 5.0);
+  vec2 centered = aPos;
+  float r2 = clamp(dot(centered, centered), 0.0, 1.0);
+  float nz = sqrt(1.0 - r2 * 0.82);
+  vNormal = normalize(vec3(centered * 0.9, nz));
+  vPosition = vec3(aPos * 6.0, nz * 2.4);
+  vViewPosition = vec3(-aPos * 1.4, 3.2);
   gl_Position = vec4(aPos, 0.0, 1.0);
 }
 `;
@@ -109,7 +115,9 @@ function getShaderGL(): ShaderGL | null {
       const canvas = document.createElement('canvas');
       canvas.width = THUMB_SIZE;
       canvas.height = THUMB_SIZE;
-      const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
+      // WebGL2 to match the app renderer (ES 1.00 shaders get core fwidth etc).
+      const gl = (canvas.getContext('webgl2', { preserveDrawingBuffer: true })
+        ?? canvas.getContext('webgl', { preserveDrawingBuffer: true })) as WebGLRenderingContext | null;
       if (!gl) {
         shaderGL = null;
       } else {

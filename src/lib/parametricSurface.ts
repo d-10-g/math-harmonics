@@ -8,11 +8,11 @@ import { Formula } from '../constants';
 export const DEFAULT_P_RANGE: [number, number] = [0, Math.PI * 2];
 export const DEFAULT_Q_RANGE: [number, number] = [0, Math.PI * 2];
 
-// mathjs evaluation is the cost driver: SEGMENTS_P * SEGMENTS_Q * 3 evals
-// per rebuild. 96x44 keeps a rebuild in the tens of milliseconds; the
-// rebuild cadence in the views is slower for parametric surfaces to match.
-const SEGMENTS_P = 96;
-const SEGMENTS_Q = 44;
+// mathjs evaluation is the cost driver: segsP * segsQ * 3 evals per rebuild.
+// 96x44 keeps a rebuild in the tens of milliseconds on desktop; XR asks for
+// a smaller grid to protect 90 Hz frame budgets on headsets.
+export const SURFACE_SEGMENTS_DESKTOP = { segsP: 96, segsQ: 44 };
+export const SURFACE_SEGMENTS_XR = { segsP: 72, segsQ: 34 };
 
 type CompiledAxes = { x: any; y: any; z: any };
 
@@ -38,8 +38,11 @@ export function buildParametricGeometry(
   formula: Formula,
   compiled: CompiledAxes,
   t: number,
-  scalar = 1
+  scalar = 1,
+  segments = SURFACE_SEGMENTS_DESKTOP
 ): THREE.BufferGeometry {
+  const SEGMENTS_P = segments.segsP;
+  const SEGMENTS_Q = segments.segsQ;
   const { pRange, qRange } = surfaceRanges(formula);
   const vertsPerRow = SEGMENTS_P + 1;
   const vertCount = vertsPerRow * (SEGMENTS_Q + 1);

@@ -2806,8 +2806,20 @@ function buildPhotorealFragmentShader(model: ProceduralMaterialModel, mode: Shad
     `;
 }
 
+// Presets whose hand-authored GLSL renders too dark or flat to be useful;
+// only these keep the generated photoreal material. Everything else uses its
+// original authored shader (restored 2026-07 — the enhancement pass used to
+// discard all 100 authored programs).
+// s11 "Glitch Blue" renders a single flat color; s18 "Retro Grid" uses
+// fwidth, which ES 1.00 shaders can't reach even on WebGL2.
+const TEMPLATE_FALLBACK_IDS = new Set<string>(['s11', 's18']);
+
 function enhanceShaderPreset(preset: ShaderPreset, index: number): ShaderPreset {
   if (preset.category === 'Organic PDE shaders') {
+    return preset;
+  }
+
+  if (!TEMPLATE_FALLBACK_IDS.has(preset.id)) {
     return preset;
   }
 
@@ -3595,7 +3607,162 @@ const SELF_MODIFYING_SHADER_PRESETS: ShaderPreset[] = [
   createSelfModifyingShader("self-shader-mutation-10", "Shader Mutation: Meta Material Breather", "Shader formula mutation meta-shaders", "Prismatic Glass Metal Water", "mutation", "Meta-material grammar mutates across glass, metal, water, and spectral glow.")
 ];
 
+// Live-music shaders: uBass/uMid/uTreble carry smoothed band energies (0-1)
+// whenever Audio Beat Sync is on; all of these read as calm, complete visuals
+// at zero and bloom with the music.
+const AUDIO_REACTIVE_SHADER_PRESETS: ShaderPreset[] = [
+  {
+    id: "audio-bass-bloom",
+    name: "Audio: Bass Bloom",
+    category: "Audio-reactive shaders",
+    description: "A breathing core that flares outward on every bass swell.",
+    fragmentShader: `
+      uniform float time;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uTreble;
+      varying vec2 vUv;
+      varying vec3 vPosition;
+      ${SHADER_UTILS}
+      void main() {
+        float r = length(vPosition.xy) * 0.09;
+        float core = exp(-r * (3.2 - 2.1 * uBass));
+        float breath = 0.5 + 0.5 * sin(time * 1.4 - r * 5.0);
+        float halo = exp(-abs(r - (0.45 + 0.35 * uBass)) * 7.0);
+        vec3 base = mix(vec3(0.06, 0.03, 0.16), vec3(0.55, 0.16, 0.85), core + 0.25 * breath);
+        vec3 hot = vec3(0.35, 0.85, 1.0) * (halo * (0.5 + 1.6 * uBass) + 0.35 * uMid);
+        vec3 color = base + hot + vec3(1.0, 0.9, 0.7) * core * uBass * 1.4;
+        gl_FragColor = vec4(color, clamp(0.55 + core * 0.4 + halo * 0.3, 0.0, 1.0));
+      }
+    `
+  },
+  {
+    id: "audio-spectrum-ribbon",
+    name: "Audio: Spectrum Ribbon",
+    category: "Audio-reactive shaders",
+    description: "Low to high frequencies painted left to right along the curve.",
+    fragmentShader: `
+      uniform float time;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uTreble;
+      varying vec2 vUv;
+      ${SHADER_UTILS}
+      void main() {
+        float bassZone = smoothstep(0.45, 0.0, vUv.x);
+        float midZone = 1.0 - abs(vUv.x - 0.5) * 2.2;
+        float trebleZone = smoothstep(0.55, 1.0, vUv.x);
+        float energy = bassZone * uBass + max(midZone, 0.0) * uMid + trebleZone * uTreble;
+        float wave = 0.5 + 0.5 * sin(vUv.x * 24.0 - time * 2.2);
+        vec3 base = spectral(vUv.x * 0.85 + time * 0.03) * (0.35 + 0.3 * wave);
+        vec3 lit = base * (1.0 + energy * 2.6) + vec3(1.0) * pow(energy, 2.0) * 0.55;
+        float edge = smoothstep(0.0, 0.18, vUv.y) * smoothstep(1.0, 0.82, vUv.y);
+        gl_FragColor = vec4(lit, 0.35 + 0.65 * edge);
+      }
+    `
+  },
+  {
+    id: "audio-beat-ripple",
+    name: "Audio: Beat Ripple",
+    category: "Audio-reactive shaders",
+    description: "Concentric rings that surge with the low end and shimmer with mids.",
+    fragmentShader: `
+      uniform float time;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uTreble;
+      varying vec3 vPosition;
+      ${SHADER_UTILS}
+      void main() {
+        float r = length(vPosition.xy) * 0.14;
+        float rings = sin(r * 16.0 - time * 3.0);
+        float sharp = smoothstep(0.2 - 0.18 * uBass, 1.0, rings);
+        float glow = sharp * (0.4 + 1.8 * uBass) + 0.2 * (0.5 + 0.5 * rings);
+        vec3 cold = vec3(0.05, 0.12, 0.25);
+        vec3 pulse = mix(vec3(0.1, 0.75, 0.9), vec3(1.0, 0.45, 0.75), clamp(uMid * 1.6, 0.0, 1.0));
+        vec3 color = cold + pulse * glow + vec3(0.9, 0.95, 1.0) * uTreble * pow(1.0 - min(r, 1.0), 3.0);
+        gl_FragColor = vec4(color, clamp(0.5 + glow * 0.45, 0.0, 1.0));
+      }
+    `
+  },
+  {
+    id: "audio-treble-sparkle",
+    name: "Audio: Treble Sparkle",
+    category: "Audio-reactive shaders",
+    description: "A dark satin field where highs strike glints like struck flint.",
+    fragmentShader: `
+      uniform float time;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uTreble;
+      varying vec2 vUv;
+      varying vec3 vPosition;
+      ${SHADER_UTILS}
+      void main() {
+        vec3 cell = floor(vPosition * 1.6 + vec3(0.0, 0.0, time * 0.4));
+        float spark = hash13(cell);
+        float gate = step(1.0 - (0.04 + uTreble * 0.3), fract(spark + time * (0.6 + uTreble)));
+        float twinkle = gate * (0.4 + 0.6 * fract(spark * 7.31));
+        vec3 satin = mix(vec3(0.04, 0.05, 0.1), vec3(0.16, 0.1, 0.28), 0.5 + 0.5 * sin(vUv.x * 6.0 + time));
+        satin *= 1.0 + uBass * 0.6;
+        vec3 glint = vec3(0.85, 0.95, 1.0) * twinkle * (0.8 + 2.2 * uTreble);
+        gl_FragColor = vec4(satin + glint, 0.85);
+      }
+    `
+  },
+  {
+    id: "audio-mid-swirl",
+    name: "Audio: Mid Swirl",
+    category: "Audio-reactive shaders",
+    description: "A slow nebula whose swirl tightens and saturates with the mids.",
+    fragmentShader: `
+      uniform float time;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uTreble;
+      varying vec3 vPosition;
+      ${SHADER_UTILS}
+      void main() {
+        vec2 pxy = vPosition.xy * 0.1;
+        float r = length(pxy);
+        float a = atan(pxy.y, pxy.x) + r * (2.0 + uMid * 5.0) - time * 0.4;
+        float bands = 0.5 + 0.5 * sin(a * 3.0);
+        float mist = fbm(vec3(pxy * 3.0, time * 0.15));
+        vec3 deep = vec3(0.05, 0.08, 0.2);
+        vec3 swirlColor = spectral(fract(0.55 + bands * 0.25 + uMid * 0.3)) * (0.4 + 0.8 * bands);
+        vec3 color = deep + swirlColor * (0.5 + 1.6 * uMid) + mist * vec3(0.2, 0.15, 0.35) * (1.0 + uBass);
+        gl_FragColor = vec4(color, 0.8);
+      }
+    `
+  },
+  {
+    id: "audio-vu-fire",
+    name: "Audio: VU Fire",
+    category: "Audio-reactive shaders",
+    description: "Flames climb the surface exactly as high as the music pushes them.",
+    fragmentShader: `
+      uniform float time;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uTreble;
+      varying vec2 vUv;
+      ${SHADER_UTILS}
+      void main() {
+        float level = clamp(uBass * 0.55 + uMid * 0.35 + uTreble * 0.25, 0.0, 1.0);
+        float flicker = fbm(vec3(vUv.x * 9.0, vUv.y * 4.0 - time * 1.7, time * 0.3));
+        float height = level * 0.85 + 0.12 + flicker * 0.18;
+        float flame = smoothstep(height, height - 0.35, vUv.y);
+        vec3 ember = mix(vec3(0.06, 0.01, 0.02), vec3(0.85, 0.2, 0.05), flame);
+        vec3 tip = vec3(1.0, 0.85, 0.3) * pow(flame, 3.0);
+        float pilot = 0.25 * (0.5 + 0.5 * sin(time * 2.0)) * smoothstep(0.25, 0.0, vUv.y);
+        gl_FragColor = vec4(ember + tip + vec3(0.9, 0.5, 0.2) * pilot, clamp(0.35 + flame * 0.65, 0.0, 1.0));
+      }
+    `
+  }
+];
+
 export const PRESET_SHADERS: ShaderPreset[] = [
+  ...AUDIO_REACTIVE_SHADER_PRESETS,
   ...R185_TSL_LAB_SHADER_PRESETS,
   ...BASE_PRESET_SHADERS.map(enhanceShaderPreset),
   ...ORGANIC_FLOW_SHADER_PRESETS,
