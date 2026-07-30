@@ -1713,6 +1713,49 @@ function XRAlphaController() {
   return null;
 }
 
+// 2D-mode cursor → world-coordinate readout, written straight into a DOM
+// node so pointer moves never re-render React.
+function CursorReadout({ targetRef, enabled }: { targetRef: React.RefObject<HTMLDivElement | null>; enabled: boolean }) {
+  const { gl, camera } = useThree();
+
+  useEffect(() => {
+    const target = targetRef.current;
+    if (!enabled) {
+      if (target) target.textContent = '';
+      return;
+    }
+    const element = gl.domElement;
+    const raycaster = new THREE.Raycaster();
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const ndc = new THREE.Vector2();
+    const hit = new THREE.Vector3();
+
+    const handleMove = (event: PointerEvent) => {
+      const rect = element.getBoundingClientRect();
+      ndc.set(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(ndc, camera);
+      if (raycaster.ray.intersectPlane(plane, hit) && targetRef.current) {
+        targetRef.current.textContent = `x ${hit.x.toFixed(2)}   y ${hit.y.toFixed(2)}`;
+      }
+    };
+    const handleLeave = () => {
+      if (targetRef.current) targetRef.current.textContent = '';
+    };
+
+    element.addEventListener('pointermove', handleMove);
+    element.addEventListener('pointerleave', handleLeave);
+    return () => {
+      element.removeEventListener('pointermove', handleMove);
+      element.removeEventListener('pointerleave', handleLeave);
+    };
+  }, [gl, camera, enabled, targetRef]);
+
+  return null;
+}
+
 function XRPlayerOrigin({ originRef }: { originRef: React.RefObject<THREE.Group | null> }) {
   const session = useXR((state) => state.session);
   return <XROrigin ref={originRef} disabled={!session} />;
@@ -1867,6 +1910,7 @@ export default function GraphView({
   const [xrGeometrySelection, setXrGeometrySelection] = useState<GraphGeometrySelection>('formula');
   const xrOriginRef = useRef<THREE.Group>(null);
   const xrDragOffsetRef = useRef(new THREE.Vector3());
+  const readoutRef = useRef<HTMLDivElement>(null);
   // Priority: in-XR HUD selection > desktop geometry override > formula default
   const baseGeometryMode = webgpuGeometry !== 'auto' ? webgpuGeometry : formulaGeometryMode;
   const geometryMode = xrGeometrySelection === 'formula' ? baseGeometryMode : xrGeometrySelection;
@@ -1879,8 +1923,21 @@ export default function GraphView({
 
   return (
     <div className="w-full h-full bg-transparent relative">
-      <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 0, 25], fov: 50 }} gl={{ alpha: true, antialias: true, premultipliedAlpha: false, preserveDrawingBuffer: true }}>
+      <Canvas
+        shadows
+        dpr={[1, 2]}
+        camera={{ position: [0, 0, 25], fov: 50 }}
+        gl={{ alpha: true, antialias: true, premultipliedAlpha: false, preserveDrawingBuffer: true }}
+        onCreated={({ gl }) => {
+          // preventDefault lets three restore the context instead of dying.
+          gl.domElement.addEventListener('webglcontextlost', (event) => {
+            event.preventDefault();
+            console.warn('WebGL context lost — waiting for automatic restore.');
+          });
+        }}
+      >
         <XR store={xrStore}>
+          <CursorReadout targetRef={readoutRef} enabled={!show3D} />
           <XRPlayerOrigin originRef={xrOriginRef} />
           <XRJoystickLocomotion originRef={xrOriginRef} />
           <XRVisualThumbstickControls setXrVisualTransform={setXrVisualTransform} />
@@ -1963,6 +2020,13 @@ export default function GraphView({
         </XR>
       </Canvas>
       
+      {!show3D && (
+        <div
+          ref={readoutRef}
+          className="absolute bottom-4 left-4 min-h-[22px] min-w-[130px] rounded border border-cyan-400/15 bg-black/55 px-2.5 py-1 font-mono text-[10px] text-cyan-200/80 backdrop-blur pointer-events-none"
+        />
+      )}
+
       {/* HUD Info */}
       <div className="absolute top-4 left-4 flex flex-col gap-1 pointer-events-none">
         <div className="bg-black/60 border border-white/10 backdrop-blur px-3 py-1.5 rounded-lg">

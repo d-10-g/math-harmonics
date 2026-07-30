@@ -23,6 +23,9 @@ export type ClockState = {
   mid: number;
   treble: number;
   lastBeatAt: number;
+  // A/B loop: when both are set, playback wraps inside [loopStart, loopEnd).
+  loopStart: number | null;
+  loopEnd: number | null;
 };
 
 export const clockStore = createStore<ClockState>(() => ({
@@ -38,7 +41,9 @@ export const clockStore = createStore<ClockState>(() => ({
   bass: 0,
   mid: 0,
   treble: 0,
-  lastBeatAt: 0
+  lastBeatAt: 0,
+  loopStart: null,
+  loopEnd: null
 }));
 
 export const getClockTime = () => clockStore.getState().time;
@@ -59,6 +64,14 @@ export const setAudioBands = (bass: number, mid: number, treble: number) =>
 export const clearAudioBands = () => clockStore.setState({ bass: 0, mid: 0, treble: 0 });
 
 export const markBeat = () => clockStore.setState({ lastBeatAt: performance.now() });
+
+export const setLoopPoint = (which: 'start' | 'end') => {
+  const state = clockStore.getState();
+  if (which === 'start') clockStore.setState({ loopStart: state.time });
+  else clockStore.setState({ loopEnd: state.time });
+};
+
+export const clearLoop = () => clockStore.setState({ loopStart: null, loopEnd: null });
 
 export function startClock() {
   let raf = 0;
@@ -88,6 +101,14 @@ export function startClock() {
         currentSpeed = baseSpeed * mult;
       }
       nextTime = (state.time + deltaSeconds * currentSpeed) % PHASE_RANGE;
+
+      // A/B loop wrap (requires a forward window)
+      const { loopStart, loopEnd } = state;
+      if (loopStart !== null && loopEnd !== null && loopEnd > loopStart + 0.01) {
+        if (nextTime >= loopEnd || nextTime < loopStart) {
+          nextTime = loopStart + ((nextTime - loopStart) % (loopEnd - loopStart) + (loopEnd - loopStart)) % (loopEnd - loopStart);
+        }
+      }
     }
 
     clockStore.setState({ time: nextTime, fps: fpsEma, frameMs: deltaSeconds * 1000 });

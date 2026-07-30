@@ -72,6 +72,7 @@ const POINT_COUNT = 320;
 const TWO_TURNS = Math.PI * 8;
 const WEBGPU_XR_REQUEST_EVENT = 'math-harmonics:webgpu-xr-request';
 const WEBGPU_XR_UNAVAILABLE_EVENT = 'math-harmonics:webgpu-xr-unavailable';
+const WEBGPU_CAPTURE_EVENT = 'math-harmonics:webgpu-capture';
 const WEBGPU_XR_DEADZONE = 0.18;
 const WEBGPU_XR_START_TIMEOUT_MS = 8000;
 const WEBGPU_XR_DEFAULT_SCALE = 0.48;
@@ -1193,6 +1194,17 @@ export default function WebGPUView({
   const isPlayingRef = useRef(isPlaying);
   const show3DRef = useRef(show3D);
   const xrSessionCleanupRef = useRef<(() => void) | null>(null);
+  const captureRequestRef = useRef<string | null>(null);
+
+  // PNG capture must read the canvas immediately after a render inside the
+  // animation loop; outside it the WebGPU swapchain is already presented.
+  useEffect(() => {
+    const handleCapture = (event: Event) => {
+      captureRequestRef.current = (event as CustomEvent<{ name?: string }>).detail?.name ?? 'capture';
+    };
+    window.addEventListener(WEBGPU_CAPTURE_EVENT, handleCapture);
+    return () => window.removeEventListener(WEBGPU_CAPTURE_EVENT, handleCapture);
+  }, []);
   const [status, setStatus] = useState('initializing WebGPU');
   const [webgpuXRStatus, setWebgpuXRStatus] = useState<WebGPUXRStatus>('checking');
   const [webgpuXRMessage, setWebgpuXRMessage] = useState('Checking headset WebGPU XR support');
@@ -1610,6 +1622,19 @@ export default function WebGPUView({
         updateWebGPUXRInput(refs.current!, deltaSeconds);
         if (!refs.current?.isXRPresenting) controls.update();
         renderer.render(scene, camera);
+
+        if (captureRequestRef.current) {
+          const name = captureRequestRef.current;
+          captureRequestRef.current = null;
+          try {
+            const link = document.createElement('a');
+            link.download = `harmonic-${name}.png`;
+            link.href = renderer.domElement.toDataURL('image/png');
+            link.click();
+          } catch (error) {
+            console.warn('Unable to capture WebGPU snapshot:', error);
+          }
+        }
       });
     };
 

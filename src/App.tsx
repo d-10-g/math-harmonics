@@ -4,9 +4,11 @@
  */
 
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { compile } from 'mathjs';
 import Sidebar from './components/Sidebar';
 import GraphView from './components/GraphView';
 import Controls from './components/Controls';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // The WebGPU path (three/webgpu + TSL) is a large chunk; load it only when
 // the WebGPU renderer is actually selected. Headsets default to WebGL.
@@ -21,11 +23,11 @@ import {
 } from './constants';
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
-import { clearAudioBands, markBeat, setAudioBands, setClockPlayback, setClockTime, startClock, useClockSnapshot } from './lib/clock';
+import { clearAudioBands, clearLoop, markBeat, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, startClock, useClockSnapshot } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 
-const APP_VERSION = 'v1.1.21-beta';
+const APP_VERSION = `v${__APP_VERSION__}`;
 
 const WEBGPU_LIGHTING_PRESETS: WebGPULightingPreset[] = ['studio', 'aurora', 'gallery', 'eclipse', 'caustic', 'noir', 'sunset', 'laboratory', 'underlight', 'prism'];
 const WEBGPU_GEOMETRY_PRESETS: Exclude<WebGPUGeometryProfile, 'auto'>[] = [
@@ -92,19 +94,64 @@ function TemporalReadout() {
 
 function TimeScrubber({ onScrub }: { onScrub: () => void }) {
   const clock = useClockSnapshot(30);
+  const PHASE_MAX = 12.566; // 4pi
+  const hasLoop = clock.loopStart !== null && clock.loopEnd !== null;
+
   return (
-    <input
-      type="range"
-      min="0"
-      max="12.566" // 4pi
-      step="0.001"
-      value={clock.time}
-      onChange={(e) => {
-        onScrub();
-        setClockTime(parseFloat(e.target.value));
-      }}
-      className="flex-1 h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
-    />
+    <>
+      <div className="relative flex-1 flex items-center">
+        {clock.loopStart !== null && (
+          <div
+            className="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 bg-emerald-400"
+            style={{ left: `${(clock.loopStart / PHASE_MAX) * 100}%` }}
+            title="Loop start"
+          />
+        )}
+        {clock.loopEnd !== null && (
+          <div
+            className="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 bg-rose-400"
+            style={{ left: `${(clock.loopEnd / PHASE_MAX) * 100}%` }}
+            title="Loop end"
+          />
+        )}
+        <input
+          type="range"
+          min="0"
+          max={PHASE_MAX}
+          step="0.001"
+          value={clock.time}
+          onChange={(e) => {
+            onScrub();
+            setClockTime(parseFloat(e.target.value));
+          }}
+          className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
+        />
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => setLoopPoint('start')}
+          className="px-2 py-1 rounded border border-emerald-400/30 bg-emerald-500/10 text-[9px] font-mono text-emerald-300 hover:bg-emerald-500/25 transition-colors"
+          title="Set loop start (A) at current phase"
+        >
+          A
+        </button>
+        <button
+          onClick={() => setLoopPoint('end')}
+          className="px-2 py-1 rounded border border-rose-400/30 bg-rose-500/10 text-[9px] font-mono text-rose-300 hover:bg-rose-500/25 transition-colors"
+          title="Set loop end (B) at current phase"
+        >
+          B
+        </button>
+        <button
+          onClick={clearLoop}
+          disabled={!hasLoop && clock.loopStart === null && clock.loopEnd === null}
+          className="px-2 py-1 rounded border border-white/10 bg-white/5 text-[9px] font-mono text-white/45 hover:bg-white/15 transition-colors disabled:opacity-30"
+          title="Clear A/B loop"
+        >
+          ✕
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -172,6 +219,9 @@ export default function App() {
   const [cycleFavoritesOnly, setCycleFavoritesOnly] = useState(initialShared.cycleFavoritesOnly ?? false);
   const cycleFavoritesOnlyRef = useRef(cycleFavoritesOnly);
   useEffect(() => { cycleFavoritesOnlyRef.current = cycleFavoritesOnly; }, [cycleFavoritesOnly]);
+  const [autoPilotShuffle, setAutoPilotShuffle] = useState(initialShared.autoPilotShuffle ?? false);
+  const autoPilotShuffleRef = useRef(autoPilotShuffle);
+  useEffect(() => { autoPilotShuffleRef.current = autoPilotShuffle; }, [autoPilotShuffle]);
   const [showEnvironment, setShowEnvironment] = useState(initialShared.showEnvironment ?? true);
   const [lineWidth, setLineWidth] = useState(initialShared.lineWidth ?? 0.14);
   const [autoCycleWebgpuLighting, setAutoCycleWebgpuLighting] = useState(false);
@@ -205,6 +255,40 @@ export default function App() {
   const shaderQuantRef = useRef(shaderQuant);
   useEffect(() => { shaderQuantRef.current = shaderQuant; }, [shaderQuant]);
 
+  // Auto-pilot advance, shared by beat-triggered and timer-based cycling:
+  // honors the favorites-only pool and the shuffle toggle.
+  const autoAdvanceFormula = () => {
+    setSelectedFormula(prev => {
+      const pool = cyclePool(PRESET_FORMULAS, cycleFavoritesOnlyRef.current, 'formula');
+      if (autoPilotShuffleRef.current) {
+        if (pool.length <= 1) return pool[0] ?? prev;
+        let next = prev;
+        for (let i = 0; i < 8 && next.id === prev.id; i++) {
+          next = pool[Math.floor(Math.random() * pool.length)];
+        }
+        return next;
+      }
+      const index = pool.findIndex(f => f.id === prev.id);
+      return pool[(index + 1) % pool.length];
+    });
+  };
+
+  const autoAdvanceShader = () => {
+    setSelectedShader(prev => {
+      const pool = cyclePool(PRESET_SHADERS, cycleFavoritesOnlyRef.current, 'shader');
+      if (autoPilotShuffleRef.current) {
+        if (pool.length <= 1) return pool[0] ?? prev;
+        let next = prev;
+        for (let i = 0; i < 8 && next.id === prev.id; i++) {
+          next = pool[Math.floor(Math.random() * pool.length)];
+        }
+        return next;
+      }
+      const index = pool.findIndex(s => s.id === prev.id);
+      return pool[(index + 1) % pool.length];
+    });
+  };
+
   // Audio Reactivity & Quantization Logic
   useEffect(() => {
     if (!audioSync) return;
@@ -221,17 +305,11 @@ export default function App() {
     let sBeatCount = 0;
     
     const triggerFormula = () => {
-      if (autoCycleFormulaRef.current) {
-        const r = Math.floor(Math.random() * PRESET_FORMULAS.length);
-        setSelectedFormula(PRESET_FORMULAS[r]);
-      }
+      if (autoCycleFormulaRef.current) autoAdvanceFormula();
     };
-    
+
     const triggerShader = () => {
-      if (autoCycleShaderRef.current) {
-        const r = Math.floor(Math.random() * PRESET_SHADERS.length);
-        setSelectedShader(PRESET_SHADERS[r]);
-      }
+      if (autoCycleShaderRef.current) autoAdvanceShader();
     };
 
     const startAudio = async () => {
@@ -336,19 +414,13 @@ export default function App() {
   // Time-based interval (Only runs if Audio Sync is OFF)
   useEffect(() => {
     if (!autoCycleFormula || audioSync) return;
-    const interval = setInterval(() => {
-      const randomIndex = Math.floor(Math.random() * PRESET_FORMULAS.length);
-      setSelectedFormula(PRESET_FORMULAS[randomIndex]);
-    }, formulaCycleSpeed * 1000);
+    const interval = setInterval(() => autoAdvanceFormula(), formulaCycleSpeed * 1000);
     return () => clearInterval(interval);
   }, [autoCycleFormula, formulaCycleSpeed, audioSync]);
 
   useEffect(() => {
     if (!autoCycleShader || audioSync) return;
-    const interval = setInterval(() => {
-      const randomIndex = Math.floor(Math.random() * PRESET_SHADERS.length);
-      setSelectedShader(PRESET_SHADERS[randomIndex]);
-    }, shaderCycleSpeed * 1000);
+    const interval = setInterval(() => autoAdvanceShader(), shaderCycleSpeed * 1000);
     return () => clearInterval(interval);
   }, [autoCycleShader, shaderCycleSpeed, audioSync]);
 
@@ -454,14 +526,18 @@ export default function App() {
   };
 
   // Art direction: presets that declare a preferred material + light rig
-  // apply them on selection while Auto-Style is on, so cycling the library
-  // lands on designed combinations instead of leftovers.
+  // (and optionally a speed) apply them on selection while Auto-Style is on,
+  // so cycling the library lands on designed combinations instead of leftovers.
   useEffect(() => {
     if (!autoStyle) return;
     const style = selectedFormula.style;
-    if (!style) return;
-    setWebgpuMaterial(style.material);
-    setWebgpuLightingPreset(style.lighting);
+    if (style) {
+      setWebgpuMaterial(style.material);
+      setWebgpuLightingPreset(style.lighting);
+    }
+    if (selectedFormula.speedHint !== undefined) {
+      setSpeed(selectedFormula.speedHint);
+    }
   }, [selectedFormula.id, autoStyle]);
 
   // Persist shareable state to the URL hash + localStorage (preset ids and
@@ -483,9 +559,10 @@ export default function App() {
       autoStyle,
       showEnvironment,
       lineWidth,
-      cycleFavoritesOnly
+      cycleFavoritesOnly,
+      autoPilotShuffle
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -535,6 +612,11 @@ export default function App() {
   }, []);
 
   const saveSnapshot = () => {
+    if (rendererMode === 'webgpu') {
+      // The WebGPU canvas must be captured inside its own render loop.
+      window.dispatchEvent(new CustomEvent('math-harmonics:webgpu-capture', { detail: { name: selectedFormula.id } }));
+      return;
+    }
     const canvas = document.querySelector('section canvas') as HTMLCanvasElement | null;
     if (!canvas) return;
     try {
@@ -544,6 +626,46 @@ export default function App() {
       link.click();
     } catch (error) {
       console.warn('Unable to capture snapshot:', error);
+    }
+  };
+
+  // Mutate: perturb the current formula's constants into a validated variant.
+  const handleMutateFormula = () => {
+    const mutateExpression = (expression: string) =>
+      expression.replace(/\b\d+(\.\d+)?\b/g, (match) => {
+        if (Math.random() < 0.35) return match;
+        const value = parseFloat(match);
+        const mutated = value * (0.72 + Math.random() * 0.56);
+        // Integer frequencies stay integers so curves still close nicely.
+        return Number.isInteger(value) && value <= 16
+          ? String(Math.max(1, Math.round(mutated)))
+          : mutated.toFixed(3);
+      });
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const x = mutateExpression(selectedFormula.x);
+      const y = mutateExpression(selectedFormula.y);
+      const z = mutateExpression(selectedFormula.z ?? 'sin(2 * p + t) * 4');
+      try {
+        for (const expression of [x, y, z]) {
+          const value = compile(expression).evaluate({ p: 1.234, t: 0.7, s: 1, q: 1.1 });
+          const numeric = typeof value === 'number' ? value : value?.re;
+          if (typeof numeric !== 'number' || !Number.isFinite(numeric)) throw new Error('non-finite');
+        }
+        const baseName = selectedFormula.name.replace(/ \(mutated\)$/, '');
+        setSelectedFormula((prev) => ({
+          ...prev,
+          id: `custom-mut-${Date.now()}`,
+          name: `${baseName} (mutated)`,
+          x,
+          y,
+          z,
+          description: `Mutated variant of ${baseName}.`
+        }));
+        return;
+      } catch {
+        // Retry with a fresh roll.
+      }
     }
   };
 
@@ -591,9 +713,8 @@ export default function App() {
           </button>
           <button
             onClick={saveSnapshot}
-            disabled={rendererMode === 'webgpu'}
-            className="px-3 py-1 hover:bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-white/50 hover:text-white transition-colors uppercase tracking-widest disabled:opacity-35 disabled:cursor-not-allowed"
-            title={rendererMode === 'webgpu' ? 'Snapshot is available in WebGL mode' : 'Save the current view as a PNG'}
+            className="px-3 py-1 hover:bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-white/50 hover:text-white transition-colors uppercase tracking-widest"
+            title="Save the current view as a PNG"
           >
             Save PNG
           </button>
@@ -634,6 +755,7 @@ export default function App() {
         {/* Center: Graph View */}
         <section className="min-h-[520px] xl:min-h-0 bg-white/5 border border-white/10 rounded-lg relative overflow-hidden flex flex-col group">
           <div className="flex-1 relative">
+            <ErrorBoundary>
             {rendererMode === 'webgpu' ? (
               <Suspense
                 fallback={
@@ -701,6 +823,7 @@ export default function App() {
                 setShaderCycleSpeed={setShaderCycleSpeed}
               />
             )}
+            </ErrorBoundary>
           </div>
 
           <div className="p-6 bg-[#0a0a0a]/80 border-t border-white/10 backdrop-blur-md">
@@ -780,6 +903,9 @@ export default function App() {
           setAutoStyle={setAutoStyle}
           cycleFavoritesOnly={cycleFavoritesOnly}
           setCycleFavoritesOnly={setCycleFavoritesOnly}
+          autoPilotShuffle={autoPilotShuffle}
+          setAutoPilotShuffle={setAutoPilotShuffle}
+          onMutateFormula={handleMutateFormula}
           showEnvironment={showEnvironment}
           setShowEnvironment={setShowEnvironment}
           lineWidth={lineWidth}

@@ -5,6 +5,8 @@ import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 import fs from 'fs';
 
+const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
@@ -23,6 +25,7 @@ export default defineConfig(({mode}) => {
     },
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      __APP_VERSION__: JSON.stringify(pkg.version),
     },
     resolve: {
       alias: {

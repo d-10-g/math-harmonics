@@ -16,6 +16,9 @@ export interface Formula {
   // Art direction: preferred material + light rig, applied on selection when
   // Auto-Style is enabled.
   style?: { material: Exclude<WebGPUMaterialProfile, 'auto'>; lighting: WebGPULightingPreset };
+  // Preferred animation speed, applied with Auto-Style (surfaces breathe
+  // slowly; chaotic curves want pace).
+  speedHint?: number;
 }
 
 export type FormulaGeometryMode =
@@ -462,6 +465,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "2.2 * sin(2 * p + t) + 0.4 * sin(23 * p - 4 * t)",
     z: "1.2 * sin(9 * p + 3 * t) * cos(2 * p)",
     geometryMode: "constellation",
+    speedHint: 1.4,
     description: "Neural arc with high-frequency jitter riding a slow carrier loop."
   },
     {
@@ -600,6 +604,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "3 * sin(p + 0.2 * t) + 1.3 * sin(3.1416 * p)",
     z: "1.5 * sin(1.618 * p + t)",
     geometryMode: "tube",
+    speedHint: 1.2,
     description: "Quasi-periodic torus flow with incommensurate frequencies (e, pi, phi)."
   },
     {
@@ -1473,6 +1478,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "(3 + (1.1 + 0.35 * sin(t)) * cos(q)) * sin(p)",
     z: "(1.1 + 0.35 * sin(t)) * sin(q)",
     style: { material: "ceramic", lighting: "studio" },
+    speedHint: 0.5,
     description: "A torus whose tube radius breathes with the phase clock."
   },
   {
@@ -1485,6 +1491,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "((2.5 + 0.15 * sin(t)) + cos(0.5 * p) * sin(q) - sin(0.5 * p) * sin(2 * q)) * sin(p)",
     z: "sin(0.5 * p) * sin(q) + cos(0.5 * p) * sin(2 * q)",
     style: { material: "copper", lighting: "sunset" },
+    speedHint: 0.5,
     description: "Figure-eight immersion of the Klein bottle — a closed surface with no inside."
   },
   {
@@ -1497,6 +1504,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "(3 + q * cos(0.5 * p + 0.2 * t)) * sin(p)",
     z: "q * sin(0.5 * p + 0.2 * t)",
     style: { material: "velvet", lighting: "noir" },
+    speedHint: 0.5,
     description: "One-sided band whose half-twist slowly crawls around the ring."
   },
   {
@@ -1510,6 +1518,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "-cos(0.5 * t) * sinh(q) * cos(p) + sin(0.5 * t) * cosh(q) * sin(p)",
     z: "0.6 * p * cos(0.5 * t) + 1.4 * q * sin(0.5 * t)",
     style: { material: "chrome", lighting: "gallery" },
+    speedHint: 0.5,
     description: "The classic isometric deformation between a helicoid and a catenoid, driven by t."
   },
   {
@@ -1522,6 +1531,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "0.62 * (1 - 0.0796 * q) * sin(2 * q) * (1 + cos(p)) + 0.14 * sin(2 * q)",
     z: "0.28 * q + 0.62 * (1 - 0.0796 * q) * sin(p) + 0.03 * sin(15 * q + t)",
     style: { material: "pearl", lighting: "sunset" },
+    speedHint: 0.5,
     description: "Logarithmic turret shell: a shrinking tube coiled up a rising spiral."
   },
   {
@@ -1535,6 +1545,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "2.6 * sin(p + 0.3 * t) * sin(q)",
     z: "2.6 * (cos(q) + log(tan(q / 2))) + 0.35 * p",
     style: { material: "jade", lighting: "caustic" },
+    speedHint: 0.5,
     description: "Dini's surface: constant negative curvature twisted along a helix."
   },
   {
@@ -1546,6 +1557,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "3 * sin(q)",
     z: "3 * sin(p + q + 0.5 * t)",
     style: { material: "hologram", lighting: "prism" },
+    speedHint: 0.5,
     description: "The sine surface: three orthogonal sines sliding against each other."
   },
   {
@@ -1558,6 +1570,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "(3 + 0.8 * sin(3 * q) * cos(4 * p + t)) * sin(q) * sin(p)",
     z: "(3 + 0.8 * sin(3 * q) * cos(4 * p + t)) * cos(q)",
     style: { material: "ruby", lighting: "eclipse" },
+    speedHint: 0.5,
     description: "A sphere modulated by a rotating spherical harmonic — it blooms as t turns."
   },
   {
@@ -1571,6 +1584,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "q",
     z: "1.1 * sin(2 * sqrt(p^2 + q^2) - 2 * t) + 0.4 * sin(1.7 * p + t) * cos(1.5 * q)",
     style: { material: "ice", lighting: "laboratory" },
+    speedHint: 0.5,
     description: "Circular ripples from the center interfering with a diagonal cross-swell."
   },
   {
@@ -1584,6 +1598,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "3 * sign(cos(q)) * abs(cos(q))^(0.55 + 0.3 * sin(0.5 * t)) * sign(sin(p)) * abs(sin(p))^(0.55 + 0.3 * sin(0.5 * t))",
     z: "3 * sign(sin(q)) * abs(sin(q))^(0.55 + 0.3 * sin(0.5 * t))",
     style: { material: "plasma", lighting: "prism" },
+    speedHint: 0.5,
     description: "A superellipsoid whose exponent breathes between rounded cube and pointed star."
   },
   {
@@ -1596,6 +1611,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "(2.6 + 0.8 * cos(q)) * sin(p)",
     z: "0.8 * sin(q) + 0.45 * p - 2.8",
     style: { material: "liquid-metal", lighting: "studio" },
+    speedHint: 0.5,
     description: "A toroidal tube stretched into a two-turn helical spring."
   },
   {
@@ -1607,6 +1623,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "(3 + (0.55 + 0.45 * cos(2 * t + 3 * p)) * cos(q)) * sin(p)",
     z: "(0.55 + 0.45 * sin(2 * t + 3 * p)) * sin(q)",
     style: { material: "neon", lighting: "underlight" },
+    speedHint: 0.5,
     description: "A torus whose cross-section squashes and rolls as it travels the ring."
   },
   {
@@ -1620,6 +1637,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "3.2 * (sin(p + 0.2 * t) * cos(q))^3",
     z: "3.2 * sin(q)^3",
     style: { material: "obsidian", lighting: "eclipse" },
+    speedHint: 0.5,
     description: "Cubed-cosine star ellipsoid: six cusps joined by pinched saddle walls."
   },
   {
@@ -1631,6 +1649,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "((2 + 1.3 * sin(0.4 * t)) + 1.4 * cos(q)) * sin(p)",
     z: "1.4 * sin(q)",
     style: { material: "glass", lighting: "aurora" },
+    speedHint: 0.5,
     description: "The major radius sweeps through ring, horn and spindle torus regimes."
   },
   {
@@ -1644,6 +1663,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     y: "q * sin(2 * p)",
     z: "0.8 * p - 2.5 + 0.2 * sin(6 * q + t)",
     style: { material: "carbon", lighting: "noir" },
+    speedHint: 0.5,
     description: "A double-turn spiral ramp with a gentle radial shudder."
   }
 ];
@@ -1661,6 +1681,7 @@ const SUPERSHAPE_FORMULAS: Formula[] = [
     y: "3 * ((abs(cos(1.25 * p)))^2.2 + (abs(sin(1.25 * p)))^1.7)^(-1 / (4 + 2 * sin(0.3 * t))) * sin(p) * ((abs(cos(q)))^1.6 + (abs(sin(q)))^1.6)^(-1 / 6) * cos(q)",
     z: "3 * ((abs(cos(q)))^1.6 + (abs(sin(q)))^1.6)^(-1 / 6) * sin(q)",
     style: { material: "jade", lighting: "caustic" },
+    speedHint: 0.5,
     description: "A five-ribbed superformula solid whose sharpness breathes with t."
   },
   {
@@ -1674,6 +1695,7 @@ const SUPERSHAPE_FORMULAS: Formula[] = [
     y: "2.8 * ((abs(cos(2 * p)))^5 + (abs(sin(2 * p)))^5)^(-1 / (1 + 0.35 * sin(0.4 * t))) * sin(p) * ((abs(cos(0.5 * q)))^2 + (abs(sin(0.5 * q)))^2)^(-1 / 3) * cos(q)",
     z: "2.8 * ((abs(cos(0.5 * q)))^2 + (abs(sin(0.5 * q)))^2)^(-1 / 3) * sin(q)",
     style: { material: "obsidian", lighting: "underlight" },
+    speedHint: 0.5,
     description: "Eight-spined urchin: pointed lobes flex as the exponent oscillates."
   },
   {
@@ -1687,6 +1709,7 @@ const SUPERSHAPE_FORMULAS: Formula[] = [
     y: "3 * ((abs(cos(1.5 * p)))^(2.5 + 1.5 * sin(0.5 * t)) + (abs(sin(1.5 * p)))^(2.5 - 1.5 * sin(0.5 * t)))^(-1 / 2.4) * sin(p) * ((abs(cos(q)))^2 + (abs(sin(q)))^2)^(-1 / 2) * cos(q)",
     z: "3 * ((abs(cos(q)))^2 + (abs(sin(q)))^2)^(-1 / 2) * sin(q)",
     style: { material: "pearl", lighting: "sunset" },
+    speedHint: 0.5,
     description: "Six petals trade fullness in antiphase, like a blossom opening and closing."
   },
   {
@@ -1700,6 +1723,7 @@ const SUPERSHAPE_FORMULAS: Formula[] = [
     y: "3 * ((abs(cos(0.75 * p)))^3 + (abs(sin(0.75 * p)))^3)^(-1 / 1.2) * sin(p) * ((abs(cos(1.5 * q)))^3 + (abs(sin(1.5 * q)))^3)^(-1 / (5 + 2 * sin(0.25 * t))) * cos(q)",
     z: "3 * ((abs(cos(1.5 * q)))^3 + (abs(sin(1.5 * q)))^3)^(-1 / (5 + 2 * sin(0.25 * t))) * sin(q)",
     style: { material: "ruby", lighting: "gallery" },
+    speedHint: 0.5,
     description: "Triangular superformula cut with ridged latitudes — a slowly re-faceting gem."
   },
   {
@@ -1710,6 +1734,7 @@ const SUPERSHAPE_FORMULAS: Formula[] = [
     z: "0.8 * sin(3 * p + t)",
     geometryMode: "tube",
     style: { material: "velvet", lighting: "sunset" },
+    speedHint: 0.8,
     description: "Seven-petaled superformula rose, slowly precessing."
   },
   {
@@ -1720,6 +1745,7 @@ const SUPERSHAPE_FORMULAS: Formula[] = [
     z: "0.6 * cos(5 * p - t)",
     geometryMode: "ribbon",
     style: { material: "neon", lighting: "prism" },
+    speedHint: 0.8,
     description: "Five-pointed star whose spikes sharpen and relax with the beat of t."
   },
   {
@@ -1730,6 +1756,7 @@ const SUPERSHAPE_FORMULAS: Formula[] = [
     z: "0.5 * sin(2 * p + 0.5 * t)",
     geometryMode: "extrude",
     style: { material: "ceramic", lighting: "gallery" },
+    speedHint: 0.8,
     description: "A near-polygon whose symmetry count drifts, so the outline never repeats."
   },
   {
@@ -1740,6 +1767,7 @@ const SUPERSHAPE_FORMULAS: Formula[] = [
     z: "0.7 * sin(6 * p + t)",
     geometryMode: "lathe",
     style: { material: "carbon", lighting: "noir" },
+    speedHint: 0.8,
     description: "Twelve-toothed superformula gear with a wobbling axial ripple."
   }
 ];

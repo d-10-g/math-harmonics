@@ -1,6 +1,6 @@
 import { compile } from 'mathjs';
 import { Formula, ShaderPreset } from '../constants';
-import { surfaceMidQ } from './parametricSurface';
+import { surfaceRanges } from './parametricSurface';
 
 // Lazy preset thumbnails for the library list. Formula thumbs are 2D canvas
 // polylines; shader thumbs render the actual GLSL on a shared WebGL quad.
@@ -33,23 +33,33 @@ export function formulaThumbnail(formula: Formula): string {
       const fx = compile(formula.x);
       const fy = compile(formula.y);
       const t = 1.2;
-      const count = 180;
-      const q = formula.parametric ? surfaceMidQ(formula) : 0;
-      const xs: number[] = [];
-      const ys: number[] = [];
+      const count = formula.parametric ? 120 : 180;
+      // Surfaces preview as several stacked q-slices (wireframe feel);
+      // curves as a single stroke.
+      const { pRange, qRange } = surfaceRanges(formula);
+      const qSlices = formula.parametric
+        ? [0.08, 0.3, 0.5, 0.7, 0.92].map((f) => qRange[0] + f * (qRange[1] - qRange[0]))
+        : [0];
+      const pSpan: [number, number] = formula.parametric ? pRange : [0, Math.PI * 8];
+      const slices: Array<{ xs: number[]; ys: number[] }> = [];
       let extent = 0.001;
 
-      for (let i = 0; i <= count; i++) {
-        const p = (i / count) * Math.PI * 8;
-        const scope = { p, t, s: 1, q };
-        const rawX = fx.evaluate(scope);
-        const rawY = fy.evaluate(scope);
-        const x = typeof rawX === 'number' ? rawX : rawX?.re ?? 0;
-        const y = typeof rawY === 'number' ? rawY : rawY?.re ?? 0;
-        if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('non-finite sample');
-        xs.push(x);
-        ys.push(y);
-        extent = Math.max(extent, Math.abs(x), Math.abs(y));
+      for (const q of qSlices) {
+        const xs: number[] = [];
+        const ys: number[] = [];
+        for (let i = 0; i <= count; i++) {
+          const p = pSpan[0] + (i / count) * (pSpan[1] - pSpan[0]);
+          const scope = { p, t, s: 1, q };
+          const rawX = fx.evaluate(scope);
+          const rawY = fy.evaluate(scope);
+          const x = typeof rawX === 'number' ? rawX : rawX?.re ?? 0;
+          const y = typeof rawY === 'number' ? rawY : rawY?.re ?? 0;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('non-finite sample');
+          xs.push(x);
+          ys.push(y);
+          extent = Math.max(extent, Math.abs(x), Math.abs(y));
+        }
+        slices.push({ xs, ys });
       }
 
       const scale = (THUMB_SIZE / 2 - 8) / extent;
@@ -61,16 +71,21 @@ export function formulaThumbnail(formula: Formula): string {
       gradient.addColorStop(0, '#818cf8');
       gradient.addColorStop(1, '#22d3ee');
       ctx.strokeStyle = gradient;
-      ctx.lineWidth = 1.6;
+      ctx.lineWidth = formula.parametric ? 1.1 : 1.6;
       ctx.lineJoin = 'round';
-      ctx.beginPath();
-      for (let i = 0; i <= count; i++) {
-        const px = THUMB_SIZE / 2 + xs[i] * scale;
-        const py = THUMB_SIZE / 2 - ys[i] * scale;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
+
+      slices.forEach((slice, index) => {
+        ctx.globalAlpha = formula.parametric ? 0.3 + (index / Math.max(1, slices.length - 1)) * 0.65 : 1;
+        ctx.beginPath();
+        for (let i = 0; i <= count; i++) {
+          const px = THUMB_SIZE / 2 + slice.xs[i] * scale;
+          const py = THUMB_SIZE / 2 - slice.ys[i] * scale;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
       dataUrl = ctx.canvas.toDataURL('image/png');
     } catch {
       dataUrl = '';
