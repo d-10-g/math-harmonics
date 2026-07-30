@@ -20,10 +20,13 @@ export default defineConfig(({mode}) => {
       dedupe: ['three'],
     },
     server: {
-      https: {
-        key: fs.readFileSync('./.cert/key.pem'),
-        cert: fs.readFileSync('./.cert/cert.pem'),
-      },
+      // HTTPS only when local mkcert files exist (CI and fresh clones have none).
+      https: fs.existsSync('./.cert/key.pem') && fs.existsSync('./.cert/cert.pem')
+        ? {
+            key: fs.readFileSync('./.cert/key.pem'),
+            cert: fs.readFileSync('./.cert/cert.pem'),
+          }
+        : undefined,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
