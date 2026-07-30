@@ -69,8 +69,8 @@ const DEFAULT_XR_VISUAL_TRANSFORM = {
 const XR_THUMBSTICK_DEADZONE = 0.16;
 const XR_LOCOMOTION_SPEED = 1.65;
 const XR_LOCOMOTION_BOUNDS = 6;
-const XR_VISUAL_SCALE_MIN = 0.035;
-const XR_VISUAL_SCALE_MAX = 0.2;
+const XR_VISUAL_SCALE_MIN = 0.02;
+const XR_VISUAL_SCALE_MAX = 0.24;
 const XR_VISUAL_DISTANCE_MIN = 0.9;
 const XR_VISUAL_DISTANCE_MAX = 3.4;
 
@@ -1290,6 +1290,15 @@ function AngledMirrorSurfaces({ show3D }: { show3D: boolean }) {
   );
 }
 
+type SpatialPointer = {
+  // Ray-object intersection: tracks where the user is "pointing at".
+  point: THREE.Vector3;
+  // Ray origin: tracks where the hand/controller physically is. Two-hand
+  // gestures measure these — hit points slide off the object as hands close
+  // together, which made shrinking nearly impossible on device.
+  origin: THREE.Vector3;
+};
+
 type SpatialGesture = {
   mode: 'move' | 'transform';
   start: THREE.Vector3;
@@ -1319,7 +1328,7 @@ function SpatialWrapper({
   // object (the only way to move it on Vision Pro); two simultaneous pinches
   // scale by hand separation and yaw by hand orbit. Offset lives in a ref
   // owned by GraphView so the VIEW tab's RESET ALL can clear it.
-  const activePointersRef = useRef(new Map<number, THREE.Vector3>());
+  const activePointersRef = useRef(new Map<number, SpatialPointer>());
   const gestureRef = useRef<SpatialGesture | null>(null);
 
   useEffect(() => {
@@ -1337,23 +1346,35 @@ function SpatialWrapper({
     }
   });
 
+  const readPointer = (e: any): SpatialPointer | null => {
+    if (!e.point) return null;
+    return {
+      point: e.point.clone(),
+      origin: e.ray?.origin ? e.ray.origin.clone() : e.point.clone()
+    };
+  };
+
   const beginGesture = () => {
     const pointers = [...activePointersRef.current.values()];
     if (pointers.length >= 2) {
       const [a, b] = pointers;
+      // Grabbing with both hands takes manual control: freeze auto-rotate at
+      // the current heading so the turn gesture visibly sticks.
+      const currentYaw = autoYawRef.current;
+      setXrVisualTransform?.((prev) => (prev.autoRotate ? { ...prev, autoRotate: false, yaw: currentYaw } : prev));
       gestureRef.current = {
         mode: 'transform',
         start: new THREE.Vector3(),
         origin: dragOffsetRef.current.clone(),
-        initialDistance: Math.max(0.05, a.distanceTo(b)),
+        initialDistance: Math.max(0.03, a.origin.distanceTo(b.origin)),
         initialScale: xrVisualTransform.scale,
-        initialAngle: Math.atan2(b.x - a.x, b.z - a.z),
-        initialYaw: xrVisualTransform.yaw
+        initialAngle: Math.atan2(b.origin.x - a.origin.x, b.origin.z - a.origin.z),
+        initialYaw: currentYaw
       };
     } else if (pointers.length === 1) {
       gestureRef.current = {
         mode: 'move',
-        start: pointers[0].clone(),
+        start: pointers[0].point.clone(),
         origin: dragOffsetRef.current.clone(),
         initialDistance: 0,
         initialScale: 0,
@@ -1366,23 +1387,27 @@ function SpatialWrapper({
   };
 
   const handlePointerDown = (e: any) => {
-    if (!isPresenting || !e.point) return;
+    if (!isPresenting) return;
+    const pointer = readPointer(e);
+    if (!pointer) return;
     e.stopPropagation();
-    activePointersRef.current.set(e.pointerId, e.point.clone());
+    activePointersRef.current.set(e.pointerId, pointer);
     e.target?.setPointerCapture?.(e.pointerId);
     beginGesture();
   };
 
   const handlePointerMove = (e: any) => {
     const pointers = activePointersRef.current;
-    if (!isPresenting || !e.point || !pointers.has(e.pointerId)) return;
+    if (!isPresenting || !pointers.has(e.pointerId)) return;
+    const pointer = readPointer(e);
+    if (!pointer) return;
     e.stopPropagation();
-    pointers.set(e.pointerId, e.point.clone());
+    pointers.set(e.pointerId, pointer);
     const gesture = gestureRef.current;
     if (!gesture) return;
 
     if (gesture.mode === 'move') {
-      const next = gesture.origin.clone().add(e.point.clone().sub(gesture.start));
+      const next = gesture.origin.clone().add(pointer.point.clone().sub(gesture.start));
       next.x = THREE.MathUtils.clamp(next.x, -2.5, 2.5);
       next.y = THREE.MathUtils.clamp(next.y, -0.8, 1.2);
       next.z = THREE.MathUtils.clamp(next.z, -2.5, 2.5);
@@ -1392,8 +1417,11 @@ function SpatialWrapper({
 
     const [a, b] = [...pointers.values()];
     if (!a || !b) return;
-    const ratio = Math.max(0.05, a.distanceTo(b)) / gesture.initialDistance;
-    const deltaYaw = Math.atan2(b.x - a.x, b.z - a.z) - gesture.initialAngle;
+    // Hand separation drives scale; exponent > 1 widens the travel so a
+    // comfortable hand movement covers the full range in either direction.
+    const separation = Math.max(0.03, a.origin.distanceTo(b.origin));
+    const ratio = Math.pow(separation / gesture.initialDistance, 1.35);
+    const deltaYaw = Math.atan2(b.origin.x - a.origin.x, b.origin.z - a.origin.z) - gesture.initialAngle;
     setXrVisualTransform?.((prev) => ({
       ...prev,
       scale: THREE.MathUtils.clamp(gesture.initialScale * ratio, XR_VISUAL_SCALE_MIN, XR_VISUAL_SCALE_MAX),
@@ -1458,12 +1486,15 @@ function HUDButton({
   const scale = hovered ? 1.08 : 1.0;
 
   return (
-    <mesh 
-      position={position} 
+    <mesh
+      position={position}
       scale={[scale, scale, scale]}
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
-      onClick={(e) => {
+      // Fire on press, not press+release: with gaze-and-pinch input the gaze
+      // often drifts off the button between pinch-down and pinch-up, which
+      // made clicks feel unreliable on Vision Pro.
+      onPointerDown={(e) => {
         e.stopPropagation();
         onClick();
       }}
@@ -1576,7 +1607,7 @@ function ImmersiveHUD({
   const hudLeftController = useXRInputSourceState('controller', 'left');
   const hudRightController = useXRInputSourceState('controller', 'right');
   const hasControllers = Boolean(hudLeftController || hudRightController);
-  const hudScale = hasControllers ? 1 : 1.3;
+  const hudScale = hasControllers ? 1 : 1.45;
   const [activeTab, setActiveTab] = useState<'control' | 'settings' | 'view' | 'pilot' | 'formulas' | 'shaders'>('control');
   const [formulaPage, setFormulaPage] = useState(0);
   const [shaderPage, setShaderPage] = useState(0);
