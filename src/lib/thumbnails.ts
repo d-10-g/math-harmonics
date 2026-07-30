@@ -1,5 +1,6 @@
 import { compile } from 'mathjs';
 import { Formula, ShaderPreset } from '../constants';
+import { surfaceMidQ } from './parametricSurface';
 
 // Lazy preset thumbnails for the library list. Formula thumbs are 2D canvas
 // polylines; shader thumbs render the actual GLSL on a shared WebGL quad.
@@ -33,13 +34,14 @@ export function formulaThumbnail(formula: Formula): string {
       const fy = compile(formula.y);
       const t = 1.2;
       const count = 180;
+      const q = formula.parametric ? surfaceMidQ(formula) : 0;
       const xs: number[] = [];
       const ys: number[] = [];
       let extent = 0.001;
 
       for (let i = 0; i <= count; i++) {
         const p = (i / count) * Math.PI * 8;
-        const scope = { p, t, s: 1 };
+        const scope = { p, t, s: 1, q };
         const rawX = fx.evaluate(scope);
         const rawY = fy.evaluate(scope);
         const x = typeof rawX === 'number' ? rawX : rawX?.re ?? 0;

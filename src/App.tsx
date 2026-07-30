@@ -679,7 +679,7 @@ export default function App() {
         <div className="flex gap-8">
           <span>Phase t: [0, 4π]</span>
           <FooterVerts />
-          <span>Mode: {show3D ? ((webgpuGeometry !== 'auto' ? webgpuGeometry : selectedFormula.geometryMode)?.toUpperCase() || 'VARIED_3D') : 'ORTHO_2D'}</span>
+          <span>Mode: {show3D ? (selectedFormula.parametric ? 'SURFACE(P,Q)' : (webgpuGeometry !== 'auto' ? webgpuGeometry : selectedFormula.geometryMode)?.toUpperCase() || 'VARIED_3D') : 'ORTHO_2D'}</span>
         </div>
         <FooterStats />
       </footer>

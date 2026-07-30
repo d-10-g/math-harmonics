@@ -7,6 +7,12 @@ export interface Formula {
   geometryMode?: FormulaGeometryMode;
   category?: FormulaCategory;
   description: string;
+  // True two-parameter surface: x/y/z are f(p, q, t) and the renderer builds
+  // a (p, q) grid mesh directly instead of running a curve through one of the
+  // procedural geometry modes.
+  parametric?: boolean;
+  pRange?: [number, number];
+  qRange?: [number, number];
 }
 
 export type FormulaGeometryMode =
@@ -26,7 +32,7 @@ export type FormulaGeometryMode =
   | 'ripple'
   | 'prism'
   | 'vortex';
-export type FormulaCategory = 'Parameter-evolving fractals' | 'Coordinate-dependent formulas' | 'State-dependent rule switching' | 'Formula mutation meta-fractals' | 'Organic root and PDE fields';
+export type FormulaCategory = 'Parameter-evolving fractals' | 'Coordinate-dependent formulas' | 'State-dependent rule switching' | 'Formula mutation meta-fractals' | 'Organic root and PDE fields' | 'Parametric surfaces';
 export type WebGPUGeometryProfile = 'auto' | FormulaGeometryMode;
 export type WebGPULightingPreset = 'studio' | 'aurora' | 'gallery' | 'eclipse' | 'caustic' | 'noir' | 'sunset' | 'laboratory' | 'underlight' | 'prism';
 export type WebGPUMaterialProfile =
@@ -1444,7 +1450,112 @@ const SELF_MODIFYING_FORMULAS: Formula[] = [
   }
 ];
 
+// True f(p, q, t) surfaces — rendered as (p, q) grid meshes, not curves.
+const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
+  {
+    id: "surf-01",
+    name: "Torus Pulse",
+    category: "Parametric surfaces",
+    parametric: true,
+    x: "(3 + (1.1 + 0.35 * sin(t)) * cos(q)) * cos(p)",
+    y: "(3 + (1.1 + 0.35 * sin(t)) * cos(q)) * sin(p)",
+    z: "(1.1 + 0.35 * sin(t)) * sin(q)",
+    description: "A torus whose tube radius breathes with the phase clock."
+  },
+  {
+    id: "surf-02",
+    name: "Klein Bottle",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [0, 12.566],
+    x: "((2.5 + 0.15 * sin(t)) + cos(0.5 * p) * sin(q) - sin(0.5 * p) * sin(2 * q)) * cos(p)",
+    y: "((2.5 + 0.15 * sin(t)) + cos(0.5 * p) * sin(q) - sin(0.5 * p) * sin(2 * q)) * sin(p)",
+    z: "sin(0.5 * p) * sin(q) + cos(0.5 * p) * sin(2 * q)",
+    description: "Figure-eight immersion of the Klein bottle — a closed surface with no inside."
+  },
+  {
+    id: "surf-03",
+    name: "Mobius Band",
+    category: "Parametric surfaces",
+    parametric: true,
+    qRange: [-0.9, 0.9],
+    x: "(3 + q * cos(0.5 * p + 0.2 * t)) * cos(p)",
+    y: "(3 + q * cos(0.5 * p + 0.2 * t)) * sin(p)",
+    z: "q * sin(0.5 * p + 0.2 * t)",
+    description: "One-sided band whose half-twist slowly crawls around the ring."
+  },
+  {
+    id: "surf-04",
+    name: "Catenoid-Helicoid Morph",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [-3.1416, 3.1416],
+    qRange: [-1.6, 1.6],
+    x: "cos(0.5 * t) * sinh(q) * sin(p) + sin(0.5 * t) * cosh(q) * cos(p)",
+    y: "-cos(0.5 * t) * sinh(q) * cos(p) + sin(0.5 * t) * cosh(q) * sin(p)",
+    z: "0.6 * p * cos(0.5 * t) + 1.4 * q * sin(0.5 * t)",
+    description: "The classic isometric deformation between a helicoid and a catenoid, driven by t."
+  },
+  {
+    id: "surf-05",
+    name: "Turret Seashell",
+    category: "Parametric surfaces",
+    parametric: true,
+    qRange: [0, 12.566],
+    x: "0.62 * (1 - 0.0796 * q) * cos(2 * q) * (1 + cos(p)) + 0.14 * cos(2 * q)",
+    y: "0.62 * (1 - 0.0796 * q) * sin(2 * q) * (1 + cos(p)) + 0.14 * sin(2 * q)",
+    z: "0.28 * q + 0.62 * (1 - 0.0796 * q) * sin(p) + 0.03 * sin(15 * q + t)",
+    description: "Logarithmic turret shell: a shrinking tube coiled up a rising spiral."
+  },
+  {
+    id: "surf-06",
+    name: "Dini Twist",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [0, 12.566],
+    qRange: [0.15, 2.0],
+    x: "2.6 * cos(p + 0.3 * t) * sin(q)",
+    y: "2.6 * sin(p + 0.3 * t) * sin(q)",
+    z: "2.6 * (cos(q) + log(tan(q / 2))) + 0.35 * p",
+    description: "Dini's surface: constant negative curvature twisted along a helix."
+  },
+  {
+    id: "surf-07",
+    name: "Sine Weave",
+    category: "Parametric surfaces",
+    parametric: true,
+    x: "3 * sin(p)",
+    y: "3 * sin(q)",
+    z: "3 * sin(p + q + 0.5 * t)",
+    description: "The sine surface: three orthogonal sines sliding against each other."
+  },
+  {
+    id: "surf-08",
+    name: "Harmonic Bloom",
+    category: "Parametric surfaces",
+    parametric: true,
+    qRange: [0.05, 3.09],
+    x: "(3 + 0.8 * sin(3 * q) * cos(4 * p + t)) * sin(q) * cos(p)",
+    y: "(3 + 0.8 * sin(3 * q) * cos(4 * p + t)) * sin(q) * sin(p)",
+    z: "(3 + 0.8 * sin(3 * q) * cos(4 * p + t)) * cos(q)",
+    description: "A sphere modulated by a rotating spherical harmonic — it blooms as t turns."
+  },
+  {
+    id: "surf-09",
+    name: "Interference Pool",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [-5, 5],
+    qRange: [-5, 5],
+    x: "p",
+    y: "q",
+    z: "1.1 * sin(2 * sqrt(p^2 + q^2) - 2 * t) + 0.4 * sin(1.7 * p + t) * cos(1.5 * q)",
+    description: "Circular ripples from the center interfering with a diagonal cross-swell."
+  }
+];
+
 export const PRESET_FORMULAS: Formula[] = [
+  ...PARAMETRIC_SURFACE_FORMULAS,
   ...BASE_PRESET_FORMULAS,
   ...ORGANIC_FLOW_FORMULAS,
   ...SELF_MODIFYING_FORMULAS

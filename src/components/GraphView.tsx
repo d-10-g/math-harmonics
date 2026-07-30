@@ -31,10 +31,14 @@ function HudText(props: React.ComponentProps<typeof Text>) {
 }
 import { lightingRigSettings } from '../lib/lighting';
 import { createPhysicalMaterial } from '../lib/materials';
+import { buildParametricGeometry, surfaceMidQ } from '../lib/parametricSurface';
 
 // 3D geometry is rebuilt on this cadence instead of every frame; the material
 // time uniform and group motion still animate at full framerate in between.
+// Parametric surfaces evaluate ~13k mathjs samples per rebuild, so they get a
+// slower cadence.
 const GEOMETRY_REBUILD_MS = 100;
+const PARAMETRIC_REBUILD_MS = 220;
 
 const Line = 'line' as any;
 const GridHelper = 'gridHelper' as any;
@@ -273,13 +277,13 @@ function readNumber(value: any) {
   return THREE.MathUtils.clamp(n, -10000, 10000);
 }
 
-function sampleFormulaPoints(compiled: CompiledFormula, currentTime: number, scalar: number, resolution: number) {
+function sampleFormulaPoints(compiled: CompiledFormula, currentTime: number, scalar: number, resolution: number, qValue = 0) {
   const rawPts: THREE.Vector3[] = [];
   const extents: number[] = [];
 
   for (let i = 0; i <= resolution; i++) {
     const p = (i / resolution) * Math.PI * 8;
-    const scope = { p, t: currentTime, s: scalar };
+    const scope = { p, t: currentTime, s: scalar, q: qValue };
     let x = 0;
     let y = 0;
     let z = 0;
@@ -1109,10 +1113,14 @@ function FormulaLine({
       return;
     }
     const t = getClockTime();
-    const points = sampleFormulaPoints(compiled, t, scalarValue, resolution);
-    setGeometry3D(buildFormulaGeometry(points, geometryMode, formula.name, t));
+    if (formula.parametric) {
+      if (compiled.valid) setGeometry3D(buildParametricGeometry(formula, compiled, t, scalarValue));
+    } else {
+      const points = sampleFormulaPoints(compiled, t, scalarValue, resolution);
+      setGeometry3D(buildFormulaGeometry(points, geometryMode, formula.name, t));
+    }
     lastRebuildRef.current = performance.now();
-  }, [compiled, formula.name, geometryMode, scalarValue, show3D]);
+  }, [compiled, formula, geometryMode, scalarValue, show3D]);
 
   useEffect(() => {
     if (geometry3D) reportVerts(geometry3D.getAttribute('position')?.count ?? 0);
@@ -1145,17 +1153,22 @@ function FormulaLine({
 
     if (show3D) {
       const now = performance.now();
-      if (now - lastRebuildRef.current >= GEOMETRY_REBUILD_MS) {
+      const cadence = formula.parametric ? PARAMETRIC_REBUILD_MS : GEOMETRY_REBUILD_MS;
+      if (now - lastRebuildRef.current >= cadence) {
         lastRebuildRef.current = now;
-        const points = sampleFormulaPoints(compiled, time, nextScalar, resolution);
-        setGeometry3D(buildFormulaGeometry(points, geometryMode, formula.name, time));
+        if (formula.parametric) {
+          if (compiled.valid) setGeometry3D(buildParametricGeometry(formula, compiled, time, nextScalar));
+        } else {
+          const points = sampleFormulaPoints(compiled, time, nextScalar, resolution);
+          setGeometry3D(buildFormulaGeometry(points, geometryMode, formula.name, time));
+        }
       }
       return;
     }
 
     const positions = geometry.attributes.position.array as Float32Array;
     const uvs = geometry.attributes.uv.array as Float32Array;
-    const points = sampleFormulaPoints(compiled, time, nextScalar, resolution);
+    const points = sampleFormulaPoints(compiled, time, nextScalar, resolution, formula.parametric ? surfaceMidQ(formula) : 0);
     for (let i = 0; i <= resolution; i++) {
       positions[i * 3] = points[i].x;
       positions[i * 3 + 1] = points[i].y;
@@ -1227,6 +1240,74 @@ function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; inte
       <pointLight color={rig.rim} position={rig.rimPosition} intensity={rig.rimScale * light} distance={36} />
       <pointLight color={rig.fill} position={rig.fillPosition} intensity={rig.fillScale * light} distance={32} />
     </>
+  );
+}
+
+// Immersive-VR surroundings: a rig-tinted dome, a sparse starfield and a
+// floor disc + grid so the void has depth and a ground reference. Hidden in
+// passthrough modes (the real room is the environment there).
+function XREnvironment({ preset }: { preset: WebGPULightingPreset }) {
+  const session = useXR((state) => state.session);
+  const isPresenting = !!session;
+  const blend = session?.environmentBlendMode;
+  const isPassthrough = blend === 'alpha-blend' || blend === 'additive';
+  const rig = lightingRigSettings(preset);
+
+  const stars = useMemo(() => {
+    const count = 1200;
+    const positions = new Float32Array(count * 3);
+    // Deterministic LCG so the sky is identical every session.
+    let seed = 1234567;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed / 4294967296;
+    };
+    for (let i = 0; i < count; i++) {
+      const radius = 30 + rand() * 14;
+      const theta = rand() * Math.PI * 2;
+      const phi = Math.acos(rand() * 2 - 1);
+      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = Math.abs(radius * Math.cos(phi)) * 0.9 - 2;
+      positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    return geometry;
+  }, []);
+
+  useEffect(() => () => stars.dispose(), [stars]);
+
+  const grid = useMemo(() => {
+    const helper = new THREE.GridHelper(14, 28, new THREE.Color(rig.rim), new THREE.Color(rig.ground));
+    const material = helper.material as THREE.LineBasicMaterial;
+    material.transparent = true;
+    material.opacity = 0.22;
+    material.depthWrite = false;
+    return helper;
+  }, [rig.rim, rig.ground]);
+
+  useEffect(() => () => {
+    grid.geometry.dispose();
+    (grid.material as THREE.Material).dispose();
+  }, [grid]);
+
+  if (!isPresenting || isPassthrough) return null;
+
+  return (
+    <group>
+      <mesh>
+        <sphereGeometry args={[50, 32, 16]} />
+        <meshBasicMaterial color={rig.background} side={THREE.BackSide} depthWrite={false} />
+      </mesh>
+      <points geometry={stars}>
+        <pointsMaterial size={0.14} sizeAttenuation color="#cdd8ff" transparent opacity={0.8} depthWrite={false} />
+      </points>
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.002, 0]}>
+        <circleGeometry args={[7.5, 48]} />
+        <meshBasicMaterial color={rig.ground} transparent opacity={0.5} depthWrite={false} />
+      </mesh>
+      <primitive object={grid} position={[0, 0.02, 0]} />
+    </group>
   );
 }
 
@@ -2691,6 +2772,7 @@ export default function GraphView({
           <XRJoystickLocomotion originRef={xrOriginRef} />
           <XRVisualThumbstickControls setXrVisualTransform={setXrVisualTransform} />
           <XRAlphaController />
+          <XREnvironment preset={webgpuLightingPreset} />
           <StudioEnvironment />
           <SpatialWrapper xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
             <LightingRig preset={webgpuLightingPreset} intensity={webgpuLighting} />

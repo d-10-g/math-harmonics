@@ -84,7 +84,7 @@ interface ControlsProps {
 function formulaError(expression: string): string | null {
   try {
     const compiled = compile(expression);
-    const value = compiled.evaluate({ p: 1.234, t: 0.7, s: 1 });
+    const value = compiled.evaluate({ p: 1.234, t: 0.7, s: 1, q: 1.1 });
     const numeric = typeof value === 'number' ? value : value?.re;
     if (typeof numeric !== 'number' || !Number.isFinite(numeric)) {
       return 'Does not evaluate to a finite number';

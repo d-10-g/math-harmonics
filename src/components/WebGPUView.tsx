@@ -18,6 +18,7 @@ import {
 } from '../constants';
 import { getClockTime, reportVerts } from '../lib/clock';
 import { lightingRigSettings } from '../lib/lighting';
+import { buildParametricGeometry, surfaceMidQ } from '../lib/parametricSurface';
 
 type WebGPUViewProps = {
   formula: Formula;
@@ -341,16 +342,16 @@ function compileFormula(formula: Formula): CompiledFormula {
   }
 }
 
-function evaluateCompiled(node: any, p: number, t: number, fallback: number) {
+function evaluateCompiled(node: any, p: number, t: number, fallback: number, q = 0) {
   try {
-    const value = node?.evaluate({ p, t });
+    const value = node?.evaluate({ p, t, q });
     return Number.isFinite(value) ? value : fallback;
   } catch {
     return fallback;
   }
 }
 
-function samplePoints(compiled: CompiledFormula, t: number, show3D: boolean) {
+function samplePoints(compiled: CompiledFormula, t: number, show3D: boolean, qValue = 0) {
   const points: THREE.Vector3[] = [];
 
   for (let i = 0; i <= POINT_COUNT; i++) {
@@ -359,9 +360,9 @@ function samplePoints(compiled: CompiledFormula, t: number, show3D: boolean) {
 
     if (compiled.valid) {
       points.push(new THREE.Vector3(
-        evaluateCompiled(compiled.x, p, t, Math.cos(p) * 4),
-        evaluateCompiled(compiled.y, p, t, Math.sin(p) * 4),
-        show3D ? evaluateCompiled(compiled.z, p, t, Math.sin(p + t) * 1.5) : 0
+        evaluateCompiled(compiled.x, p, t, Math.cos(p) * 4, qValue),
+        evaluateCompiled(compiled.y, p, t, Math.sin(p) * 4, qValue),
+        show3D ? evaluateCompiled(compiled.z, p, t, Math.sin(p + t) * 1.5, qValue) : 0
       ));
     } else {
       points.push(new THREE.Vector3(Math.cos(p) * 4, Math.sin(p) * 4, show3D ? Math.sin(p * 3 + t) : 0));
@@ -975,7 +976,15 @@ function createVortexGeometry(points: THREE.Vector3[], t: number) {
 }
 
 function buildGeometry(formula: Formula, compiled: CompiledFormula, t: number, show3D: boolean, webgpuGeometry: WebGPUGeometryProfile) {
-  const points = samplePoints(compiled, t, show3D);
+  if (formula.parametric && show3D && compiled.valid && compiled.x) {
+    try {
+      return buildParametricGeometry(formula, compiled as { x: any; y: any; z: any }, t);
+    } catch (error) {
+      console.warn('Unable to build parametric surface for WebGPU path:', error);
+    }
+  }
+
+  const points = samplePoints(compiled, t, show3D, formula.parametric ? surfaceMidQ(formula) : 0);
   const mode = geometryModeForFormula(formula, show3D, webgpuGeometry);
 
   try {
