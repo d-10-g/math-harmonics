@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Search, Shuffle, Sparkles } from 'lucide-react';
+import { Search, Shuffle, Sparkles, Star } from 'lucide-react';
 import { Formula, PRESET_FORMULAS, ShaderPreset } from '../constants';
 import { PRESET_SHADERS } from '../shaders';
 import { cn } from '../lib/utils';
@@ -23,7 +23,26 @@ type LibraryItem = {
   kind: 'formula' | 'shader';
 };
 
-const PAGE_SIZE = 4;
+const FAVORITES_KEY = 'harmonics.favorites.v1';
+const FAVORITES_CATEGORY = '★ Favs';
+
+function loadFavorites(): Set<string> {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    if (raw) return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    // Corrupt storage falls through to an empty set.
+  }
+  return new Set();
+}
+
+function saveFavorites(favorites: Set<string>) {
+  try {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
+  } catch {
+    // Storage may be unavailable; favorites just won't persist.
+  }
+}
 
 function categoryLabel(category?: string) {
   if (!category) return 'Core';
@@ -44,17 +63,17 @@ function itemKey(item: LibraryItem) {
   return `${item.kind}-${item.id}`;
 }
 
-export default function Sidebar({ 
-  selectedFormula, 
-  onSelect, 
-  selectedShader, 
+export default function Sidebar({
+  selectedFormula,
+  onSelect,
+  selectedShader,
   onSelectShader,
   activeTab,
   setActiveTab
 }: SidebarProps) {
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [page, setPage] = useState(0);
+  const [favorites, setFavorites] = useState<Set<string>>(loadFavorites);
 
   const items = useMemo<LibraryItem[]>(() => {
     if (activeTab === 'formulas') {
@@ -106,6 +125,11 @@ export default function Sidebar({
     };
   }, [activeTab, selectedFormula, selectedShader]);
 
+  const favoriteCount = useMemo(
+    () => items.reduce((count, item) => count + (favorites.has(itemKey(item)) ? 1 : 0), 0),
+    [items, favorites]
+  );
+
   const categories = useMemo(() => {
     const counts = new Map<string, number>();
     items.forEach((item) => {
@@ -115,6 +139,7 @@ export default function Sidebar({
 
     return [
       { label: 'All', count: items.length },
+      { label: FAVORITES_CATEGORY, count: favoriteCount },
       ...Array.from(counts, ([label, count]) => ({ label, count }))
         .sort((a, b) => {
           if (a.label === 'Core') return -1;
@@ -122,32 +147,25 @@ export default function Sidebar({
           return a.label.localeCompare(b.label);
         })
     ];
-  }, [items]);
+  }, [items, favoriteCount]);
 
   const filteredItems = useMemo(() => {
     const term = query.trim().toLowerCase();
 
     return items.filter((item) => {
       const label = categoryLabel(item.category);
-      const categoryMatches = selectedCategory === 'All' || selectedCategory === label;
+      const categoryMatches = selectedCategory === 'All'
+        || (selectedCategory === FAVORITES_CATEGORY ? favorites.has(itemKey(item)) : selectedCategory === label);
       const text = `${item.name} ${item.description} ${item.source} ${label}`.toLowerCase();
       return categoryMatches && (!term || text.includes(term));
     });
-  }, [items, query, selectedCategory]);
+  }, [items, query, selectedCategory, favorites]);
 
   useEffect(() => {
     setQuery('');
     setSelectedCategory('All');
-    setPage(0);
   }, [activeTab]);
 
-  useEffect(() => {
-    setPage(0);
-  }, [query, selectedCategory]);
-
-  const pageCount = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount - 1);
-  const visibleItems = filteredItems.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
   const selectedKey = itemKey(selectedItem);
 
   const selectItem = (item: LibraryItem) => {
@@ -156,6 +174,20 @@ export default function Sidebar({
     } else {
       onSelectShader(PRESET_SHADERS[item.index]);
     }
+  };
+
+  const toggleFavorite = (item: LibraryItem) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      const key = itemKey(item);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      saveFavorites(next);
+      return next;
+    });
   };
 
   const selectRandom = () => {
@@ -169,7 +201,7 @@ export default function Sidebar({
       <div className="bg-white/5 border border-white/10 rounded-lg p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
         <div className="flex justify-between items-center px-1">
           <div className="flex gap-2 rounded-lg bg-black/30 border border-white/10 p-1">
-            <button 
+            <button
               onClick={() => setActiveTab('formulas')}
               className={cn(
                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-[0.16em] transition-colors",
@@ -178,7 +210,7 @@ export default function Sidebar({
             >
               Formulas
             </button>
-            <button 
+            <button
               onClick={() => setActiveTab('shaders')}
               className={cn(
                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-[0.16em] transition-colors",
@@ -191,7 +223,7 @@ export default function Sidebar({
           <button
             onClick={selectRandom}
             className="h-8 w-8 rounded-md border border-white/10 bg-white/5 text-white/45 hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center"
-            title="Random preset"
+            title="Random preset from the current filter"
             type="button"
           >
             <Shuffle size={14} />
@@ -245,69 +277,71 @@ export default function Sidebar({
 
         <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3 text-[9px] font-mono uppercase tracking-[0.16em] text-white/35">
           <span>{filteredItems.length} Matches</span>
-          <span>Page {currentPage + 1}/{pageCount}</span>
+          <span>Scroll to browse</span>
         </div>
 
-        <div className="mt-3 grid min-h-[300px] lg:min-h-0 flex-1 grid-rows-4 gap-2 overflow-hidden">
-          {visibleItems.map((item) => {
-            const isSelected = itemKey(item) === selectedKey;
+        <div className="mt-3 flex-1 min-h-[300px] lg:min-h-0 overflow-y-auto custom-scrollbar pr-1 space-y-2">
+          {filteredItems.map((item) => {
+            const key = itemKey(item);
+            const isSelected = key === selectedKey;
+            const isFavorite = favorites.has(key);
             return (
-              <button
-                key={itemKey(item)}
-                onClick={() => selectItem(item)}
+              <div
+                key={key}
                 className={cn(
-                  "min-h-0 w-full text-left rounded-lg border p-3 transition-all duration-200 group overflow-hidden",
-                  isSelected 
-                    ? "bg-indigo-600/20 border-indigo-400/50" 
+                  "w-full flex items-stretch rounded-lg border transition-all duration-200 group overflow-hidden",
+                  isSelected
+                    ? "bg-indigo-600/20 border-indigo-400/50"
                     : "bg-white/[0.045] border-white/8 hover:border-white/20 hover:bg-white/[0.08]"
                 )}
-                type="button"
               >
-                <div className="flex justify-between items-start mb-1">
-                  <div className={cn(
-                    "text-[9px] font-mono uppercase",
-                    isSelected ? "text-indigo-200" : "text-white/30"
-                  )}>
-                    {categoryLabel(item.category)}
+                <button
+                  onClick={() => selectItem(item)}
+                  className="flex-1 min-w-0 text-left p-3"
+                  type="button"
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <div className={cn(
+                      "text-[9px] font-mono uppercase",
+                      isSelected ? "text-indigo-200" : "text-white/30"
+                    )}>
+                      {categoryLabel(item.category)}
+                    </div>
+                    {isSelected && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                    )}
                   </div>
-                  {isSelected && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                  <div className="truncate text-[11px] font-bold uppercase tracking-wide text-white/85">{item.name}</div>
+                  <div className="mt-1 line-clamp-2 text-[10px] leading-4 text-white/38 group-hover:text-white/55">
+                    {item.description}
+                  </div>
+                </button>
+                <button
+                  onClick={() => toggleFavorite(item)}
+                  className={cn(
+                    "shrink-0 px-2.5 flex items-center border-l transition-colors",
+                    isFavorite
+                      ? "border-amber-300/20 text-amber-300"
+                      : "border-white/5 text-white/20 hover:text-white/60"
                   )}
-                </div>
-                <div className="truncate text-[11px] font-bold uppercase tracking-wide text-white/85">{item.name}</div>
-                <div className="mt-1 line-clamp-2 text-[10px] leading-4 text-white/38 group-hover:text-white/55">
-                  {item.description}
-                </div>
-              </button>
+                  title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-pressed={isFavorite}
+                  type="button"
+                >
+                  <Star size={13} className={isFavorite ? 'fill-amber-300' : undefined} />
+                </button>
+              </div>
             );
           })}
 
-          {visibleItems.length === 0 && (
-            <div className="row-span-4 rounded-lg border border-white/10 bg-white/[0.03] p-4 text-xs text-white/35">
-              No matches.
+          {filteredItems.length === 0 && (
+            <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4 text-xs text-white/35">
+              {selectedCategory === FAVORITES_CATEGORY
+                ? 'No favorites yet — tap the star on any preset.'
+                : 'No matches.'}
             </div>
           )}
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button
-            onClick={() => setPage((value) => Math.max(0, value - 1))}
-            disabled={currentPage === 0}
-            className="flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.04] py-2 text-[10px] font-mono uppercase text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-30 disabled:hover:bg-white/[0.04] disabled:hover:text-white/45"
-            type="button"
-          >
-            <ChevronLeft size={13} />
-            Prev
-          </button>
-          <button
-            onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
-            disabled={currentPage >= pageCount - 1}
-            className="flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.04] py-2 text-[10px] font-mono uppercase text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-30 disabled:hover:bg-white/[0.04] disabled:hover:text-white/45"
-            type="button"
-          >
-            Next
-            <ChevronRight size={13} />
-          </button>
         </div>
       </div>
 

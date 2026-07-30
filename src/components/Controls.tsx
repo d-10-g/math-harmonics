@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { compile } from 'mathjs';
 import { cn } from '../lib/utils';
 import { useClockSnapshot } from '../lib/clock';
 import {
@@ -77,6 +78,55 @@ interface ControlsProps {
   shaderQuant: number;
   setShaderQuant: (q: number) => void;
   xrStore: any;
+}
+
+function formulaError(expression: string): string | null {
+  try {
+    const compiled = compile(expression);
+    const value = compiled.evaluate({ p: 1.234, t: 0.7, s: 1 });
+    const numeric = typeof value === 'number' ? value : value?.re;
+    if (typeof numeric !== 'number' || !Number.isFinite(numeric)) {
+      return 'Does not evaluate to a finite number';
+    }
+    return null;
+  } catch (error: any) {
+    return error?.message || 'Invalid expression';
+  }
+}
+
+function FormulaField({
+  label,
+  labelClass,
+  value,
+  placeholder,
+  onChange
+}: {
+  label: React.ReactNode;
+  labelClass: string;
+  value: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  const error = useMemo(() => formulaError(value), [value]);
+
+  return (
+    <div className="space-y-1.5">
+      <label className={labelClass}>{label}</label>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        spellCheck={false}
+        className={cn(
+          "w-full bg-black/40 border rounded-lg p-3 font-mono text-xs text-indigo-100 outline-none transition-colors h-16 resize-none",
+          error ? "border-rose-500/60 focus:border-rose-400" : "border-white/10 focus:border-indigo-500/50"
+        )}
+      />
+      {error && (
+        <div className="text-[9px] font-mono text-rose-400 leading-snug" role="alert">{error}</div>
+      )}
+    </div>
+  );
 }
 
 function LiveStats() {
@@ -317,30 +367,31 @@ export default function Controls({
         
         {activeTab === 'formulas' ? (
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-mono text-white/40 uppercase tracking-widest">X-Vector (p, t)</label>
-              <textarea 
-                value={selectedFormula.x}
-                onChange={(e) => onUpdateFormula(e.target.value, selectedFormula.y, selectedFormula.z || "sin(2 * p + t) * 4")}
-                className="w-full bg-black/40 border border-white/10 rounded-lg p-3 font-mono text-xs text-indigo-100 outline-none focus:border-indigo-500/50 transition-colors h-16 resize-none animate-pulse"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-mono text-white/40 uppercase tracking-widest">Y-Vector (p, t)</label>
-              <textarea 
-                value={selectedFormula.y}
-                onChange={(e) => onUpdateFormula(selectedFormula.x, e.target.value, selectedFormula.z || "sin(2 * p + t) * 4")}
-                className="w-full bg-black/40 border border-white/10 rounded-lg p-3 font-mono text-xs text-indigo-100 outline-none focus:border-indigo-500/50 transition-colors h-16 resize-none animate-pulse"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-mono text-[#d946ef] uppercase tracking-widest font-bold">Z-Vector (p, t) <span className="text-white/30 font-normal">[3D Volumetric]</span></label>
-              <textarea 
-                value={selectedFormula.z || "sin(2 * p + t) * 4"}
-                onChange={(e) => onUpdateFormula(selectedFormula.x, selectedFormula.y, e.target.value)}
-                placeholder="sin(2 * p + t) * 4"
-                className="w-full bg-black/40 border border-white/10 rounded-lg p-3 font-mono text-xs text-[#d946ef] outline-none focus:border-indigo-500/50 transition-colors h-16 resize-none animate-pulse"
-              />
+            <FormulaField
+              label="X-Vector (p, t)"
+              labelClass="text-[9px] font-mono text-white/40 uppercase tracking-widest"
+              value={selectedFormula.x}
+              onChange={(value) => onUpdateFormula(value, selectedFormula.y, selectedFormula.z || "sin(2 * p + t) * 4")}
+            />
+            <FormulaField
+              label="Y-Vector (p, t)"
+              labelClass="text-[9px] font-mono text-white/40 uppercase tracking-widest"
+              value={selectedFormula.y}
+              onChange={(value) => onUpdateFormula(selectedFormula.x, value, selectedFormula.z || "sin(2 * p + t) * 4")}
+            />
+            <FormulaField
+              label={<>Z-Vector (p, t) <span className="text-white/30 font-normal">[3D Volumetric]</span></>}
+              labelClass="text-[9px] font-mono text-[#d946ef] uppercase tracking-widest font-bold"
+              value={selectedFormula.z || "sin(2 * p + t) * 4"}
+              placeholder="sin(2 * p + t) * 4"
+              onChange={(value) => onUpdateFormula(selectedFormula.x, selectedFormula.y, value)}
+            />
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {['p — parameter [0, 8π]', 't — time phase', 's — XR hand scalar'].map((hint) => (
+                <span key={hint} className="rounded bg-white/[0.05] border border-white/10 px-2 py-0.5 text-[8px] font-mono text-white/40">
+                  {hint}
+                </span>
+              ))}
             </div>
           </div>
         ) : (

@@ -19,6 +19,7 @@ import {
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
 import { setClockPlayback, setClockTime, startClock, useClockSnapshot } from './lib/clock';
+import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 
 const APP_VERSION = 'v1.1.21-beta';
 
@@ -82,7 +83,9 @@ const xrStore = createXRStore({
   frameBufferScaling: (maxFramebufferScale: number) => isVisionProSafari() ? Math.min(1, maxFramebufferScale) : maxFramebufferScale,
   foveation: 0,
   anchors: false,
-  handTracking: isVisionProSafari() ? false : true,
+  // visionOS 2+ Safari exposes WebXR hand input; it is an optional feature,
+  // so requesting it is harmless where unsupported.
+  handTracking: true,
   layers: false,
   hitTest: false,
   planeDetection: false,
@@ -125,21 +128,26 @@ function FooterVerts() {
   return <span>Verts: {verts}</span>;
 }
 
+// Read once at module load: URL hash > localStorage > defaults.
+const initialShared = loadSharedState();
+
 export default function App() {
-  const [selectedFormula, setSelectedFormula] = useState<Formula>(PRESET_FORMULAS[0]);
-  const [selectedShader, setSelectedShader] = useState<ShaderPreset>(PRESET_SHADERS[0]);
+  const [selectedFormula, setSelectedFormula] = useState<Formula>(() => resolveInitialFormula(initialShared));
+  const [selectedShader, setSelectedShader] = useState<ShaderPreset>(() => resolveInitialShader(initialShared));
   const [activeTab, setActiveTab] = useState<'formulas'|'shaders'>('formulas');
-  const [speed, setSpeed] = useState(0.1);
+  const [speed, setSpeed] = useState(initialShared.speed ?? 0.1);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [show3D, setShow3D] = useState(true);
-  const [showWireframe, setShowWireframe] = useState(false);
-  const [showArtifacts, setShowArtifacts] = useState(false);
-  const [showMirrors, setShowMirrors] = useState(false);
-  const [rendererMode, setRendererMode] = useState<'webgl' | 'webgpu'>(() => shouldDefaultToWebGLForXR() ? 'webgl' : 'webgpu');
-  const [webgpuLighting, setWebgpuLighting] = useState(1.5);
-  const [webgpuLightingPreset, setWebgpuLightingPreset] = useState<WebGPULightingPreset>('studio');
-  const [webgpuGeometry, setWebgpuGeometry] = useState<WebGPUGeometryProfile>('auto');
-  const [webgpuMaterial, setWebgpuMaterial] = useState<WebGPUMaterialProfile>('auto');
+  const [show3D, setShow3D] = useState(initialShared.show3D ?? true);
+  const [showWireframe, setShowWireframe] = useState(initialShared.showWireframe ?? false);
+  const [showArtifacts, setShowArtifacts] = useState(initialShared.showArtifacts ?? false);
+  const [showMirrors, setShowMirrors] = useState(initialShared.showMirrors ?? false);
+  const [rendererMode, setRendererMode] = useState<'webgl' | 'webgpu'>(
+    () => initialShared.rendererMode ?? (shouldDefaultToWebGLForXR() ? 'webgl' : 'webgpu')
+  );
+  const [webgpuLighting, setWebgpuLighting] = useState(initialShared.webgpuLighting ?? 1.5);
+  const [webgpuLightingPreset, setWebgpuLightingPreset] = useState<WebGPULightingPreset>(initialShared.webgpuLightingPreset ?? 'studio');
+  const [webgpuGeometry, setWebgpuGeometry] = useState<WebGPUGeometryProfile>(initialShared.webgpuGeometry ?? 'auto');
+  const [webgpuMaterial, setWebgpuMaterial] = useState<WebGPUMaterialProfile>(initialShared.webgpuMaterial ?? 'auto');
   const [autoCycleWebgpuLighting, setAutoCycleWebgpuLighting] = useState(false);
   const [autoCycleWebgpuGeometry, setAutoCycleWebgpuGeometry] = useState(false);
   const [autoCycleWebgpuMaterial, setAutoCycleWebgpuMaterial] = useState(false);
@@ -376,12 +384,98 @@ export default function App() {
     });
   };
 
+  const handlePrevFormula = () => {
+    setSelectedFormula(prev => {
+      const currentIndex = PRESET_FORMULAS.findIndex(f => f.id === prev.id);
+      const prevIndex = (currentIndex - 1 + PRESET_FORMULAS.length) % PRESET_FORMULAS.length;
+      return PRESET_FORMULAS[prevIndex];
+    });
+  };
+
   const handleNextShader = () => {
     setSelectedShader(prev => {
       const currentIndex = PRESET_SHADERS.findIndex(s => s.id === prev.id);
       const nextIndex = (currentIndex + 1) % PRESET_SHADERS.length;
       return PRESET_SHADERS[nextIndex];
     });
+  };
+
+  const handlePrevShader = () => {
+    setSelectedShader(prev => {
+      const currentIndex = PRESET_SHADERS.findIndex(s => s.id === prev.id);
+      const prevIndex = (currentIndex - 1 + PRESET_SHADERS.length) % PRESET_SHADERS.length;
+      return PRESET_SHADERS[prevIndex];
+    });
+  };
+
+  // Persist shareable state to the URL hash + localStorage (preset ids and
+  // settings only; custom-edited expressions are not serialized).
+  useEffect(() => {
+    persistSharedState({
+      formulaId: selectedFormula.id,
+      shaderId: selectedShader.id,
+      rendererMode,
+      show3D,
+      showWireframe,
+      showArtifacts,
+      showMirrors,
+      speed,
+      webgpuGeometry,
+      webgpuMaterial,
+      webgpuLightingPreset,
+      webgpuLighting
+    });
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting]);
+
+  // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          setIsPlaying(p => !p);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          handleNextFormula();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          handlePrevFormula();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          handleNextShader();
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          handlePrevShader();
+          break;
+        case 'f':
+        case 'F':
+          toggleFullScreen();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // Handlers only use functional state updates and document APIs.
+  }, []);
+
+  const [copiedLink, setCopiedLink] = useState(false);
+  const copyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 1500);
+    } catch (err) {
+      console.warn('Unable to copy share link:', err);
+    }
   };
 
   const toggleFullScreen = () => {
@@ -407,9 +501,17 @@ export default function App() {
           <h1 className="text-xl font-medium tracking-tight">Harmonic.OS <span className="text-white/30 font-mono text-xs ml-2 uppercase tracking-widest">{APP_VERSION}</span></h1>
         </div>
         <div className="flex gap-4 items-center">
-          <button 
+          <button
+            onClick={copyShareLink}
+            className="px-3 py-1 hover:bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-white/50 hover:text-white transition-colors uppercase tracking-widest"
+            title="Copy a link that restores the current formula, shader and settings"
+          >
+            {copiedLink ? 'Copied ✓' : 'Copy Link'}
+          </button>
+          <button
             onClick={toggleFullScreen}
             className="px-3 py-1 hover:bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-white/50 hover:text-white transition-colors uppercase tracking-widest"
+            title="Toggle fullscreen (F)"
           >
             Full Screen
           </button>
@@ -494,6 +596,7 @@ export default function App() {
           <div className="p-6 bg-[#0a0a0a]/80 border-t border-white/10 backdrop-blur-md">
             <div className="flex justify-between text-[10px] font-mono text-white/40 mb-3 uppercase tracking-tighter">
               <span>Temporal Phase (t)</span>
+              <span className="hidden md:inline text-white/25">Space ⏯ · ← → formula · ↑ ↓ shader · F fullscreen</span>
               <TemporalReadout />
             </div>
             <div className="w-full h-8 flex items-center px-2 gap-4">

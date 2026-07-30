@@ -1205,15 +1205,22 @@ function AngledMirrorSurfaces({ show3D }: { show3D: boolean }) {
 
 function SpatialWrapper({
   children,
-  xrVisualTransform
+  xrVisualTransform,
+  dragOffsetRef
 }: {
   children: React.ReactNode;
   xrVisualTransform: XRVisualTransform;
+  dragOffsetRef: React.MutableRefObject<THREE.Vector3>;
 }) {
   const session = useXR((state) => state.session);
   const isPresenting = !!session;
   const groupRef = useRef<THREE.Group>(null);
   const autoYawRef = useRef(xrVisualTransform.yaw);
+  // Pinch/trigger-drag repositions the visual in XR. This is the only way to
+  // move it on Apple Vision Pro (gaze + pinch, no thumbsticks); on Quest it
+  // complements the sticks. Offset lives in a ref owned by GraphView so the
+  // VIEW tab's RESET ALL can clear it.
+  const dragStateRef = useRef<{ pointerId: number; start: THREE.Vector3; origin: THREE.Vector3 } | null>(null);
 
   useEffect(() => {
     autoYawRef.current = xrVisualTransform.yaw;
@@ -1225,11 +1232,43 @@ function SpatialWrapper({
         ? autoYawRef.current + 0.005
         : xrVisualTransform.yaw;
       groupRef.current.rotation.set(xrVisualTransform.pitch, autoYawRef.current, xrVisualTransform.roll);
+      const offset = dragOffsetRef.current;
+      groupRef.current.position.set(offset.x, 1.1 + offset.y, -xrVisualTransform.distance + offset.z);
     }
   });
 
+  const handlePointerDown = (e: any) => {
+    if (!isPresenting || !e.point) return;
+    e.stopPropagation();
+    dragStateRef.current = {
+      pointerId: e.pointerId,
+      start: e.point.clone(),
+      origin: dragOffsetRef.current.clone()
+    };
+    e.target?.setPointerCapture?.(e.pointerId);
+  };
+
+  const handlePointerMove = (e: any) => {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== e.pointerId || !e.point) return;
+    e.stopPropagation();
+    const next = drag.origin.clone().add(e.point.clone().sub(drag.start));
+    next.x = THREE.MathUtils.clamp(next.x, -2.5, 2.5);
+    next.y = THREE.MathUtils.clamp(next.y, -0.8, 1.2);
+    next.z = THREE.MathUtils.clamp(next.z, -2.5, 2.5);
+    dragOffsetRef.current.copy(next);
+  };
+
+  const handlePointerUp = (e: any) => {
+    if (dragStateRef.current?.pointerId !== e.pointerId) return;
+    dragStateRef.current = null;
+    e.target?.releasePointerCapture?.(e.pointerId);
+  };
+
   const scale = isPresenting ? xrVisualTransform.scale : 1;
-  const position: [number, number, number] = isPresenting ? [0, 1.1, -xrVisualTransform.distance] : [0, 0, 0];
+  const position: [number, number, number] = isPresenting
+    ? [dragOffsetRef.current.x, 1.1 + dragOffsetRef.current.y, -xrVisualTransform.distance + dragOffsetRef.current.z]
+    : [0, 0, 0];
   const rotation: [number, number, number] = isPresenting
     ? [xrVisualTransform.pitch, autoYawRef.current, xrVisualTransform.roll]
     : [0, 0, 0];
@@ -1238,7 +1277,16 @@ function SpatialWrapper({
     <>
       {!isPresenting && <OrbitControls makeDefault enableDamping />}
 
-      <group ref={groupRef} position={position} rotation={rotation} scale={[scale, scale, scale]}>
+      <group
+        ref={groupRef}
+        position={position}
+        rotation={rotation}
+        scale={[scale, scale, scale]}
+        onPointerDown={isPresenting ? handlePointerDown : undefined}
+        onPointerMove={isPresenting ? handlePointerMove : undefined}
+        onPointerUp={isPresenting ? handlePointerUp : undefined}
+        onPointerCancel={isPresenting ? handlePointerUp : undefined}
+      >
         {children}
       </group>
     </>
@@ -1379,6 +1427,12 @@ function ImmersiveHUD({
   setShaderCycleSpeed?: (s: number) => void;
 }) {
   const session = useXR((state) => state.session);
+  // Without controllers (Apple Vision Pro: gaze + pinch), enlarge the whole
+  // console so buttons are comfortable gaze targets.
+  const hudLeftController = useXRInputSourceState('controller', 'left');
+  const hudRightController = useXRInputSourceState('controller', 'right');
+  const hasControllers = Boolean(hudLeftController || hudRightController);
+  const hudScale = hasControllers ? 1 : 1.3;
   const [activeTab, setActiveTab] = useState<'control' | 'settings' | 'view' | 'pilot' | 'formulas' | 'shaders'>('control');
   const [formulaPage, setFormulaPage] = useState(0);
   const [shaderPage, setShaderPage] = useState(0);
@@ -1435,6 +1489,7 @@ function ImmersiveHUD({
       ref={hudGroupRef}
       position={hudPosition}
       rotation={[-Math.PI / 28, Math.PI / 4, 0]}
+      scale={[hudScale, hudScale, hudScale]}
       onPointerMove={handlePanelPointerMove}
       onPointerUp={handlePanelPointerUp}
       onPointerCancel={handlePanelPointerUp}
@@ -2146,7 +2201,9 @@ function ImmersiveHUD({
         color="#888888"
         anchorX="center"
       >
-        STICK MOVES VIEWER • HOLD TRIGGER/GRIP + STICK ADJUSTS OBJECT • VIEW TAB HAS FINE CONTROLS
+        {hasControllers
+          ? 'STICK MOVES VIEWER • HOLD TRIGGER/GRIP + STICK ADJUSTS OBJECT • PINCH-DRAG VISUAL TO MOVE IT'
+          : 'LOOK + PINCH TO SELECT • PINCH-DRAG THE VISUAL TO MOVE IT • VIEW TAB HAS FINE CONTROLS'}
       </Text>
 
       {/* 5. SECONDARY DIAGNOSTICS & VECTOR GRAPH PANEL */}
@@ -2436,8 +2493,10 @@ export default function GraphView({
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(DEFAULT_XR_VISUAL_TRANSFORM);
   const [xrGeometrySelection, setXrGeometrySelection] = useState<GraphGeometrySelection>('formula');
   const xrOriginRef = useRef<THREE.Group>(null);
+  const xrDragOffsetRef = useRef(new THREE.Vector3());
   const geometryMode = xrGeometrySelection === 'formula' ? formulaGeometryMode : xrGeometrySelection;
   const resetXRViewer = () => {
+    xrDragOffsetRef.current.set(0, 0, 0);
     if (!xrOriginRef.current) return;
     xrOriginRef.current.position.set(0, 0, 0);
     xrOriginRef.current.rotation.set(0, 0, 0);
@@ -2451,7 +2510,7 @@ export default function GraphView({
           <XRJoystickLocomotion originRef={xrOriginRef} />
           <XRVisualThumbstickControls setXrVisualTransform={setXrVisualTransform} />
           <XRAlphaController />
-          <SpatialWrapper xrVisualTransform={xrVisualTransform}>
+          <SpatialWrapper xrVisualTransform={xrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
             <ambientLight intensity={0.5} />
             <pointLight position={[10, 10, 10]} intensity={1} />
             <pointLight position={[-10, 4, -6]} intensity={0.65} color="#67e8f9" />
