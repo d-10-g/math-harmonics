@@ -18,6 +18,7 @@ import {
 } from './constants';
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
+import { setClockPlayback, setClockTime, startClock, useClockSnapshot } from './lib/clock';
 
 const APP_VERSION = 'v1.1.21-beta';
 
@@ -89,11 +90,45 @@ const xrStore = createXRStore({
   depthSensing: false
 });
 
+// Clock-driven UI lives in leaf components so ticking never re-renders App.
+function TemporalReadout() {
+  const clock = useClockSnapshot(10);
+  return <span className="text-indigo-400">t = {clock.time.toFixed(3)} rad</span>;
+}
+
+function TimeScrubber({ onScrub }: { onScrub: () => void }) {
+  const clock = useClockSnapshot(30);
+  return (
+    <input
+      type="range"
+      min="0"
+      max="12.566" // 4pi
+      step="0.001"
+      value={clock.time}
+      onChange={(e) => {
+        onScrub();
+        setClockTime(parseFloat(e.target.value));
+      }}
+      className="flex-1 h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
+    />
+  );
+}
+
+function FooterStats() {
+  const clock = useClockSnapshot(2);
+  return <div>{clock.fps.toFixed(0)} fps / {clock.frameMs.toFixed(1)} ms</div>;
+}
+
+function FooterVerts() {
+  const clock = useClockSnapshot(2);
+  const verts = clock.verts >= 1000 ? `${(clock.verts / 1000).toFixed(1)}K` : `${clock.verts}`;
+  return <span>Verts: {verts}</span>;
+}
+
 export default function App() {
   const [selectedFormula, setSelectedFormula] = useState<Formula>(PRESET_FORMULAS[0]);
   const [selectedShader, setSelectedShader] = useState<ShaderPreset>(PRESET_SHADERS[0]);
   const [activeTab, setActiveTab] = useState<'formulas'|'shaders'>('formulas');
-  const [time, setTime] = useState(0);
   const [speed, setSpeed] = useState(0.1);
   const [isPlaying, setIsPlaying] = useState(true);
   const [show3D, setShow3D] = useState(true);
@@ -123,12 +158,6 @@ export default function App() {
   const [formulaQuant, setFormulaQuant] = useState(0);
   const [shaderQuant, setShaderQuant] = useState(0);
   const [bpmInterval, setBpmInterval] = useState(500); // ms
-
-  const speedRef = useRef(speed);
-  useEffect(() => { speedRef.current = speed; }, [speed]);
-
-  const isPlayingRef = useRef(isPlaying);
-  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
   const autoCycleFormulaRef = useRef(autoCycleFormula);
   useEffect(() => { autoCycleFormulaRef.current = autoCycleFormula; }, [autoCycleFormula]);
@@ -305,36 +334,13 @@ export default function App() {
     return () => clearInterval(interval);
   }, [autoCycleWebgpuMaterial, webgpuMaterialCycleSpeed, rendererMode]);
 
-  // Main Render Loop
+  // The animation clock runs outside React (src/lib/clock.ts); playback
+  // parameters are mirrored into it so the tick loop never re-renders the tree.
+  useEffect(() => startClock(), []);
+
   useEffect(() => {
-    let animationFrameId: number;
-    let lastTime = performance.now();
-
-    const update = () => {
-      const now = performance.now();
-      const delta = (now - lastTime) / 1000;
-      lastTime = now;
-
-      if (isPlayingRef.current) {
-        setTime(t => {
-          let currentSpeed = speedRef.current;
-          // Scale continuous animation speed by beat interval if synced
-          if (audioSync) {
-             const baseSpeed = 1000 / bpmInterval; // 1 full phase revolution per beat at 1x
-             const sq = speedQuant;
-             const sMult = sq >= 0 ? sq + 1 : 1 / (Math.abs(sq) + 1);
-             currentSpeed = baseSpeed * sMult;
-          }
-          return (t + delta * currentSpeed) % (Math.PI * 4);
-        });
-      }
-
-      animationFrameId = requestAnimationFrame(update);
-    };
-
-    animationFrameId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [audioSync, bpmInterval, speedQuant]);
+    setClockPlayback({ isPlaying, speed, audioSync, bpmInterval, speedQuant });
+  }, [isPlaying, speed, audioSync, bpmInterval, speedQuant]);
 
   const handleUpdateFormula = (x: string, y: string, z: string) => {
     setSelectedFormula(prev => ({
@@ -434,7 +440,6 @@ export default function App() {
               <WebGPUView
                 formula={selectedFormula}
                 shader={selectedShader}
-                time={time}
                 show3D={show3D}
                 showWireframe={showWireframe}
                 showArtifacts={showArtifacts}
@@ -447,11 +452,10 @@ export default function App() {
                 isPlaying={isPlaying}
               />
             ) : (
-              <GraphView 
-                formula={selectedFormula} 
+              <GraphView
+                formula={selectedFormula}
                 shader={selectedShader}
-                time={time} 
-                show3D={show3D} 
+                show3D={show3D}
                 setShow3D={setShow3D}
                 showWireframe={showWireframe}
                 setShowWireframe={setShowWireframe}
@@ -490,34 +494,22 @@ export default function App() {
           <div className="p-6 bg-[#0a0a0a]/80 border-t border-white/10 backdrop-blur-md">
             <div className="flex justify-between text-[10px] font-mono text-white/40 mb-3 uppercase tracking-tighter">
               <span>Temporal Phase (t)</span>
-              <span className="text-indigo-400">t = {time.toFixed(3)} rad</span>
+              <TemporalReadout />
             </div>
             <div className="w-full h-8 flex items-center px-2 gap-4">
-              <button 
+              <button
                 onClick={() => setIsPlaying(!isPlaying)}
                 className="px-3 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/50 rounded text-[9px] font-mono uppercase transition-colors shrink-0"
               >
                 {isPlaying ? 'Pause' : 'Play'}
               </button>
-              <input 
-                type="range" 
-                min="0" 
-                max="12.566" // 4pi
-                step="0.001" 
-                value={time} 
-                onChange={(e) => {
-                  setIsPlaying(false);
-                  setTime(parseFloat(e.target.value));
-                }}
-                className="flex-1 h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
-              />
+              <TimeScrubber onScrub={() => setIsPlaying(false)} />
             </div>
           </div>
         </section>
 
         {/* Right: Controls & Editor */}
-        <Controls 
-          time={time}
+        <Controls
           selectedFormula={selectedFormula}
           onUpdateFormula={handleUpdateFormula}
           selectedShader={selectedShader}
@@ -579,11 +571,11 @@ export default function App() {
       <footer className="flex justify-between text-[9px] text-white/20 font-mono uppercase tracking-[0.2em] border-t border-white/10 pt-4 shrink-0">
         <div>Engine: {rendererMode === 'webgpu' ? `Three-r185 WebGPU-TSL / ${webgpuLighting.toFixed(2)}x light` : 'Three-r185 WebGL-Harmonics'}</div>
         <div className="flex gap-8">
-          <span>P-Range: [0, 4π]</span>
-          <span>Resolution: 200pts</span>
+          <span>Phase t: [0, 4π]</span>
+          <FooterVerts />
           <span>Mode: {show3D ? (selectedFormula.geometryMode?.toUpperCase() || 'VARIED_3D') : 'ORTHO_2D'}</span>
         </div>
-        <div>Latency: {(Math.random() * 2).toFixed(1)}ms</div>
+        <FooterStats />
       </footer>
     </div>
   );

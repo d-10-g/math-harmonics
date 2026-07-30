@@ -7,6 +7,11 @@ import { compile } from 'mathjs';
 import { Formula, FormulaGeometryMode, ShaderPreset, PRESET_FORMULAS } from '../constants';
 import { DEFAULT_VERTEX_SHADER, PRESET_SHADERS } from '../shaders';
 import { XR, XROrigin, useXR, useXRInputSourceState } from '@react-three/xr';
+import { getClockTime, reportVerts } from '../lib/clock';
+
+// 3D geometry is rebuilt on this cadence instead of every frame; the material
+// time uniform and group motion still animate at full framerate in between.
+const GEOMETRY_REBUILD_MS = 100;
 
 const Line = 'line' as any;
 const GridHelper = 'gridHelper' as any;
@@ -923,7 +928,6 @@ function buildFormulaGeometry(points: THREE.Vector3[], mode: FormulaGeometryMode
 interface GraphViewProps {
   formula: Formula;
   shader: ShaderPreset;
-  time: number;
   show3D: boolean;
   setShow3D?: (show: boolean) => void;
   showWireframe: boolean;
@@ -958,18 +962,16 @@ interface GraphViewProps {
   setShaderCycleSpeed?: (s: number) => void;
 }
 
-function FormulaLine({ 
-  formula, 
-  shader, 
-  time, 
-  show3D, 
+function FormulaLine({
+  formula,
+  shader,
+  show3D,
   showWireframe,
   geometryMode: geometryModeOverride
-}: { 
-  formula: Formula; 
-  shader: ShaderPreset; 
-  time: number; 
-  show3D: boolean; 
+}: {
+  formula: Formula;
+  shader: ShaderPreset;
+  show3D: boolean;
   showWireframe: boolean;
   geometryMode?: FormulaGeometryMode;
 }) {
@@ -1036,7 +1038,7 @@ function FormulaLine({
 
   const shaderMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
-      uniforms: { time: { value: time } },
+      uniforms: { time: { value: getClockTime() } },
       vertexShader: DEFAULT_VERTEX_SHADER,
       fragmentShader: shader.fragmentShader,
       side: THREE.DoubleSide,
@@ -1053,18 +1055,30 @@ function FormulaLine({
 
   const groupRef = useRef<THREE.Group>(null);
 
-  const geometry3D = useMemo(() => {
-    if (!show3D) return null;
-    const points = sampleFormulaPoints(compiled, time, scalarValue, resolution);
-    return buildFormulaGeometry(points, geometryMode, formula.name, time);
-  }, [compiled, formula.name, geometryMode, scalarValue, show3D, time]);
+  // 3D geometry is throttled: rebuilt immediately on structural changes, then
+  // on a fixed cadence from useFrame — never per React render, never per frame.
+  const [geometry3D, setGeometry3D] = useState<THREE.BufferGeometry | null>(null);
+  const lastRebuildRef = useRef(0);
 
   useEffect(() => {
+    if (!show3D) {
+      setGeometry3D(null);
+      return;
+    }
+    const t = getClockTime();
+    const points = sampleFormulaPoints(compiled, t, scalarValue, resolution);
+    setGeometry3D(buildFormulaGeometry(points, geometryMode, formula.name, t));
+    lastRebuildRef.current = performance.now();
+  }, [compiled, formula.name, geometryMode, scalarValue, show3D]);
+
+  useEffect(() => {
+    if (geometry3D) reportVerts(geometry3D.getAttribute('position')?.count ?? 0);
     return () => geometry3D?.dispose();
   }, [geometry3D]);
 
   // Update geometry directly in the render loop without triggering React renders or GC
   useFrame(() => {
+    const time = getClockTime();
     if (shaderMaterial) shaderMaterial.uniforms.time.value = time;
     const nextScalar = getSValue();
     const scalarThreshold = Math.max(0.005, Math.abs(scalarTarget.baseScalar) * 0.003);
@@ -1073,7 +1087,7 @@ function FormulaLine({
       scalarValueRef.current = nextScalar;
       setScalarValue(nextScalar);
     }
-    
+
     // Custom float effect for 3D mode (replaces Drei's Float component to avoid THREE.Clock warnings)
     if (groupRef.current) {
       if (show3D) {
@@ -1086,7 +1100,15 @@ function FormulaLine({
       }
     }
 
-    if (show3D) return; // For 3D we handle it below
+    if (show3D) {
+      const now = performance.now();
+      if (now - lastRebuildRef.current >= GEOMETRY_REBUILD_MS) {
+        lastRebuildRef.current = now;
+        const points = sampleFormulaPoints(compiled, time, nextScalar, resolution);
+        setGeometry3D(buildFormulaGeometry(points, geometryMode, formula.name, time));
+      }
+      return;
+    }
 
     const positions = geometry.attributes.position.array as Float32Array;
     const uvs = geometry.attributes.uv.array as Float32Array;
@@ -1181,15 +1203,11 @@ function AngledMirrorSurfaces({ show3D }: { show3D: boolean }) {
   );
 }
 
-function SpatialWrapper({ 
-  children, 
-  showArtifacts, 
-  time,
+function SpatialWrapper({
+  children,
   xrVisualTransform
-}: { 
-  children: React.ReactNode; 
-  showArtifacts: boolean; 
-  time: number;
+}: {
+  children: React.ReactNode;
   xrVisualTransform: XRVisualTransform;
 }) {
   const session = useXR((state) => state.session);
@@ -1288,7 +1306,6 @@ function ImmersiveHUD({
   onTogglePlay,
   formula,
   shader,
-  time,
   currentGeometryMode,
   xrGeometrySelection,
   setXrGeometrySelection,
@@ -1328,7 +1345,6 @@ function ImmersiveHUD({
   onTogglePlay?: () => void;
   formula: Formula;
   shader: ShaderPreset;
-  time: number;
   currentGeometryMode: FormulaGeometryMode;
   xrGeometrySelection: GraphGeometrySelection;
   setXrGeometrySelection?: GraphGeometrySelectionSetter;
@@ -2380,11 +2396,10 @@ function XRVisualThumbstickControls({ setXrVisualTransform }: { setXrVisualTrans
   return null;
 }
 
-export default function GraphView({ 
-  formula, 
-  shader, 
-  time, 
-  show3D, 
+export default function GraphView({
+  formula,
+  shader,
+  show3D,
   setShow3D,
   showWireframe,
   setShowWireframe,
@@ -2436,7 +2451,7 @@ export default function GraphView({
           <XRJoystickLocomotion originRef={xrOriginRef} />
           <XRVisualThumbstickControls setXrVisualTransform={setXrVisualTransform} />
           <XRAlphaController />
-          <SpatialWrapper showArtifacts={showArtifacts} time={time} xrVisualTransform={xrVisualTransform}>
+          <SpatialWrapper xrVisualTransform={xrVisualTransform}>
             <ambientLight intensity={0.5} />
             <pointLight position={[10, 10, 10]} intensity={1} />
             <pointLight position={[-10, 4, -6]} intensity={0.65} color="#67e8f9" />
@@ -2466,7 +2481,7 @@ export default function GraphView({
             )}
 
             {showMirrors && <AngledMirrorSurfaces show3D={show3D} />}
-            <FormulaLine formula={formula} shader={shader} time={time} show3D={show3D} showWireframe={showWireframe} geometryMode={geometryMode} />
+            <FormulaLine formula={formula} shader={shader} show3D={show3D} showWireframe={showWireframe} geometryMode={geometryMode} />
           </SpatialWrapper>
 
           <ImmersiveHUD 
@@ -2476,7 +2491,6 @@ export default function GraphView({
             onTogglePlay={onTogglePlay}
             formula={formula}
             shader={shader}
-            time={time}
             currentGeometryMode={geometryMode}
             xrGeometrySelection={xrGeometrySelection}
             setXrGeometrySelection={setXrGeometrySelection}

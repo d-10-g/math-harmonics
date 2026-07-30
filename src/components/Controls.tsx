@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { cn } from '../lib/utils';
+import { useClockSnapshot } from '../lib/clock';
 import {
   Formula,
   ShaderPreset,
@@ -22,7 +23,6 @@ function webgpuCycleSliderValueToInterval(sliderValue: number) {
 }
 
 interface ControlsProps {
-  time: number;
   selectedFormula: Formula;
   onUpdateFormula: (x: string, y: string, z: string) => void;
   selectedShader: ShaderPreset;
@@ -77,6 +77,23 @@ interface ControlsProps {
   shaderQuant: number;
   setShaderQuant: (q: number) => void;
   xrStore: any;
+}
+
+function LiveStats() {
+  const clock = useClockSnapshot(2);
+  const verts = clock.verts >= 1000 ? `${(clock.verts / 1000).toFixed(1)}K` : `${clock.verts}`;
+  return (
+    <div className="grid grid-cols-2 gap-3 mt-auto shrink-0">
+      <div className="bg-black/40 border border-white/5 p-3 rounded-lg">
+        <div className="text-[8px] text-white/30 uppercase tracking-[0.2em] font-mono mb-1">FPS</div>
+        <div className="text-lg font-mono text-indigo-400 leading-none">{clock.fps.toFixed(1)}</div>
+      </div>
+      <div className="bg-black/40 border border-white/5 p-3 rounded-lg">
+        <div className="text-[8px] text-white/30 uppercase tracking-[0.2em] font-mono mb-1">Verts</div>
+        <div className="text-lg font-mono text-indigo-400 leading-none">{verts}</div>
+      </div>
+    </div>
+  );
 }
 
 export default function Controls({
@@ -845,16 +862,7 @@ export default function Controls({
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 gap-3 mt-auto shrink-0">
-            <div className="bg-black/40 border border-white/5 p-3 rounded-lg">
-              <div className="text-[8px] text-white/30 uppercase tracking-[0.2em] font-mono mb-1">FPS</div>
-              <div className="text-lg font-mono text-indigo-400 leading-none">60.0</div>
-            </div>
-            <div className="bg-black/40 border border-white/5 p-3 rounded-lg">
-              <div className="text-[8px] text-white/30 uppercase tracking-[0.2em] font-mono mb-1">Verts</div>
-              <div className="text-lg font-mono text-indigo-400 leading-none">1.2K</div>
-            </div>
-          </div>
+          <LiveStats />
         </div>
       </div>
 

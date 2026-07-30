@@ -16,11 +16,11 @@ import {
   WebGPULightingPreset,
   WebGPUMaterialProfile
 } from '../constants';
+import { getClockTime, reportVerts } from '../lib/clock';
 
 type WebGPUViewProps = {
   formula: Formula;
   shader: ShaderPreset;
-  time: number;
   show3D: boolean;
   showWireframe: boolean;
   showArtifacts: boolean;
@@ -1335,7 +1335,6 @@ function createMirrorPanels() {
 export default function WebGPUView({
   formula,
   shader,
-  time,
   show3D,
   showWireframe,
   showArtifacts,
@@ -1352,7 +1351,6 @@ export default function WebGPUView({
   const compiledRef = useRef<CompiledFormula>(compileFormula(formula));
   const formulaRef = useRef(formula);
   const webgpuGeometryRef = useRef<WebGPUGeometryProfile>(webgpuGeometry);
-  const timeRef = useRef(time);
   const speedRef = useRef(speed);
   const isPlayingRef = useRef(isPlaying);
   const show3DRef = useRef(show3D);
@@ -1368,10 +1366,6 @@ export default function WebGPUView({
     formulaRef.current = formula;
     compiledRef.current = compileFormula(formula);
   }, [formula]);
-
-  useEffect(() => {
-    timeRef.current = time;
-  }, [time]);
 
   useEffect(() => {
     speedRef.current = speed;
@@ -1393,10 +1387,11 @@ export default function WebGPUView({
     const current = refs.current;
     if (!current) return;
 
-    const nextGeometry = buildGeometry(formula, compiledRef.current, timeRef.current, show3D, webgpuGeometry);
+    const nextGeometry = buildGeometry(formula, compiledRef.current, getClockTime(), show3D, webgpuGeometry);
     current.mesh.geometry = nextGeometry;
     current.geometry.dispose();
     current.geometry = nextGeometry;
+    reportVerts(nextGeometry.getAttribute('position')?.count ?? 0);
   }, [formula, show3D, webgpuGeometry]);
 
   useEffect(() => {
@@ -1674,7 +1669,7 @@ export default function WebGPUView({
       const geometry = buildGeometry(
         formulaRef.current,
         compiledRef.current,
-        timeRef.current,
+        getClockTime(),
         show3DRef.current,
         webgpuGeometryRef.current
       );
@@ -1760,7 +1755,7 @@ export default function WebGPUView({
           const nextGeometry = buildGeometry(
             formulaRef.current,
             compiledRef.current,
-            timeRef.current,
+            getClockTime(),
             show3DRef.current,
             webgpuGeometryRef.current
           );
@@ -1768,11 +1763,12 @@ export default function WebGPUView({
           activeGeometry.dispose();
           activeGeometry = nextGeometry;
           refs.current!.geometry = nextGeometry;
+          reportVerts(nextGeometry.getAttribute('position')?.count ?? 0);
         }
 
         const motion = isPlayingRef.current ? speedRef.current : 0;
         mesh.rotation.y += 0.003 * motion;
-        mesh.rotation.x = Math.sin(timeRef.current * 0.45) * 0.12;
+        mesh.rotation.x = Math.sin(getClockTime() * 0.45) * 0.12;
         updateWebGPUXRInput(refs.current!, deltaSeconds);
         if (!refs.current?.isXRPresenting) controls.update();
         renderer.render(scene, camera);
