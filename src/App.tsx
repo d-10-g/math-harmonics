@@ -224,6 +224,8 @@ export default function App() {
   useEffect(() => { autoPilotShuffleRef.current = autoPilotShuffle; }, [autoPilotShuffle]);
   const [showEnvironment, setShowEnvironment] = useState(initialShared.showEnvironment ?? true);
   const [lineWidth, setLineWidth] = useState(initialShared.lineWidth ?? 0.14);
+  const [postFX, setPostFX] = useState(initialShared.postFX ?? true);
+  const [bloomIntensity, setBloomIntensity] = useState(initialShared.bloomIntensity ?? 0.9);
   const [autoCycleWebgpuLighting, setAutoCycleWebgpuLighting] = useState(false);
   const [autoCycleWebgpuGeometry, setAutoCycleWebgpuGeometry] = useState(false);
   const [autoCycleWebgpuMaterial, setAutoCycleWebgpuMaterial] = useState(false);
@@ -560,9 +562,11 @@ export default function App() {
       showEnvironment,
       lineWidth,
       cycleFavoritesOnly,
-      autoPilotShuffle
+      autoPilotShuffle,
+      postFX,
+      bloomIntensity
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -712,6 +716,14 @@ export default function App() {
             ?
           </button>
           <button
+            onClick={() => window.dispatchEvent(new Event('math-harmonics:photo-mode'))}
+            disabled={rendererMode !== 'webgl'}
+            className="px-3 py-1 hover:bg-white/5 rounded-full border border-fuchsia-400/25 text-[10px] font-mono text-fuchsia-300/80 hover:text-fuchsia-200 transition-colors uppercase tracking-widest disabled:opacity-35 disabled:cursor-not-allowed"
+            title={rendererMode === 'webgl' ? 'Path-traced still of the current formula' : 'Photo mode needs the WebGL renderer'}
+          >
+            Photo
+          </button>
+          <button
             onClick={saveSnapshot}
             className="px-3 py-1 hover:bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-white/50 hover:text-white transition-colors uppercase tracking-widest"
             title="Save the current view as a PNG"
@@ -789,6 +801,8 @@ export default function App() {
                 webgpuGeometry={webgpuGeometry}
                 showEnvironment={showEnvironment}
                 lineWidth={lineWidth}
+                postFX={postFX}
+                bloomIntensity={bloomIntensity}
                 show3D={show3D}
                 setShow3D={setShow3D}
                 showWireframe={showWireframe}
@@ -910,6 +924,10 @@ export default function App() {
           setShowEnvironment={setShowEnvironment}
           lineWidth={lineWidth}
           setLineWidth={setLineWidth}
+          postFX={postFX}
+          setPostFX={setPostFX}
+          bloomIntensity={bloomIntensity}
+          setBloomIntensity={setBloomIntensity}
           xrStore={xrStore}
         />
       </main>

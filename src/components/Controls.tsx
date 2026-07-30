@@ -89,6 +89,10 @@ interface ControlsProps {
   setShowEnvironment: (show: boolean) => void;
   lineWidth: number;
   setLineWidth: (width: number) => void;
+  postFX: boolean;
+  setPostFX: (on: boolean) => void;
+  bloomIntensity: number;
+  setBloomIntensity: (value: number) => void;
   xrStore: any;
 }
 
@@ -317,6 +321,10 @@ export default function Controls({
   setShowEnvironment,
   lineWidth,
   setLineWidth,
+  postFX,
+  setPostFX,
+  bloomIntensity,
+  setBloomIntensity,
   xrStore
 }: ControlsProps) {
   const [isArSupported, setIsArSupported] = useState<boolean | null>(null);
@@ -803,6 +811,47 @@ export default function Controls({
             </div>
 
           <div className="h-[1px] bg-white/5" />
+
+          {/* Glow FX Switch + Bloom */}
+          <div className="flex items-center justify-between group">
+            <div>
+              <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Glow FX</div>
+              <div className="text-[9px] text-white/30 font-mono">Bloom + Vignette (flat screen)</div>
+            </div>
+            <button
+              onClick={() => setPostFX(!postFX)}
+              aria-label="Glow FX"
+              aria-pressed={postFX}
+              className={cn(
+                "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center px-1",
+                postFX ? "bg-indigo-600" : "bg-white/10"
+              )}
+            >
+              <div className={cn(
+                "w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm",
+                postFX ? "translate-x-5" : "translate-x-0"
+              )} />
+            </button>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <div className="text-[10px] font-semibold text-white/65">Bloom Intensity</div>
+              <div className="text-[10px] font-mono text-indigo-400">{bloomIntensity.toFixed(2)}</div>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="3"
+              step="0.05"
+              value={bloomIntensity}
+              onChange={(e) => setBloomIntensity(parseFloat(e.target.value))}
+              disabled={!postFX}
+              className={cn(
+                "w-full h-1 rounded-full appearance-none cursor-pointer transition-all",
+                postFX ? "bg-indigo-500/25 accent-indigo-400" : "bg-white/10 opacity-35"
+              )}
+            />
+          </div>
 
           {/* Cosmos Backdrop Switch */}
           <div className="flex items-center justify-between group">

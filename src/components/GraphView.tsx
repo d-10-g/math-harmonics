@@ -1,9 +1,9 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { MeshReflectorMaterial, OrbitControls } from '@react-three/drei';
+import { ContactShadows, MeshReflectorMaterial, OrbitControls } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { compile } from 'mathjs';
 import {
   Formula,
@@ -20,6 +20,7 @@ import { clockStore, getClockTime, reportVerts } from '../lib/clock';
 import { lightingRigSettings } from '../lib/lighting';
 import { createPhysicalMaterial } from '../lib/materials';
 import { buildParametricGeometry, surfaceMidQ, SURFACE_SEGMENTS_DESKTOP, SURFACE_SEGMENTS_XR } from '../lib/parametricSurface';
+import { buildRigEnvironmentScene, disposeEnvironmentScene } from '../lib/environments';
 
 // Dev aid: ?hudpreview renders the spatial console in the desktop scene so
 // its layout can be inspected without entering a headset.
@@ -931,6 +932,8 @@ interface GraphViewProps {
   webgpuGeometry: WebGPUGeometryProfile;
   showEnvironment: boolean;
   lineWidth: number;
+  postFX: boolean;
+  bloomIntensity: number;
   show3D: boolean;
   setShow3D?: (show: boolean) => void;
   showWireframe: boolean;
@@ -1268,23 +1271,65 @@ function FormulaLine({
   );
 }
 
-// Procedural PMREM environment (no network fetch) so metals, glass and
-// clearcoat profiles have something to reflect on the WebGL path.
-function StudioEnvironment() {
+// Per-rig PMREM environment (no network fetch): gradient sky + emissive
+// lightformers at the rig's own light positions, so switching rigs reshapes
+// every reflection and refraction in the scene.
+function RigEnvironment({ preset, intensity }: { preset: WebGPULightingPreset; intensity: number }) {
   const { gl, scene } = useThree();
 
   useEffect(() => {
     const pmrem = new THREE.PMREMGenerator(gl);
-    const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const envScene = buildRigEnvironmentScene(preset);
+    const envTexture = pmrem.fromScene(envScene, 0.04).texture;
     scene.environment = envTexture;
     return () => {
       if (scene.environment === envTexture) scene.environment = null;
       envTexture.dispose();
       pmrem.dispose();
+      disposeEnvironmentScene(envScene);
     };
-  }, [gl, scene]);
+  }, [gl, scene, preset]);
+
+  useEffect(() => {
+    scene.environmentIntensity = 0.45 + THREE.MathUtils.clamp(intensity, 0.45, 3.5) * 0.45;
+    return () => {
+      scene.environmentIntensity = 1;
+    };
+  }, [scene, intensity]);
 
   return null;
+}
+
+// Soft grounding shadow under the floating visual — desktop only (XR has a
+// real floor reference and a different scale).
+function GroundShadows({ show3D }: { show3D: boolean }) {
+  const session = useXR((state) => state.session);
+  if (session || !show3D) return null;
+  return (
+    <ContactShadows
+      position={[0, -15.5, 0]}
+      opacity={0.5}
+      scale={46}
+      blur={2.4}
+      far={34}
+      resolution={512}
+      frames={Infinity}
+      color="#000000"
+    />
+  );
+}
+
+// Bloom + vignette for flat-screen rendering; XR sessions bypass the
+// composer entirely (EffectComposer and WebXR layers don't mix).
+function PostEffects({ enabled, bloom }: { enabled: boolean; bloom: number }) {
+  const session = useXR((state) => state.session);
+  if (!enabled || session) return null;
+  return (
+    <EffectComposer multisampling={4}>
+      <Bloom intensity={bloom} luminanceThreshold={0.7} luminanceSmoothing={0.2} mipmapBlur radius={0.75} />
+      <Vignette eskil={false} offset={0.18} darkness={0.6} />
+    </EffectComposer>
+  );
 }
 
 // Declarative version of the WebGPU path's light rigs (shared data table).
@@ -1756,6 +1801,184 @@ function CursorReadout({ targetRef, enabled }: { targetRef: React.RefObject<HTML
   return null;
 }
 
+// Photo Mode: progressive path-traced still of the current formula, rendered
+// with its own WebGL context (three-gpu-pathtracer, lazy-loaded) so the live
+// view keeps running. Builds a studio scene from the active rig: floor,
+// directional key and rect-area rim/fill at the rig's light positions.
+function PhotoMode({
+  formula,
+  materialProfile,
+  lightingPreset,
+  onClose
+}: {
+  formula: Formula;
+  materialProfile: WebGPUMaterialProfile;
+  lightingPreset: WebGPULightingPreset;
+  onClose: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [samples, setSamples] = useState(0);
+  const [status, setStatus] = useState('Loading path tracer…');
+
+  useEffect(() => {
+    let disposed = false;
+    let raf = 0;
+    let renderer: THREE.WebGLRenderer | null = null;
+    let pathTracer: any = null;
+    let scene: THREE.Scene | null = null;
+
+    (async () => {
+      try {
+        const { WebGLPathTracer } = await import('three-gpu-pathtracer');
+        const canvas = canvasRef.current;
+        if (disposed || !canvas) return;
+
+        const width = 960;
+        const height = 640;
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true });
+        renderer.setSize(width, height, false);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.6;
+
+        const rig = lightingRigSettings(lightingPreset);
+        scene = new THREE.Scene();
+        // Bright enough that transmission has something to refract.
+        scene.background = new THREE.Color(rig.background)
+          .lerp(new THREE.Color(rig.ambient), 0.4)
+          .multiplyScalar(1.9);
+
+        const t = getClockTime();
+        const compiled = {
+          valid: true,
+          x: compile(formula.x),
+          y: compile(formula.y),
+          z: compile(formula.z ?? 'sin(2 * p + t) * 4')
+        };
+        const geometry = formula.parametric
+          ? buildParametricGeometry(formula, compiled, t, 1, { segsP: 160, segsQ: 80 })
+          : buildFormulaGeometry(
+              sampleFormulaPoints(compiled, t, 1, 700),
+              resolveFormulaGeometryMode(formula),
+              formula.name,
+              t
+            );
+        const profile = materialProfile !== 'auto' ? materialProfile : 'pearl';
+        const mesh = new THREE.Mesh(geometry, createPhysicalMaterial(profile, false));
+        scene.add(mesh);
+
+        const floor = new THREE.Mesh(
+          new THREE.PlaneGeometry(160, 160),
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color(rig.ground).multiplyScalar(1.15),
+            roughness: 0.9,
+            metalness: 0
+          })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -16;
+        scene.add(floor);
+
+        const key = new THREE.RectAreaLight(rig.key, 30, 22, 16);
+        key.position.set(rig.keyPosition[0], rig.keyPosition[1], rig.keyPosition[2]).multiplyScalar(2.2);
+        key.lookAt(0, 0, 0);
+        scene.add(key);
+        const rim = new THREE.RectAreaLight(rig.rim, 34, 10, 30);
+        rim.position.set(rig.rimPosition[0], rig.rimPosition[1], rig.rimPosition[2]).multiplyScalar(2.1);
+        rim.lookAt(0, 0, 0);
+        scene.add(rim);
+        const fill = new THREE.RectAreaLight(rig.fill, 16, 26, 16);
+        fill.position.set(rig.fillPosition[0], rig.fillPosition[1], rig.fillPosition[2]).multiplyScalar(2.1);
+        fill.lookAt(0, 0, 0);
+        scene.add(fill);
+        const dome = new THREE.RectAreaLight(rig.ambient, 6, 60, 60);
+        dome.position.set(0, 34, 0);
+        dome.lookAt(0, 0, 0);
+        scene.add(dome);
+
+        const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 400);
+        camera.position.set(17, 10, 21);
+        camera.lookAt(0, -1.5, 0);
+
+        pathTracer = new WebGLPathTracer(renderer);
+        pathTracer.bounces = 6;
+        pathTracer.filterGlossyFactor = 0.5;
+        pathTracer.tiles.set(2, 2);
+        pathTracer.setScene(scene, camera);
+        if (disposed) return;
+        setStatus('');
+
+        const loop = () => {
+          if (disposed || !pathTracer) return;
+          pathTracer.renderSample();
+          setSamples(Math.floor(pathTracer.samples));
+          raf = requestAnimationFrame(loop);
+        };
+        loop();
+      } catch (error: any) {
+        console.warn('Photo mode failed:', error);
+        if (!disposed) setStatus(`Path tracer unavailable: ${error?.message ?? error}`);
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(raf);
+      try {
+        pathTracer?.dispose?.();
+      } catch {
+        // three-gpu-pathtracer dispose is best-effort
+      }
+      if (scene) {
+        scene.traverse((object) => {
+          if (object instanceof THREE.Mesh) {
+            object.geometry.dispose();
+            (object.material as THREE.Material).dispose();
+          }
+        });
+      }
+      renderer?.dispose();
+    };
+  }, [formula, materialProfile, lightingPreset]);
+
+  const savePng = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = `harmonic-photo-${formula.id}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+
+  return (
+    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/85 backdrop-blur-sm p-6">
+      <div className="flex w-full max-w-[960px] items-center justify-between">
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-indigo-300">
+          Photo Mode — Path Traced {samples > 0 && `· ${samples} samples`}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={savePng}
+            disabled={samples === 0}
+            className="rounded-md border border-indigo-400/40 bg-indigo-500/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-indigo-100 transition-colors hover:bg-indigo-500/35 disabled:opacity-40"
+          >
+            Save PNG
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-colors hover:bg-white/15"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <canvas ref={canvasRef} width={960} height={640} className="max-h-[70vh] w-full max-w-[960px] rounded-lg border border-white/10 bg-black object-contain" />
+      <div className="font-mono text-[10px] text-white/40">
+        {status || 'Refining continuously — save whenever it looks good. Rig lights + floor are path-traced with real area lights.'}
+      </div>
+    </div>
+  );
+}
+
 function XRPlayerOrigin({ originRef }: { originRef: React.RefObject<THREE.Group | null> }) {
   const session = useXR((state) => state.session);
   return <XROrigin ref={originRef} disabled={!session} />;
@@ -1851,6 +2074,8 @@ export default function GraphView({
   webgpuGeometry,
   showEnvironment,
   lineWidth,
+  postFX,
+  bloomIntensity,
   show3D,
   setShow3D,
   showWireframe,
@@ -1911,6 +2136,13 @@ export default function GraphView({
   const xrOriginRef = useRef<THREE.Group>(null);
   const xrDragOffsetRef = useRef(new THREE.Vector3());
   const readoutRef = useRef<HTMLDivElement>(null);
+  const [photoOpen, setPhotoOpen] = useState(false);
+
+  useEffect(() => {
+    const open = () => setPhotoOpen(true);
+    window.addEventListener('math-harmonics:photo-mode', open);
+    return () => window.removeEventListener('math-harmonics:photo-mode', open);
+  }, []);
   // Priority: in-XR HUD selection > desktop geometry override > formula default
   const baseGeometryMode = webgpuGeometry !== 'auto' ? webgpuGeometry : formulaGeometryMode;
   const geometryMode = xrGeometrySelection === 'formula' ? baseGeometryMode : xrGeometrySelection;
@@ -1944,7 +2176,9 @@ export default function GraphView({
           <XRBeatHaptics />
           <XRAlphaController />
           <XREnvironment preset={webgpuLightingPreset} desktopVisible={showEnvironment && show3D} />
-          <StudioEnvironment />
+          <RigEnvironment preset={webgpuLightingPreset} intensity={webgpuLighting} />
+          <GroundShadows show3D={show3D} />
+          <PostEffects enabled={postFX} bloom={bloomIntensity} />
           <SpatialWrapper xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
             <LightingRig preset={webgpuLightingPreset} intensity={webgpuLighting} />
             
@@ -2024,6 +2258,15 @@ export default function GraphView({
         <div
           ref={readoutRef}
           className="absolute bottom-4 left-4 min-h-[22px] min-w-[130px] rounded border border-cyan-400/15 bg-black/55 px-2.5 py-1 font-mono text-[10px] text-cyan-200/80 backdrop-blur pointer-events-none"
+        />
+      )}
+
+      {photoOpen && (
+        <PhotoMode
+          formula={formula}
+          materialProfile={webgpuMaterial}
+          lightingPreset={webgpuLightingPreset}
+          onClose={() => setPhotoOpen(false)}
         />
       )}
 
