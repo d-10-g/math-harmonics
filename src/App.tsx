@@ -23,6 +23,7 @@ import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
 import { setClockPlayback, setClockTime, startClock, useClockSnapshot } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
+import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 
 const APP_VERSION = 'v1.1.21-beta';
 
@@ -63,21 +64,6 @@ const WEBGPU_MATERIAL_PRESETS: Exclude<WebGPUMaterialProfile, 'auto'>[] = [
   'ice',
   'neon'
 ];
-
-function isVisionProSafari() {
-  if (typeof navigator === 'undefined' || navigator.xr == null) return false;
-
-  return /Vision|visionOS|AppleVision/i.test(navigator.userAgent)
-    || (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1);
-}
-
-function isQuestBrowser() {
-  return typeof navigator !== 'undefined' && /(OculusBrowser|Quest|Meta Quest)/i.test(navigator.userAgent);
-}
-
-function shouldDefaultToWebGLForXR() {
-  return typeof navigator !== 'undefined' && navigator.xr != null && (isQuestBrowser() || isVisionProSafari());
-}
 
 const xrStore = createXRStore({
   offerSession: false,

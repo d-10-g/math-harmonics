@@ -17,6 +17,18 @@ import {
 import { DEFAULT_VERTEX_SHADER, PRESET_SHADERS } from '../shaders';
 import { XR, XROrigin, useXR, useXRInputSourceState } from '@react-three/xr';
 import { getClockTime, reportVerts } from '../lib/clock';
+import { configureTextBuilder } from 'troika-three-text';
+import { isVisionProSafari } from '../lib/platform';
+
+// visionOS Safari renders drei/troika text blank with the defaults: the CDN
+// font fetch and the blob-URL glyph worker both fail there. Self-hosted font
+// + main-thread glyph generation fix it (verified on device 2026-07).
+const HUD_FONT_URL = `${import.meta.env.BASE_URL}fonts/hud.woff`;
+if (isVisionProSafari()) configureTextBuilder({ useWorker: false });
+
+function HudText(props: React.ComponentProps<typeof Text>) {
+  return <Text font={HUD_FONT_URL} {...props} />;
+}
 import { lightingRigSettings } from '../lib/lighting';
 import { createPhysicalMaterial } from '../lib/materials';
 
@@ -1278,24 +1290,37 @@ function AngledMirrorSurfaces({ show3D }: { show3D: boolean }) {
   );
 }
 
+type SpatialGesture = {
+  mode: 'move' | 'transform';
+  start: THREE.Vector3;
+  origin: THREE.Vector3;
+  initialDistance: number;
+  initialScale: number;
+  initialAngle: number;
+  initialYaw: number;
+};
+
 function SpatialWrapper({
   children,
   xrVisualTransform,
+  setXrVisualTransform,
   dragOffsetRef
 }: {
   children: React.ReactNode;
   xrVisualTransform: XRVisualTransform;
+  setXrVisualTransform?: XRVisualTransformSetter;
   dragOffsetRef: React.MutableRefObject<THREE.Vector3>;
 }) {
   const session = useXR((state) => state.session);
   const isPresenting = !!session;
   const groupRef = useRef<THREE.Group>(null);
   const autoYawRef = useRef(xrVisualTransform.yaw);
-  // Pinch/trigger-drag repositions the visual in XR. This is the only way to
-  // move it on Apple Vision Pro (gaze + pinch, no thumbsticks); on Quest it
-  // complements the sticks. Offset lives in a ref owned by GraphView so the
-  // VIEW tab's RESET ALL can clear it.
-  const dragStateRef = useRef<{ pointerId: number; start: THREE.Vector3; origin: THREE.Vector3 } | null>(null);
+  // XR grab gestures on the visual itself. One pinch/trigger drags the
+  // object (the only way to move it on Vision Pro); two simultaneous pinches
+  // scale by hand separation and yaw by hand orbit. Offset lives in a ref
+  // owned by GraphView so the VIEW tab's RESET ALL can clear it.
+  const activePointersRef = useRef(new Map<number, THREE.Vector3>());
+  const gestureRef = useRef<SpatialGesture | null>(null);
 
   useEffect(() => {
     autoYawRef.current = xrVisualTransform.yaw;
@@ -1312,32 +1337,76 @@ function SpatialWrapper({
     }
   });
 
+  const beginGesture = () => {
+    const pointers = [...activePointersRef.current.values()];
+    if (pointers.length >= 2) {
+      const [a, b] = pointers;
+      gestureRef.current = {
+        mode: 'transform',
+        start: new THREE.Vector3(),
+        origin: dragOffsetRef.current.clone(),
+        initialDistance: Math.max(0.05, a.distanceTo(b)),
+        initialScale: xrVisualTransform.scale,
+        initialAngle: Math.atan2(b.x - a.x, b.z - a.z),
+        initialYaw: xrVisualTransform.yaw
+      };
+    } else if (pointers.length === 1) {
+      gestureRef.current = {
+        mode: 'move',
+        start: pointers[0].clone(),
+        origin: dragOffsetRef.current.clone(),
+        initialDistance: 0,
+        initialScale: 0,
+        initialAngle: 0,
+        initialYaw: 0
+      };
+    } else {
+      gestureRef.current = null;
+    }
+  };
+
   const handlePointerDown = (e: any) => {
     if (!isPresenting || !e.point) return;
     e.stopPropagation();
-    dragStateRef.current = {
-      pointerId: e.pointerId,
-      start: e.point.clone(),
-      origin: dragOffsetRef.current.clone()
-    };
+    activePointersRef.current.set(e.pointerId, e.point.clone());
     e.target?.setPointerCapture?.(e.pointerId);
+    beginGesture();
   };
 
   const handlePointerMove = (e: any) => {
-    const drag = dragStateRef.current;
-    if (!drag || drag.pointerId !== e.pointerId || !e.point) return;
+    const pointers = activePointersRef.current;
+    if (!isPresenting || !e.point || !pointers.has(e.pointerId)) return;
     e.stopPropagation();
-    const next = drag.origin.clone().add(e.point.clone().sub(drag.start));
-    next.x = THREE.MathUtils.clamp(next.x, -2.5, 2.5);
-    next.y = THREE.MathUtils.clamp(next.y, -0.8, 1.2);
-    next.z = THREE.MathUtils.clamp(next.z, -2.5, 2.5);
-    dragOffsetRef.current.copy(next);
+    pointers.set(e.pointerId, e.point.clone());
+    const gesture = gestureRef.current;
+    if (!gesture) return;
+
+    if (gesture.mode === 'move') {
+      const next = gesture.origin.clone().add(e.point.clone().sub(gesture.start));
+      next.x = THREE.MathUtils.clamp(next.x, -2.5, 2.5);
+      next.y = THREE.MathUtils.clamp(next.y, -0.8, 1.2);
+      next.z = THREE.MathUtils.clamp(next.z, -2.5, 2.5);
+      dragOffsetRef.current.copy(next);
+      return;
+    }
+
+    const [a, b] = [...pointers.values()];
+    if (!a || !b) return;
+    const ratio = Math.max(0.05, a.distanceTo(b)) / gesture.initialDistance;
+    const deltaYaw = Math.atan2(b.x - a.x, b.z - a.z) - gesture.initialAngle;
+    setXrVisualTransform?.((prev) => ({
+      ...prev,
+      scale: THREE.MathUtils.clamp(gesture.initialScale * ratio, XR_VISUAL_SCALE_MIN, XR_VISUAL_SCALE_MAX),
+      yaw: gesture.initialYaw + deltaYaw
+    }));
   };
 
   const handlePointerUp = (e: any) => {
-    if (dragStateRef.current?.pointerId !== e.pointerId) return;
-    dragStateRef.current = null;
+    if (!activePointersRef.current.has(e.pointerId)) return;
+    activePointersRef.current.delete(e.pointerId);
     e.target?.releasePointerCapture?.(e.pointerId);
+    // Re-anchor so a remaining pointer continues smoothly as a move gesture.
+    beginGesture();
   };
 
   const scale = isPresenting ? xrVisualTransform.scale : 1;
@@ -1407,7 +1476,7 @@ function HUDButton({
         roughness={0.2}
         metalness={0.8}
       />
-      <Text 
+      <HudText 
         position={[0, 0, 0.012]} 
         fontSize={height * 0.22} 
         color="#ffffff" 
@@ -1415,7 +1484,7 @@ function HUDButton({
         anchorY="middle"
       >
         {label}
-      </Text>
+      </HudText>
     </mesh>
   );
 }
@@ -1601,14 +1670,14 @@ function ImmersiveHUD({
       </mesh>
 
       {/* HUD Header */}
-      <Text 
+      <HudText 
         position={[0, 0.19, 0.015]} 
         fontSize={0.022} 
         color="#818cf8" 
         anchorX="center"
       >
         HARMONIC.OS SPATIAL CONTROL
-      </Text>
+      </HudText>
 
       {/* Tab Selectors Row */}
       <group position={[0, 0.13, 0.015]}>
@@ -1674,26 +1743,26 @@ function ImmersiveHUD({
       {activeTab === 'control' && (
         <group>
           {/* Active Formula Info */}
-          <Text 
+          <HudText 
             position={[0, 0.03, 0.015]} 
             fontSize={0.014} 
             color="#ffffff" 
             anchorX="center"
           >
             {`FORMULA: ${formula.name}`}
-          </Text>
+          </HudText>
 
           {/* Active Shader Info */}
-          <Text 
+          <HudText 
             position={[0, -0.02, 0.015]} 
             fontSize={0.014} 
             color="#00ffcc" 
             anchorX="center"
           >
             {`SHADER: ${shader.name}`}
-          </Text>
+          </HudText>
 
-          <Text
+          <HudText
             position={[0, -0.055, 0.015]}
             fontSize={0.011}
             color="#f472b6"
@@ -1701,7 +1770,7 @@ function ImmersiveHUD({
             maxWidth={0.68}
           >
             {`HAND Y -> SCALAR: ${scalarLabel}`}
-          </Text>
+          </HudText>
 
           {/* Row of Controls */}
           <HUDButton 
@@ -1815,7 +1884,7 @@ function ImmersiveHUD({
               height={0.04}
             />
             
-            <Text 
+            <HudText 
               position={[0, 0, 0]} 
               fontSize={0.014} 
               color="#ffffff" 
@@ -1823,7 +1892,7 @@ function ImmersiveHUD({
               anchorY="middle"
             >
               {`ANIMATION SPEED: ${speed.toFixed(1)}x`}
-            </Text>
+            </HudText>
 
             <HUDButton 
               position={[0.18, 0, 0]} 
@@ -1851,9 +1920,9 @@ function ImmersiveHUD({
               width={0.1}
               height={0.035}
             />
-            <Text fontSize={0.012} color="#ffffff" anchorX="center" anchorY="middle">
+            <HudText fontSize={0.012} color="#ffffff" anchorX="center" anchorY="middle">
               {`SIZE: ${Math.round((xrVisualTransform.scale / DEFAULT_XR_VISUAL_TRANSFORM.scale) * 100)}%`}
-            </Text>
+            </HudText>
             <HUDButton
               position={[0.27, 0, 0]}
               color="#374151"
@@ -1875,9 +1944,9 @@ function ImmersiveHUD({
               width={0.1}
               height={0.035}
             />
-            <Text fontSize={0.012} color="#ffffff" anchorX="center" anchorY="middle">
+            <HudText fontSize={0.012} color="#ffffff" anchorX="center" anchorY="middle">
               {`ZOOM: ${xrVisualTransform.distance.toFixed(2)}m`}
-            </Text>
+            </HudText>
             <HUDButton
               position={[0.27, 0, 0]}
               color="#374151"
@@ -1899,9 +1968,9 @@ function ImmersiveHUD({
               width={0.1}
               height={0.035}
             />
-            <Text fontSize={0.012} color="#ffffff" anchorX="center" anchorY="middle">
+            <HudText fontSize={0.012} color="#ffffff" anchorX="center" anchorY="middle">
               {`YAW: ${Math.round(THREE.MathUtils.radToDeg(xrVisualTransform.yaw))}deg`}
-            </Text>
+            </HudText>
             <HUDButton
               position={[0.27, 0, 0]}
               color="#374151"
@@ -1923,9 +1992,9 @@ function ImmersiveHUD({
               width={0.1}
               height={0.035}
             />
-            <Text fontSize={0.012} color="#ffffff" anchorX="center" anchorY="middle">
+            <HudText fontSize={0.012} color="#ffffff" anchorX="center" anchorY="middle">
               {`PITCH: ${Math.round(THREE.MathUtils.radToDeg(xrVisualTransform.pitch))}deg`}
-            </Text>
+            </HudText>
             <HUDButton
               position={[0.27, 0, 0]}
               color="#374151"
@@ -1947,9 +2016,9 @@ function ImmersiveHUD({
               width={0.1}
               height={0.035}
             />
-            <Text fontSize={0.0095} color="#f472b6" anchorX="center" anchorY="middle" maxWidth={0.38}>
+            <HudText fontSize={0.0095} color="#f472b6" anchorX="center" anchorY="middle" maxWidth={0.38}>
               {xrGeometryLabel}
-            </Text>
+            </HudText>
             <HUDButton
               position={[0.27, 0, 0]}
               color="#374151"
@@ -2018,7 +2087,7 @@ function ImmersiveHUD({
               height={0.045}
             />
             
-            <Text 
+            <HudText 
               position={[0.13, 0, 0]} 
               fontSize={0.011} 
               color="#ffffff" 
@@ -2026,7 +2095,7 @@ function ImmersiveHUD({
               anchorY="middle"
             >
               {audioSync ? `BPM: ${formatQuant(speedQuant)}` : `SPD: ${speed.toFixed(1)}x`}
-            </Text>
+            </HudText>
 
             <HUDButton 
               position={[0.26, 0, 0]} 
@@ -2073,7 +2142,7 @@ function ImmersiveHUD({
               height={0.045}
             />
             
-            <Text 
+            <HudText 
               position={[0.13, 0, 0]} 
               fontSize={0.011} 
               color="#ffffff" 
@@ -2081,7 +2150,7 @@ function ImmersiveHUD({
               anchorY="middle"
             >
               {audioSync ? `BEAT: ${formatQuant(formulaQuant)}` : `INT: ${formulaCycleSpeed.toFixed(1)}s`}
-            </Text>
+            </HudText>
 
             <HUDButton 
               position={[0.26, 0, 0]} 
@@ -2128,7 +2197,7 @@ function ImmersiveHUD({
               height={0.045}
             />
             
-            <Text 
+            <HudText 
               position={[0.13, 0, 0]} 
               fontSize={0.011} 
               color="#ffffff" 
@@ -2136,7 +2205,7 @@ function ImmersiveHUD({
               anchorY="middle"
             >
               {audioSync ? `BEAT: ${formatQuant(shaderQuant)}` : `INT: ${shaderCycleSpeed.toFixed(1)}s`}
-            </Text>
+            </HudText>
 
             <HUDButton 
               position={[0.26, 0, 0]} 
@@ -2191,7 +2260,7 @@ function ImmersiveHUD({
               width={0.09}
               height={0.035}
             />
-            <Text 
+            <HudText 
               position={[0, 0, 0]} 
               fontSize={0.012} 
               color="#ffffff" 
@@ -2199,7 +2268,7 @@ function ImmersiveHUD({
               anchorY="middle"
             >
               {`PAGE ${formulaPage + 1} / ${Math.ceil(PRESET_FORMULAS.length / 4)}`}
-            </Text>
+            </HudText>
             <HUDButton 
               position={[0.18, 0, 0]} 
               color="#374151" 
@@ -2247,7 +2316,7 @@ function ImmersiveHUD({
               width={0.09}
               height={0.035}
             />
-            <Text 
+            <HudText 
               position={[0, 0, 0]} 
               fontSize={0.012} 
               color="#ffffff" 
@@ -2255,7 +2324,7 @@ function ImmersiveHUD({
               anchorY="middle"
             >
               {`PAGE ${shaderPage + 1} / ${Math.ceil(PRESET_SHADERS.length / 4)}`}
-            </Text>
+            </HudText>
             <HUDButton 
               position={[0.18, 0, 0]} 
               color="#374151" 
@@ -2270,16 +2339,16 @@ function ImmersiveHUD({
       )}
 
       {/* Informational tip at the very bottom of the HUD */}
-      <Text
+      <HudText
         position={[0, -0.225, 0.015]}
         fontSize={0.009}
         color="#888888"
         anchorX="center"
       >
         {hasControllers
-          ? 'STICK MOVES VIEWER • HOLD TRIGGER/GRIP + STICK ADJUSTS OBJECT • PINCH-DRAG VISUAL TO MOVE IT'
-          : 'LOOK + PINCH TO SELECT • PINCH-DRAG THE VISUAL TO MOVE IT • VIEW TAB HAS FINE CONTROLS'}
-      </Text>
+          ? 'STICK MOVES VIEWER • TRIGGER-DRAG MOVES VISUAL • TWO TRIGGERS SCALE & TURN IT'
+          : 'ONE PINCH DRAGS THE VISUAL • TWO-HAND PINCH SCALES & TURNS IT • VIEW TAB HAS FINE CONTROLS'}
+      </HudText>
 
       {/* 5. SECONDARY DIAGNOSTICS & VECTOR GRAPH PANEL */}
       <group position={[0, -0.56, -0.03]}>
@@ -2304,53 +2373,53 @@ function ImmersiveHUD({
         </mesh>
 
         {/* Header */}
-        <Text 
+        <HudText 
           position={[0, 0.16, 0.015]} 
           fontSize={0.022} 
           color="#f472b6" 
           anchorX="center"
         >
           DIAGNOSTICS & SYSTEM MATRIX
-        </Text>
+        </HudText>
 
         {/* Mathematical Formulas Vector Coordinates */}
         <group position={[-0.34, 0.10, 0.015]}>
-          <Text fontSize={0.011} color="#38bdf8" anchorX="left">
+          <HudText fontSize={0.011} color="#38bdf8" anchorX="left">
             {`X(p,t) = ${formula.x}`}
-          </Text>
+          </HudText>
         </group>
         <group position={[-0.34, 0.05, 0.015]}>
-          <Text fontSize={0.011} color="#38bdf8" anchorX="left">
+          <HudText fontSize={0.011} color="#38bdf8" anchorX="left">
             {`Y(p,t) = ${formula.y}`}
-          </Text>
+          </HudText>
         </group>
         <group position={[-0.34, 0.0, 0.015]}>
-          <Text fontSize={0.011} color="#d946ef" anchorX="left">
+          <HudText fontSize={0.011} color="#d946ef" anchorX="left">
             {`Z(p,t) = ${formula.z || "sin(2 * p + t) * 4"}`}
-          </Text>
+          </HudText>
         </group>
 
         {/* Active Profile Info */}
         <group position={[-0.34, -0.06, 0.015]}>
-          <Text fontSize={0.012} color="#a78bfa" anchorX="left" fontWeight="bold">
+          <HudText fontSize={0.012} color="#a78bfa" anchorX="left" fontWeight="bold">
             {`Preset: ${formula.name.replace(/_/g, ' ')}`}
-          </Text>
-          <Text position={[0, -0.02, 0]} fontSize={0.009} color="#9ca3af" anchorX="left" maxWidth={0.68}>
+          </HudText>
+          <HudText position={[0, -0.02, 0]} fontSize={0.009} color="#9ca3af" anchorX="left" maxWidth={0.68}>
             {formula.description || "Active mathematical model of resonance harmonics"}
-          </Text>
+          </HudText>
         </group>
 
         {/* Shader telemetry */}
         <group position={[-0.34, -0.11, 0.015]}>
-          <Text fontSize={0.011} color="#00ffcc" anchorX="left">
+          <HudText fontSize={0.011} color="#00ffcc" anchorX="left">
             {`Active Shader: ${shader.name.replace(/_/g, ' ')}`}
-          </Text>
+          </HudText>
         </group>
 
         <group position={[-0.34, -0.14, 0.015]}>
-          <Text fontSize={0.01} color="#f472b6" anchorX="left" maxWidth={0.68}>
+          <HudText fontSize={0.01} color="#f472b6" anchorX="left" maxWidth={0.68}>
             {`Hand Y Scalar: ${scalarLabel}`}
-          </Text>
+          </HudText>
         </group>
 
         {/* Hardware Statistics Grid */}
@@ -2361,38 +2430,38 @@ function ImmersiveHUD({
             <meshBasicMaterial color="#000000" transparent opacity={0.4} />
           </mesh>
           
-          <Text position={[-0.09, 0.08, 0]} fontSize={0.009} color="#888888" anchorX="left">
+          <HudText position={[-0.09, 0.08, 0]} fontSize={0.009} color="#888888" anchorX="left">
             TELEMETRY DATA:
-          </Text>
-          <Text position={[-0.09, 0.05, 0]} fontSize={0.01} color="#10b981" anchorX="left">
+          </HudText>
+          <HudText position={[-0.09, 0.05, 0]} fontSize={0.01} color="#10b981" anchorX="left">
             FPS: 60.0
-          </Text>
-          <Text position={[-0.09, 0.02, 0]} fontSize={0.01} color="#3b82f6" anchorX="left">
+          </HudText>
+          <HudText position={[-0.09, 0.02, 0]} fontSize={0.01} color="#3b82f6" anchorX="left">
             VERTS: 1.2K
-          </Text>
-          <Text position={[-0.09, -0.01, 0]} fontSize={0.01} color="#eab308" anchorX="left">
+          </HudText>
+          <HudText position={[-0.09, -0.01, 0]} fontSize={0.01} color="#eab308" anchorX="left">
             {`MODE: ${show3D ? currentGeometryMode.toUpperCase() : "LINEAR"}`}
-          </Text>
-          <Text position={[-0.09, -0.04, 0]} fontSize={0.01} color="#ec4899" anchorX="left">
+          </HudText>
+          <HudText position={[-0.09, -0.04, 0]} fontSize={0.01} color="#ec4899" anchorX="left">
             {`SPEED: ${speed.toFixed(1)}x`}
-          </Text>
-          <Text position={[-0.09, -0.07, 0]} fontSize={0.009} color="#a855f7" anchorX="left" maxWidth={0.18}>
+          </HudText>
+          <HudText position={[-0.09, -0.07, 0]} fontSize={0.009} color="#a855f7" anchorX="left" maxWidth={0.18}>
             {`PHASE: ${speed > 0 ? "LOCK" : "STABLE"}`}
-          </Text>
-          <Text position={[-0.09, -0.11, 0]} fontSize={0.008} color="#6b7280" anchorX="left">
+          </HudText>
+          <HudText position={[-0.09, -0.11, 0]} fontSize={0.008} color="#6b7280" anchorX="left">
             RENDER: WebGL_v4
-          </Text>
+          </HudText>
         </group>
 
         {/* Interactive Close VR Info */}
-        <Text
+        <HudText
           position={[0, -0.175, 0.015]}
           fontSize={0.009}
           color="#888888"
           anchorX="center"
         >
           REAL-TIME MATHEMATICS GRAPH ENGINE • HARMONIC.OS SPATIAL CORE
-        </Text>
+        </HudText>
       </group>
     </group>
   );
@@ -2592,7 +2661,7 @@ export default function GraphView({
           <XRVisualThumbstickControls setXrVisualTransform={setXrVisualTransform} />
           <XRAlphaController />
           <StudioEnvironment />
-          <SpatialWrapper xrVisualTransform={xrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
+          <SpatialWrapper xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
             <LightingRig preset={webgpuLightingPreset} intensity={webgpuLighting} />
             
             {showArtifacts && (
