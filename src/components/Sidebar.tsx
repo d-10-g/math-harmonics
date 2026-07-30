@@ -217,6 +217,13 @@ export default function Sidebar({
   }, [activeTab]);
 
   const selectedKey = itemKey(selectedItem);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Keep the selection visible while cycling with keys/auto-pilot.
+  useEffect(() => {
+    const row = listRef.current?.querySelector(`[data-key="${CSS.escape(selectedKey)}"]`);
+    row?.scrollIntoView({ block: 'nearest' });
+  }, [selectedKey]);
 
   const selectItem = (item: LibraryItem) => {
     if (item.kind === 'formula') {
@@ -330,7 +337,7 @@ export default function Sidebar({
           <span>Scroll to browse</span>
         </div>
 
-        <div className="mt-3 flex-1 min-h-[300px] lg:min-h-0 overflow-y-auto custom-scrollbar pr-1 space-y-2">
+        <div ref={listRef} className="mt-3 flex-1 min-h-[300px] lg:min-h-0 overflow-y-auto custom-scrollbar pr-1 space-y-2">
           {filteredItems.map((item) => {
             const key = itemKey(item);
             const isSelected = key === selectedKey;
@@ -338,6 +345,7 @@ export default function Sidebar({
             return (
               <div
                 key={key}
+                data-key={key}
                 className={cn(
                   "w-full flex items-stretch rounded-lg border transition-all duration-200 group overflow-hidden",
                   isSelected

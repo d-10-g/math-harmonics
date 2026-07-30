@@ -17,6 +17,12 @@ export type ClockState = {
   fps: number;
   frameMs: number;
   verts: number;
+  // Smoothed audio band energies in [0, ~1] while audio sync is active,
+  // plus the timestamp of the last detected beat (performance.now()).
+  bass: number;
+  mid: number;
+  treble: number;
+  lastBeatAt: number;
 };
 
 export const clockStore = createStore<ClockState>(() => ({
@@ -28,7 +34,11 @@ export const clockStore = createStore<ClockState>(() => ({
   speedQuant: 0,
   fps: 0,
   frameMs: 0,
-  verts: 0
+  verts: 0,
+  bass: 0,
+  mid: 0,
+  treble: 0,
+  lastBeatAt: 0
 }));
 
 export const getClockTime = () => clockStore.getState().time;
@@ -42,6 +52,13 @@ export const setClockPlayback = (
 export const reportVerts = (verts: number) => {
   if (clockStore.getState().verts !== verts) clockStore.setState({ verts });
 };
+
+export const setAudioBands = (bass: number, mid: number, treble: number) =>
+  clockStore.setState({ bass, mid, treble });
+
+export const clearAudioBands = () => clockStore.setState({ bass: 0, mid: 0, treble: 0 });
+
+export const markBeat = () => clockStore.setState({ lastBeatAt: performance.now() });
 
 export function startClock() {
   let raf = 0;

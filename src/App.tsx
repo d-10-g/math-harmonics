@@ -21,7 +21,7 @@ import {
 } from './constants';
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
-import { setClockPlayback, setClockTime, startClock, useClockSnapshot } from './lib/clock';
+import { clearAudioBands, markBeat, setAudioBands, setClockPlayback, setClockTime, startClock, useClockSnapshot } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 
@@ -66,7 +66,9 @@ const WEBGPU_MATERIAL_PRESETS: Exclude<WebGPUMaterialProfile, 'auto'>[] = [
 ];
 
 const xrStore = createXRStore({
-  offerSession: false,
+  // One-tap "Enter VR" offer from the browser chrome where supported
+  // (Quest browser); harmlessly ignored elsewhere.
+  offerSession: 'immersive-vr',
   domOverlay: false,
   frameRate: isVisionProSafari() ? 'mid' : 'high',
   frameBufferScaling: (maxFramebufferScale: number) => isVisionProSafari() ? Math.min(1, maxFramebufferScale) : maxFramebufferScale,
@@ -137,6 +139,9 @@ export default function App() {
   const [webgpuLightingPreset, setWebgpuLightingPreset] = useState<WebGPULightingPreset>(initialShared.webgpuLightingPreset ?? 'studio');
   const [webgpuGeometry, setWebgpuGeometry] = useState<WebGPUGeometryProfile>(initialShared.webgpuGeometry ?? 'auto');
   const [webgpuMaterial, setWebgpuMaterial] = useState<WebGPUMaterialProfile>(initialShared.webgpuMaterial ?? 'auto');
+  const [autoStyle, setAutoStyle] = useState(initialShared.autoStyle ?? true);
+  const [showEnvironment, setShowEnvironment] = useState(initialShared.showEnvironment ?? true);
+  const [lineWidth, setLineWidth] = useState(initialShared.lineWidth ?? 0.14);
   const [autoCycleWebgpuLighting, setAutoCycleWebgpuLighting] = useState(false);
   const [autoCycleWebgpuGeometry, setAutoCycleWebgpuGeometry] = useState(false);
   const [autoCycleWebgpuMaterial, setAutoCycleWebgpuMaterial] = useState(false);
@@ -207,19 +212,35 @@ export default function App() {
         source.connect(analyser);
         
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        
+        let bassEma = 0;
+        let midEma = 0;
+        let trebleEma = 0;
+
+        const bandAverage = (from: number, to: number) => {
+          let total = 0;
+          for (let i = from; i < to; i++) total += dataArray[i];
+          return total / ((to - from) * 255);
+        };
+
         const detectBeat = () => {
           analyser.getByteFrequencyData(dataArray);
           let sum = 0;
           for(let i = 0; i < 8; i++) sum += dataArray[i];
           const average = sum / 8;
-          
+
+          // Smoothed band energies for audio-reactive materials and lights.
+          bassEma = bassEma * 0.72 + bandAverage(0, 8) * 0.28;
+          midEma = midEma * 0.72 + bandAverage(8, 40) * 0.28;
+          trebleEma = trebleEma * 0.72 + bandAverage(40, 116) * 0.28;
+          setAudioBands(bassEma, midEma, trebleEma);
+
           const now = performance.now();
           // Dynamic peak detection: must be loud enough (80) and 15% louder than recent floating average
           if (average > 80 && average > lastAverage * 1.15 && now - lastBeatTime > 300) {
              const interval = lastBeatTime > 0 ? now - lastBeatTime : 500;
              lastBeatTime = now;
              setBpmInterval(interval);
+             markBeat();
              
              // Formula Cycle
              if (autoCycleFormulaRef.current) {
@@ -276,6 +297,7 @@ export default function App() {
     return () => {
       if (animationId) cancelAnimationFrame(animationId);
       if (audioCtx) audioCtx.close();
+      clearAudioBands();
     };
   }, [audioSync]);
 
@@ -399,6 +421,17 @@ export default function App() {
     });
   };
 
+  // Art direction: presets that declare a preferred material + light rig
+  // apply them on selection while Auto-Style is on, so cycling the library
+  // lands on designed combinations instead of leftovers.
+  useEffect(() => {
+    if (!autoStyle) return;
+    const style = selectedFormula.style;
+    if (!style) return;
+    setWebgpuMaterial(style.material);
+    setWebgpuLightingPreset(style.lighting);
+  }, [selectedFormula.id, autoStyle]);
+
   // Persist shareable state to the URL hash + localStorage (preset ids and
   // settings only; custom-edited expressions are not serialized).
   useEffect(() => {
@@ -414,9 +447,12 @@ export default function App() {
       webgpuGeometry,
       webgpuMaterial,
       webgpuLightingPreset,
-      webgpuLighting
+      webgpuLighting,
+      autoStyle,
+      showEnvironment,
+      lineWidth
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -458,6 +494,19 @@ export default function App() {
     // Handlers only use functional state updates and document APIs.
   }, []);
 
+  const saveSnapshot = () => {
+    const canvas = document.querySelector('section canvas') as HTMLCanvasElement | null;
+    if (!canvas) return;
+    try {
+      const link = document.createElement('a');
+      link.download = `harmonic-${selectedFormula.id}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.warn('Unable to capture snapshot:', error);
+    }
+  };
+
   const [copiedLink, setCopiedLink] = useState(false);
   const copyShareLink = async () => {
     try {
@@ -492,6 +541,14 @@ export default function App() {
           <h1 className="text-xl font-medium tracking-tight">Harmonic.OS <span className="text-white/30 font-mono text-xs ml-2 uppercase tracking-widest">{APP_VERSION}</span></h1>
         </div>
         <div className="flex gap-4 items-center">
+          <button
+            onClick={saveSnapshot}
+            disabled={rendererMode === 'webgpu'}
+            className="px-3 py-1 hover:bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-white/50 hover:text-white transition-colors uppercase tracking-widest disabled:opacity-35 disabled:cursor-not-allowed"
+            title={rendererMode === 'webgpu' ? 'Snapshot is available in WebGL mode' : 'Save the current view as a PNG'}
+          >
+            Save PNG
+          </button>
           <button
             onClick={copyShareLink}
             className="px-3 py-1 hover:bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-white/50 hover:text-white transition-colors uppercase tracking-widest"
@@ -560,6 +617,8 @@ export default function App() {
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
                 webgpuGeometry={webgpuGeometry}
+                showEnvironment={showEnvironment}
+                lineWidth={lineWidth}
                 show3D={show3D}
                 setShow3D={setShow3D}
                 showWireframe={showWireframe}
@@ -669,6 +728,12 @@ export default function App() {
           setFormulaQuant={setFormulaQuant}
           shaderQuant={shaderQuant}
           setShaderQuant={setShaderQuant}
+          autoStyle={autoStyle}
+          setAutoStyle={setAutoStyle}
+          showEnvironment={showEnvironment}
+          setShowEnvironment={setShowEnvironment}
+          lineWidth={lineWidth}
+          setLineWidth={setLineWidth}
           xrStore={xrStore}
         />
       </main>

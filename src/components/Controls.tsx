@@ -78,6 +78,12 @@ interface ControlsProps {
   setFormulaQuant: (q: number) => void;
   shaderQuant: number;
   setShaderQuant: (q: number) => void;
+  autoStyle: boolean;
+  setAutoStyle: (auto: boolean) => void;
+  showEnvironment: boolean;
+  setShowEnvironment: (show: boolean) => void;
+  lineWidth: number;
+  setLineWidth: (width: number) => void;
   xrStore: any;
 }
 
@@ -231,6 +237,12 @@ export default function Controls({
   setFormulaQuant,
   shaderQuant,
   setShaderQuant,
+  autoStyle,
+  setAutoStyle,
+  showEnvironment,
+  setShowEnvironment,
+  lineWidth,
+  setLineWidth,
   xrStore
 }: ControlsProps) {
   const [isArSupported, setIsArSupported] = useState<boolean | null>(null);
@@ -629,6 +641,28 @@ export default function Controls({
                 </div>
               </div>
 
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-white/80">Auto-Style Presets</div>
+                  <div className="text-[9px] text-white/30 font-mono">Formulas Apply Their Own Material + Rig</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoStyle(!autoStyle)}
+                  aria-label="Auto-style presets"
+                  aria-pressed={autoStyle}
+                  className={cn(
+                    "w-9 h-4 rounded-full transition-all duration-300 relative flex items-center px-0.5",
+                    autoStyle ? "bg-cyan-500" : "bg-white/10"
+                  )}
+                >
+                  <div className={cn(
+                    "w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm",
+                    autoStyle ? "translate-x-5" : "translate-x-0"
+                  )} />
+                </button>
+              </div>
+
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <div>
@@ -687,6 +721,48 @@ export default function Controls({
             </div>
 
           <div className="h-[1px] bg-white/5" />
+
+          {/* Cosmos Backdrop Switch */}
+          <div className="flex items-center justify-between group">
+            <div>
+              <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Cosmos Backdrop</div>
+              <div className="text-[9px] text-white/30 font-mono">Rig-Tinted Dome + Starfield (3D)</div>
+            </div>
+            <button
+              onClick={() => setShowEnvironment(!showEnvironment)}
+              aria-label="Cosmos backdrop"
+              aria-pressed={showEnvironment}
+              className={cn(
+                "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center px-1",
+                showEnvironment ? "bg-indigo-600" : "bg-white/10"
+              )}
+            >
+              <div className={cn(
+                "w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm",
+                showEnvironment ? "translate-x-5" : "translate-x-0"
+              )} />
+            </button>
+          </div>
+
+          {/* 2D Line Width */}
+          <div className="space-y-3 group">
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">2D Line Width</div>
+                <div className="text-[9px] text-white/30 font-mono">0 = Hairline · Ribbon Gets Shader UVs</div>
+              </div>
+              <div className="text-[10px] font-mono text-indigo-400">{lineWidth.toFixed(2)}</div>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="0.5"
+              step="0.01"
+              value={lineWidth}
+              onChange={(e) => setLineWidth(parseFloat(e.target.value))}
+              className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
+            />
+          </div>
 
           {/* Artifacts Switch */}
           <div className="flex items-center justify-between group">

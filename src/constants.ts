@@ -13,6 +13,9 @@ export interface Formula {
   parametric?: boolean;
   pRange?: [number, number];
   qRange?: [number, number];
+  // Art direction: preferred material + light rig, applied on selection when
+  // Auto-Style is enabled.
+  style?: { material: Exclude<WebGPUMaterialProfile, 'auto'>; lighting: WebGPULightingPreset };
 }
 
 export type FormulaGeometryMode =
@@ -165,6 +168,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "sin(2 * p)",
     z: "sin(4 * p + t) * cos(2 * p)",
     geometryMode: "ribbon",
+    style: { material: "pearl", lighting: "studio" },
     description: "Classic harmonic resonance pattern."
   },
   {
@@ -346,6 +350,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "sin(p + t) * exp(0.16 * p)",
     z: "0.35 * exp(0.16 * p) * sin(2 * p + t) * 0.6",
     geometryMode: "tube",
+    style: { material: "copper", lighting: "sunset" },
     description: "Logarithmic spiral with golden-ratio growth, rotating with phase."
   },
     {
@@ -391,6 +396,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "(3 + cos(2 * p + t)) * sin(0.75 * p)",
     z: "sin(2 * p + t)",
     geometryMode: "tube",
+    style: { material: "liquid-metal", lighting: "studio" },
     description: "A true (3,8) torus knot: three toroidal loops, eight poloidal windings."
   },
     {
@@ -409,6 +415,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "3.4 * sin(p + 0.3 * sin(3 * p + t)) * cos(p) / (1 + sin(p)^2)",
     z: "1.2 * sin(2 * p + t)",
     geometryMode: "ribbon",
+    style: { material: "ruby", lighting: "noir" },
     description: "Two-lobed lemniscate wings with chaotic phase wobble, after Lorenz."
   },
     {
@@ -517,6 +524,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "1.4 * cosh(0.8 * (0.25 * p - 3.1416)) * sin(2 * p + t)",
     z: "2.2 * (0.25 * p - 3.1416)",
     geometryMode: "lathe",
+    style: { material: "chrome", lighting: "eclipse" },
     description: "Hyperboloid throat: a geodesic winding through the narrow neck."
   },
     {
@@ -535,6 +543,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "0.62 * sqrt(3 * p) * sin(7.19988 * p + 0.2 * t)",
     z: "0.5 * sin(3 * p + t)",
     geometryMode: "constellation",
+    style: { material: "jade", lighting: "caustic" },
     description: "Phyllotaxis: seeds placed by the golden angle, r ~ sqrt(n)."
   },
     {
@@ -571,6 +580,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "2.6 * (sin(p) / 2 - sin(2 * p) / 4) + 0.12 * cos(15 * p + t)",
     z: "0.4 * sin(8 * p + t)",
     geometryMode: "extrude",
+    style: { material: "obsidian", lighting: "prism" },
     description: "The main cardioid boundary of the Mandelbrot set, with edge shimmer."
   },
     {
@@ -607,6 +617,7 @@ const BASE_PRESET_FORMULAS: Formula[] = [
     y: "2.2 * cos(p) + 1.1 * cos(2 * p + 0.3 * t) + 0.55 * cos(4 * p + 0.6 * t) + 0.28 * cos(8 * p + t)",
     z: "0.5 * sin(16 * p + t) + 0.8 * cos(3 * p)",
     geometryMode: "lattice",
+    style: { material: "velvet", lighting: "aurora" },
     description: "Weierstrass-style self-similar sum: each octave adds finer branches."
   },
   {
@@ -1460,6 +1471,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     x: "(3 + (1.1 + 0.35 * sin(t)) * cos(q)) * cos(p)",
     y: "(3 + (1.1 + 0.35 * sin(t)) * cos(q)) * sin(p)",
     z: "(1.1 + 0.35 * sin(t)) * sin(q)",
+    style: { material: "ceramic", lighting: "studio" },
     description: "A torus whose tube radius breathes with the phase clock."
   },
   {
@@ -1471,6 +1483,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     x: "((2.5 + 0.15 * sin(t)) + cos(0.5 * p) * sin(q) - sin(0.5 * p) * sin(2 * q)) * cos(p)",
     y: "((2.5 + 0.15 * sin(t)) + cos(0.5 * p) * sin(q) - sin(0.5 * p) * sin(2 * q)) * sin(p)",
     z: "sin(0.5 * p) * sin(q) + cos(0.5 * p) * sin(2 * q)",
+    style: { material: "copper", lighting: "sunset" },
     description: "Figure-eight immersion of the Klein bottle — a closed surface with no inside."
   },
   {
@@ -1482,6 +1495,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     x: "(3 + q * cos(0.5 * p + 0.2 * t)) * cos(p)",
     y: "(3 + q * cos(0.5 * p + 0.2 * t)) * sin(p)",
     z: "q * sin(0.5 * p + 0.2 * t)",
+    style: { material: "velvet", lighting: "noir" },
     description: "One-sided band whose half-twist slowly crawls around the ring."
   },
   {
@@ -1494,6 +1508,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     x: "cos(0.5 * t) * sinh(q) * sin(p) + sin(0.5 * t) * cosh(q) * cos(p)",
     y: "-cos(0.5 * t) * sinh(q) * cos(p) + sin(0.5 * t) * cosh(q) * sin(p)",
     z: "0.6 * p * cos(0.5 * t) + 1.4 * q * sin(0.5 * t)",
+    style: { material: "chrome", lighting: "gallery" },
     description: "The classic isometric deformation between a helicoid and a catenoid, driven by t."
   },
   {
@@ -1505,6 +1520,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     x: "0.62 * (1 - 0.0796 * q) * cos(2 * q) * (1 + cos(p)) + 0.14 * cos(2 * q)",
     y: "0.62 * (1 - 0.0796 * q) * sin(2 * q) * (1 + cos(p)) + 0.14 * sin(2 * q)",
     z: "0.28 * q + 0.62 * (1 - 0.0796 * q) * sin(p) + 0.03 * sin(15 * q + t)",
+    style: { material: "pearl", lighting: "sunset" },
     description: "Logarithmic turret shell: a shrinking tube coiled up a rising spiral."
   },
   {
@@ -1517,6 +1533,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     x: "2.6 * cos(p + 0.3 * t) * sin(q)",
     y: "2.6 * sin(p + 0.3 * t) * sin(q)",
     z: "2.6 * (cos(q) + log(tan(q / 2))) + 0.35 * p",
+    style: { material: "jade", lighting: "caustic" },
     description: "Dini's surface: constant negative curvature twisted along a helix."
   },
   {
@@ -1527,6 +1544,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     x: "3 * sin(p)",
     y: "3 * sin(q)",
     z: "3 * sin(p + q + 0.5 * t)",
+    style: { material: "hologram", lighting: "prism" },
     description: "The sine surface: three orthogonal sines sliding against each other."
   },
   {
@@ -1538,6 +1556,7 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     x: "(3 + 0.8 * sin(3 * q) * cos(4 * p + t)) * sin(q) * cos(p)",
     y: "(3 + 0.8 * sin(3 * q) * cos(4 * p + t)) * sin(q) * sin(p)",
     z: "(3 + 0.8 * sin(3 * q) * cos(4 * p + t)) * cos(q)",
+    style: { material: "ruby", lighting: "eclipse" },
     description: "A sphere modulated by a rotating spherical harmonic — it blooms as t turns."
   },
   {
@@ -1550,7 +1569,81 @@ const PARAMETRIC_SURFACE_FORMULAS: Formula[] = [
     x: "p",
     y: "q",
     z: "1.1 * sin(2 * sqrt(p^2 + q^2) - 2 * t) + 0.4 * sin(1.7 * p + t) * cos(1.5 * q)",
+    style: { material: "ice", lighting: "laboratory" },
     description: "Circular ripples from the center interfering with a diagonal cross-swell."
+  },
+  {
+    id: "surf-10",
+    name: "Superquadric Morph",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [-3.1416, 3.1416],
+    qRange: [-1.5208, 1.5208],
+    x: "3 * sign(cos(q)) * abs(cos(q))^(0.55 + 0.3 * sin(0.5 * t)) * sign(cos(p)) * abs(cos(p))^(0.55 + 0.3 * sin(0.5 * t))",
+    y: "3 * sign(cos(q)) * abs(cos(q))^(0.55 + 0.3 * sin(0.5 * t)) * sign(sin(p)) * abs(sin(p))^(0.55 + 0.3 * sin(0.5 * t))",
+    z: "3 * sign(sin(q)) * abs(sin(q))^(0.55 + 0.3 * sin(0.5 * t))",
+    style: { material: "plasma", lighting: "prism" },
+    description: "A superellipsoid whose exponent breathes between rounded cube and pointed star."
+  },
+  {
+    id: "surf-11",
+    name: "Corkscrew Spring",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [0, 12.566],
+    x: "(2.6 + 0.8 * cos(q)) * cos(p)",
+    y: "(2.6 + 0.8 * cos(q)) * sin(p)",
+    z: "0.8 * sin(q) + 0.45 * p - 2.8",
+    style: { material: "liquid-metal", lighting: "studio" },
+    description: "A toroidal tube stretched into a two-turn helical spring."
+  },
+  {
+    id: "surf-12",
+    name: "Squish Torus",
+    category: "Parametric surfaces",
+    parametric: true,
+    x: "(3 + (0.55 + 0.45 * cos(2 * t + 3 * p)) * cos(q)) * cos(p)",
+    y: "(3 + (0.55 + 0.45 * cos(2 * t + 3 * p)) * cos(q)) * sin(p)",
+    z: "(0.55 + 0.45 * sin(2 * t + 3 * p)) * sin(q)",
+    style: { material: "neon", lighting: "underlight" },
+    description: "A torus whose cross-section squashes and rolls as it travels the ring."
+  },
+  {
+    id: "surf-13",
+    name: "Astroidal Ellipsoid",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [-3.1416, 3.1416],
+    qRange: [-1.5708, 1.5708],
+    x: "3.2 * (cos(p + 0.2 * t) * cos(q))^3",
+    y: "3.2 * (sin(p + 0.2 * t) * cos(q))^3",
+    z: "3.2 * sin(q)^3",
+    style: { material: "obsidian", lighting: "eclipse" },
+    description: "Cubed-cosine star ellipsoid: six cusps joined by pinched saddle walls."
+  },
+  {
+    id: "surf-14",
+    name: "Horn Torus Morph",
+    category: "Parametric surfaces",
+    parametric: true,
+    x: "((2 + 1.3 * sin(0.4 * t)) + 1.4 * cos(q)) * cos(p)",
+    y: "((2 + 1.3 * sin(0.4 * t)) + 1.4 * cos(q)) * sin(p)",
+    z: "1.4 * sin(q)",
+    style: { material: "glass", lighting: "aurora" },
+    description: "The major radius sweeps through ring, horn and spindle torus regimes."
+  },
+  {
+    id: "surf-15",
+    name: "Helical Ramp",
+    category: "Parametric surfaces",
+    parametric: true,
+    pRange: [0, 6.2832],
+    qRange: [0.6, 3.4],
+    x: "q * cos(2 * p)",
+    y: "q * sin(2 * p)",
+    z: "0.8 * p - 2.5 + 0.2 * sin(6 * q + t)",
+    style: { material: "carbon", lighting: "noir" },
+    description: "A double-turn spiral ramp with a gentle radial shudder."
   }
 ];
 

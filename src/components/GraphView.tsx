@@ -16,7 +16,7 @@ import {
 } from '../constants';
 import { DEFAULT_VERTEX_SHADER, PRESET_SHADERS } from '../shaders';
 import { XR, XROrigin, useXR, useXRInputSourceState } from '@react-three/xr';
-import { getClockTime, reportVerts } from '../lib/clock';
+import { clockStore, getClockTime, reportVerts } from '../lib/clock';
 import { configureTextBuilder } from 'troika-three-text';
 import { isVisionProSafari } from '../lib/platform';
 
@@ -959,6 +959,8 @@ interface GraphViewProps {
   webgpuLightingPreset: WebGPULightingPreset;
   webgpuMaterial: WebGPUMaterialProfile;
   webgpuGeometry: WebGPUGeometryProfile;
+  showEnvironment: boolean;
+  lineWidth: number;
   show3D: boolean;
   setShow3D?: (show: boolean) => void;
   showWireframe: boolean;
@@ -999,6 +1001,7 @@ function FormulaLine({
   show3D,
   showWireframe,
   materialProfile = 'auto',
+  lineWidth = 0,
   geometryMode: geometryModeOverride
 }: {
   formula: Formula;
@@ -1006,6 +1009,7 @@ function FormulaLine({
   show3D: boolean;
   showWireframe: boolean;
   materialProfile?: WebGPUMaterialProfile;
+  lineWidth?: number;
   geometryMode?: FormulaGeometryMode;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -1053,13 +1057,13 @@ function FormulaLine({
   }, [scalarTarget.baseScalar, scalarTarget.field, scalarTarget.match]);
 
   const resolution = 500;
-  
+
   // Stable geometry that never gets recreated
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((resolution + 1) * 3), 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array((resolution + 1) * 2), 2));
-    
+
     // Fill normals with Z-up so 2D lines don't crash the physical shaders
     const normals = new Float32Array((resolution + 1) * 3);
     for (let i = 0; i <= resolution; i++) {
@@ -1069,9 +1073,51 @@ function FormulaLine({
     return geo;
   }, []);
 
+  // Ribbon variant of the 2D line: two vertices per sample offset
+  // perpendicular to the curve in the XY plane, so shader presets get a real
+  // uv.y across the width. Updated in place each frame, same as the line.
+  const ribbonGeometry = useMemo(() => {
+    const vertCount = (resolution + 1) * 2;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertCount * 3), 3));
+    const uvs = new Float32Array(vertCount * 2);
+    const normals = new Float32Array(vertCount * 3);
+    const indices: number[] = [];
+    for (let i = 0; i <= resolution; i++) {
+      uvs[i * 4] = i / resolution;
+      uvs[i * 4 + 1] = 0;
+      uvs[i * 4 + 2] = i / resolution;
+      uvs[i * 4 + 3] = 1;
+      normals[i * 6 + 2] = 1;
+      normals[i * 6 + 5] = 1;
+      if (i < resolution) {
+        const a = i * 2;
+        indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
+    }
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    geo.setIndex(indices);
+    return geo;
+  }, []);
+
+  useEffect(() => () => {
+    geometry.dispose();
+    ribbonGeometry.dispose();
+  }, [geometry, ribbonGeometry]);
+
+  const useRibbon = lineWidth >= 0.02;
+
   const shaderMaterial = useMemo(() => {
+    // uBass/uMid/uTreble are supplied for any preset or custom shader that
+    // declares them; existing shaders that don't are unaffected.
     return new THREE.ShaderMaterial({
-      uniforms: { time: { value: getClockTime() } },
+      uniforms: {
+        time: { value: getClockTime() },
+        uBass: { value: 0 },
+        uMid: { value: 0 },
+        uTreble: { value: 0 }
+      },
       vertexShader: DEFAULT_VERTEX_SHADER,
       fragmentShader: shader.fragmentShader,
       side: THREE.DoubleSide,
@@ -1130,7 +1176,21 @@ function FormulaLine({
   // Update geometry directly in the render loop without triggering React renders or GC
   useFrame(() => {
     const time = getClockTime();
-    if (shaderMaterial) shaderMaterial.uniforms.time.value = time;
+    const clock = clockStore.getState();
+    if (shaderMaterial) {
+      shaderMaterial.uniforms.time.value = time;
+      shaderMaterial.uniforms.uBass.value = clock.bass;
+      shaderMaterial.uniforms.uMid.value = clock.mid;
+      shaderMaterial.uniforms.uTreble.value = clock.treble;
+    }
+    if (physicalMaterial) {
+      // Bass drives the emissive pulse while audio sync is running.
+      if (physicalMaterial.userData.baseEmissive === undefined) {
+        physicalMaterial.userData.baseEmissive = physicalMaterial.emissiveIntensity;
+      }
+      const base = physicalMaterial.userData.baseEmissive as number;
+      physicalMaterial.emissiveIntensity = clock.audioSync ? base + (0.25 + base * 1.8) * clock.bass : base;
+    }
     const nextScalar = getSValue();
     const scalarThreshold = Math.max(0.005, Math.abs(scalarTarget.baseScalar) * 0.003);
 
@@ -1166,9 +1226,35 @@ function FormulaLine({
       return;
     }
 
+    const points = sampleFormulaPoints(compiled, time, nextScalar, resolution, formula.parametric ? surfaceMidQ(formula) : 0);
+
+    if (useRibbon) {
+      const positions = ribbonGeometry.attributes.position.array as Float32Array;
+      const halfWidth = lineWidth * 0.5 * 26; // scene units (curve spans ~±13)
+      for (let i = 0; i <= resolution; i++) {
+        const prev = points[Math.max(0, i - 1)];
+        const next = points[Math.min(resolution, i + 1)];
+        let tx = next.x - prev.x;
+        let ty = next.y - prev.y;
+        const len = Math.hypot(tx, ty) || 1;
+        tx /= len;
+        ty /= len;
+        const ox = -ty * halfWidth;
+        const oy = tx * halfWidth;
+        const base = i * 6;
+        positions[base] = points[i].x + ox;
+        positions[base + 1] = points[i].y + oy;
+        positions[base + 2] = points[i].z;
+        positions[base + 3] = points[i].x - ox;
+        positions[base + 4] = points[i].y - oy;
+        positions[base + 5] = points[i].z;
+      }
+      ribbonGeometry.attributes.position.needsUpdate = true;
+      return;
+    }
+
     const positions = geometry.attributes.position.array as Float32Array;
     const uvs = geometry.attributes.uv.array as Float32Array;
-    const points = sampleFormulaPoints(compiled, time, nextScalar, resolution, formula.parametric ? surfaceMidQ(formula) : 0);
     for (let i = 0; i <= resolution; i++) {
       positions[i * 3] = points[i].x;
       positions[i * 3 + 1] = points[i].y;
@@ -1184,10 +1270,15 @@ function FormulaLine({
 
   return (
     <group ref={groupRef}>
-      {!show3D && (
+      {!show3D && !useRibbon && (
         <Line ref={lineRef} geometry={geometry} frustumCulled={false}>
           <primitive object={shaderMaterial} attach="material" />
         </Line>
+      )}
+      {!show3D && useRibbon && (
+        <mesh geometry={ribbonGeometry} frustumCulled={false}>
+          <primitive object={shaderMaterial} attach="material" />
+        </mesh>
       )}
       {show3D && geometry3D && (
         <mesh ref={meshRef} frustumCulled={false}>
@@ -1219,10 +1310,15 @@ function StudioEnvironment() {
 }
 
 // Declarative version of the WebGPU path's light rigs (shared data table).
+// While audio sync is on, band energies modulate the lights directly in the
+// frame loop: bass drives the key, mids the fill, treble the rim.
 function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; intensity: number }) {
   const { gl } = useThree();
   const rig = lightingRigSettings(preset);
   const light = THREE.MathUtils.clamp(intensity, 0.45, 3.5);
+  const keyRef = useRef<THREE.DirectionalLight>(null);
+  const rimRef = useRef<THREE.PointLight>(null);
+  const fillRef = useRef<THREE.PointLight>(null);
 
   useEffect(() => {
     const previousExposure = gl.toneMappingExposure;
@@ -1232,21 +1328,50 @@ function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; inte
     };
   }, [gl, light]);
 
+  useFrame(() => {
+    const state = clockStore.getState();
+    const active = state.audioSync;
+    if (keyRef.current) keyRef.current.intensity = rig.keyScale * light * (active ? 1 + state.bass * 1.1 : 1);
+    if (rimRef.current) rimRef.current.intensity = rig.rimScale * light * (active ? 1 + state.treble * 1.6 : 1);
+    if (fillRef.current) fillRef.current.intensity = rig.fillScale * light * (active ? 1 + state.mid * 0.9 : 1);
+  });
+
   return (
     <>
       <ambientLight color={rig.ambient} intensity={0.42 + light * rig.ambientScale} />
       <hemisphereLight color={rig.ambient} groundColor={rig.ground} intensity={0.62 + light * rig.hemiScale} />
-      <directionalLight color={rig.key} position={rig.keyPosition} intensity={rig.keyScale * light} />
-      <pointLight color={rig.rim} position={rig.rimPosition} intensity={rig.rimScale * light} distance={36} />
-      <pointLight color={rig.fill} position={rig.fillPosition} intensity={rig.fillScale * light} distance={32} />
+      <directionalLight ref={keyRef} color={rig.key} position={rig.keyPosition} intensity={rig.keyScale * light} />
+      <pointLight ref={rimRef} color={rig.rim} position={rig.rimPosition} intensity={rig.rimScale * light} distance={36} />
+      <pointLight ref={fillRef} color={rig.fill} position={rig.fillPosition} intensity={rig.fillScale * light} distance={32} />
     </>
   );
+}
+
+// Beat-synced haptic pulse on whichever controllers are connected (Quest);
+// transient-pointer input (Vision Pro hands) has no actuators, so this is a
+// silent no-op there.
+function XRBeatHaptics() {
+  const leftController = useXRInputSourceState('controller', 'left');
+  const rightController = useXRInputSourceState('controller', 'right');
+  const lastBeatRef = useRef(0);
+
+  useFrame(() => {
+    const state = clockStore.getState();
+    if (!state.audioSync || state.lastBeatAt === lastBeatRef.current) return;
+    lastBeatRef.current = state.lastBeatAt;
+    [leftController, rightController].forEach((controller) => {
+      const actuator = (controller?.inputSource?.gamepad as any)?.hapticActuators?.[0];
+      actuator?.pulse?.(0.55, 70);
+    });
+  });
+
+  return null;
 }
 
 // Immersive-VR surroundings: a rig-tinted dome, a sparse starfield and a
 // floor disc + grid so the void has depth and a ground reference. Hidden in
 // passthrough modes (the real room is the environment there).
-function XREnvironment({ preset }: { preset: WebGPULightingPreset }) {
+function XREnvironment({ preset, desktopVisible }: { preset: WebGPULightingPreset; desktopVisible: boolean }) {
   const session = useXR((state) => state.session);
   const isPresenting = !!session;
   const blend = session?.environmentBlendMode;
@@ -1291,7 +1416,7 @@ function XREnvironment({ preset }: { preset: WebGPULightingPreset }) {
     (grid.material as THREE.Material).dispose();
   }, [grid]);
 
-  if (!isPresenting || isPassthrough) return null;
+  if (isPresenting ? isPassthrough : !desktopVisible) return null;
 
   return (
     <group>
@@ -1302,11 +1427,16 @@ function XREnvironment({ preset }: { preset: WebGPULightingPreset }) {
       <points geometry={stars}>
         <pointsMaterial size={0.14} sizeAttenuation color="#cdd8ff" transparent opacity={0.8} depthWrite={false} />
       </points>
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.002, 0]}>
-        <circleGeometry args={[7.5, 48]} />
-        <meshBasicMaterial color={rig.ground} transparent opacity={0.5} depthWrite={false} />
-      </mesh>
-      <primitive object={grid} position={[0, 0.02, 0]} />
+      {/* Ground reference only makes sense with a floor-level origin (XR). */}
+      {isPresenting && (
+        <>
+          <mesh rotation-x={-Math.PI / 2} position={[0, 0.002, 0]}>
+            <circleGeometry args={[7.5, 48]} />
+            <meshBasicMaterial color={rig.ground} transparent opacity={0.5} depthWrite={false} />
+          </mesh>
+          <primitive object={grid} position={[0, 0.02, 0]} />
+        </>
+      )}
     </group>
   );
 }
@@ -2716,6 +2846,8 @@ export default function GraphView({
   webgpuLightingPreset,
   webgpuMaterial,
   webgpuGeometry,
+  showEnvironment,
+  lineWidth,
   show3D,
   setShow3D,
   showWireframe,
@@ -2750,7 +2882,28 @@ export default function GraphView({
   setShaderCycleSpeed
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
-  const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(DEFAULT_XR_VISUAL_TRANSFORM);
+  const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
+    try {
+      const raw = localStorage.getItem('harmonics.xrtransform.v1');
+      if (raw) return { ...DEFAULT_XR_VISUAL_TRANSFORM, ...JSON.parse(raw) };
+    } catch {
+      // Fall through to defaults.
+    }
+    return DEFAULT_XR_VISUAL_TRANSFORM;
+  });
+
+  // Persist the XR view (size/distance/orientation) so re-entering VR
+  // restores the last arrangement. Debounced: gestures update at frame rate.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      try {
+        localStorage.setItem('harmonics.xrtransform.v1', JSON.stringify(xrVisualTransform));
+      } catch {
+        // Storage unavailable; the view just won't persist.
+      }
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [xrVisualTransform]);
   const [xrGeometrySelection, setXrGeometrySelection] = useState<GraphGeometrySelection>('formula');
   const xrOriginRef = useRef<THREE.Group>(null);
   const xrDragOffsetRef = useRef(new THREE.Vector3());
@@ -2766,13 +2919,14 @@ export default function GraphView({
 
   return (
     <div className="w-full h-full bg-transparent relative">
-      <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 0, 25], fov: 50 }} gl={{ alpha: true, antialias: true, premultipliedAlpha: false }}>
+      <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 0, 25], fov: 50 }} gl={{ alpha: true, antialias: true, premultipliedAlpha: false, preserveDrawingBuffer: true }}>
         <XR store={xrStore}>
           <XRPlayerOrigin originRef={xrOriginRef} />
           <XRJoystickLocomotion originRef={xrOriginRef} />
           <XRVisualThumbstickControls setXrVisualTransform={setXrVisualTransform} />
+          <XRBeatHaptics />
           <XRAlphaController />
-          <XREnvironment preset={webgpuLightingPreset} />
+          <XREnvironment preset={webgpuLightingPreset} desktopVisible={showEnvironment && show3D} />
           <StudioEnvironment />
           <SpatialWrapper xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
             <LightingRig preset={webgpuLightingPreset} intensity={webgpuLighting} />
@@ -2802,7 +2956,7 @@ export default function GraphView({
             )}
 
             {showMirrors && <AngledMirrorSurfaces show3D={show3D} />}
-            <FormulaLine formula={formula} shader={shader} show3D={show3D} showWireframe={showWireframe} materialProfile={webgpuMaterial} geometryMode={geometryMode} />
+            <FormulaLine formula={formula} shader={shader} show3D={show3D} showWireframe={showWireframe} materialProfile={webgpuMaterial} lineWidth={lineWidth} geometryMode={geometryMode} />
           </SpatialWrapper>
 
           <ImmersiveHUD 
@@ -2860,7 +3014,7 @@ export default function GraphView({
       
       {/* 3D Indicator */}
       <div className="absolute top-4 right-4 bg-black/40 border border-white/10 backdrop-blur p-3 rounded-lg text-[9px] font-mono text-white/50 space-y-1">
-        <div className="flex justify-between gap-4"><span>RENDER_MODE:</span> <span className="text-indigo-400">{show3D ? geometryMode.toUpperCase() : 'LINEAR'}</span></div>
+        <div className="flex justify-between gap-4"><span>RENDER_MODE:</span> <span className="text-indigo-400">{show3D ? (formula.parametric ? 'SURFACE(P,Q)' : geometryMode.toUpperCase()) : 'LINEAR'}</span></div>
         <div className="flex justify-between gap-4"><span>COORDS:</span> <span className="text-indigo-400">CARTESIAN_3D</span></div>
         <div className="flex justify-between gap-4"><span>SAMPLING:</span> <span className="text-indigo-400">HIGH_RES</span></div>
       </div>
