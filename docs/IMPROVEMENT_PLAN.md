@@ -2,6 +2,12 @@
 
 _Drafted 2026-07-29. Covers: current-state analysis, 2D UX, Quest VR UX, Apple Vision Pro strategy (WebXR + native), and rendering/content quality (formulas, shaders, lighting, materials)._
 
+## Status (updated 2026-07-30)
+
+**Done:** Phase 0 (git/GitHub + Pages deploy, clock-out-of-React, throttled geometry, real telemetry, bundle split, share URLs) · Phase 1 (favorites library + thumbnails, inline mathjs/GLSL validation, shortcuts, help overlay) · Phase 2 partial (shared light rigs + 16 physical material profiles + RoomEnvironment on the WebGL path; audio-reactive lights/materials; XR/desktop cosmos environment) · Phase 3 partial (uikit spatial console, two-hand gestures from AVP field tests, beat haptics, adaptive XR detail, favorites-only auto-pilot) · Phase 4a (verified on device: session, gaze+pinch UI, drag; fixes shipped for text + gestures) · Phase 5 major (31 curves given real math, 23 true (p,q) surfaces incl. supershapes, 98 authored shaders resurrected with QA, 6 audio-reactive shaders, per-preset art direction, validate script).
+
+**Open:** Phase 2 renderer unification spike (WebGPURenderer + TSL everywhere — needs on-device validation) · Quest-specific tuning (snap turn, comfort vignette, perf pass — awaiting hardware) · Phase 4b native visionOS scaffold (optional, gated) · shader library dedup of the ~13 remaining template families · 2D axes/readout polish.
+
 ---
 
 ## 1. Current-state analysis
