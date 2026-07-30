@@ -1,0 +1,328 @@
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Search, Shuffle, Sparkles } from 'lucide-react';
+import { Formula, PRESET_FORMULAS, ShaderPreset } from '../constants';
+import { PRESET_SHADERS } from '../shaders';
+import { cn } from '../lib/utils';
+
+interface SidebarProps {
+  selectedFormula: Formula;
+  onSelect: (formula: Formula) => void;
+  selectedShader: ShaderPreset;
+  onSelectShader: (shader: ShaderPreset) => void;
+  activeTab: 'formulas' | 'shaders';
+  setActiveTab: (tab: 'formulas' | 'shaders') => void;
+}
+
+type LibraryItem = {
+  id: string;
+  name: string;
+  description: string;
+  category?: string;
+  source: string;
+  index: number;
+  kind: 'formula' | 'shader';
+};
+
+const PAGE_SIZE = 4;
+
+function categoryLabel(category?: string) {
+  if (!category) return 'Core';
+  if (category.includes('Parameter-evolving')) return 'Evolving';
+  if (category.includes('Coordinate-dependent')) return 'Coordinate';
+  if (category.includes('State-dependent')) return 'Switching';
+  if (category.includes('mutation')) return 'Mutation';
+  if (category.includes('Organic')) return 'Organic';
+  if (category.includes('R185 TSL')) return 'TSL Lab';
+  if (category.includes('WebGPU TSL')) return 'WebGPU TSL';
+  if (category.includes('Volumetric')) return 'Volume';
+  if (category.includes('HTMLTexture')) return 'HTML UI';
+  if (category.includes('WebGPU XR')) return 'XR Light';
+  return category;
+}
+
+function itemKey(item: LibraryItem) {
+  return `${item.kind}-${item.id}`;
+}
+
+export default function Sidebar({ 
+  selectedFormula, 
+  onSelect, 
+  selectedShader, 
+  onSelectShader,
+  activeTab,
+  setActiveTab
+}: SidebarProps) {
+  const [query, setQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [page, setPage] = useState(0);
+
+  const items = useMemo<LibraryItem[]>(() => {
+    if (activeTab === 'formulas') {
+      return PRESET_FORMULAS.map((formula, index) => ({
+        id: formula.id,
+        name: formula.name,
+        description: formula.description,
+        category: formula.category,
+        source: formula.category || formula.x,
+        index,
+        kind: 'formula'
+      }));
+    }
+
+    return PRESET_SHADERS.map((shader, index) => ({
+      id: shader.id,
+      name: shader.name,
+      description: shader.description,
+      category: shader.category,
+      source: shader.category || shader.description,
+      index,
+      kind: 'shader'
+    }));
+  }, [activeTab]);
+
+  const selectedItem = useMemo<LibraryItem>(() => {
+    if (activeTab === 'formulas') {
+      const index = PRESET_FORMULAS.findIndex((formula) => formula.id === selectedFormula.id);
+      return {
+        id: selectedFormula.id,
+        name: selectedFormula.name,
+        description: selectedFormula.description,
+        category: selectedFormula.category,
+        source: selectedFormula.category || selectedFormula.x,
+        index: index === -1 ? 0 : index,
+        kind: 'formula'
+      };
+    }
+
+    const index = PRESET_SHADERS.findIndex((shader) => shader.id === selectedShader.id);
+    return {
+      id: selectedShader.id,
+      name: selectedShader.name,
+      description: selectedShader.description,
+      category: selectedShader.category,
+      source: selectedShader.category || selectedShader.description,
+      index: index === -1 ? 0 : index,
+      kind: 'shader'
+    };
+  }, [activeTab, selectedFormula, selectedShader]);
+
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    items.forEach((item) => {
+      const label = categoryLabel(item.category);
+      counts.set(label, (counts.get(label) || 0) + 1);
+    });
+
+    return [
+      { label: 'All', count: items.length },
+      ...Array.from(counts, ([label, count]) => ({ label, count }))
+        .sort((a, b) => {
+          if (a.label === 'Core') return -1;
+          if (b.label === 'Core') return 1;
+          return a.label.localeCompare(b.label);
+        })
+    ];
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    const term = query.trim().toLowerCase();
+
+    return items.filter((item) => {
+      const label = categoryLabel(item.category);
+      const categoryMatches = selectedCategory === 'All' || selectedCategory === label;
+      const text = `${item.name} ${item.description} ${item.source} ${label}`.toLowerCase();
+      return categoryMatches && (!term || text.includes(term));
+    });
+  }, [items, query, selectedCategory]);
+
+  useEffect(() => {
+    setQuery('');
+    setSelectedCategory('All');
+    setPage(0);
+  }, [activeTab]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [query, selectedCategory]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visibleItems = filteredItems.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const selectedKey = itemKey(selectedItem);
+
+  const selectItem = (item: LibraryItem) => {
+    if (item.kind === 'formula') {
+      onSelect(PRESET_FORMULAS[item.index]);
+    } else {
+      onSelectShader(PRESET_SHADERS[item.index]);
+    }
+  };
+
+  const selectRandom = () => {
+    const pool = filteredItems.length > 0 ? filteredItems : items;
+    const item = pool[Math.floor(Math.random() * pool.length)];
+    if (item) selectItem(item);
+  };
+
+  return (
+    <aside className="min-h-[620px] lg:min-h-0 flex flex-col gap-4 overflow-hidden">
+      <div className="bg-white/5 border border-white/10 rounded-lg p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="flex justify-between items-center px-1">
+          <div className="flex gap-2 rounded-lg bg-black/30 border border-white/10 p-1">
+            <button 
+              onClick={() => setActiveTab('formulas')}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-[0.16em] transition-colors",
+                activeTab === 'formulas' ? "bg-indigo-500/25 text-indigo-100" : "text-white/35 hover:text-white/70"
+              )}
+            >
+              Formulas
+            </button>
+            <button 
+              onClick={() => setActiveTab('shaders')}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-[0.16em] transition-colors",
+                activeTab === 'shaders' ? "bg-indigo-500/25 text-indigo-100" : "text-white/35 hover:text-white/70"
+              )}
+            >
+              Shaders
+            </button>
+          </div>
+          <button
+            onClick={selectRandom}
+            className="h-8 w-8 rounded-md border border-white/10 bg-white/5 text-white/45 hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center"
+            title="Random preset"
+            type="button"
+          >
+            <Shuffle size={14} />
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-[0.18em] text-indigo-300">
+                <Sparkles size={12} />
+                <span>Selected</span>
+              </div>
+              <div className="mt-2 truncate text-sm font-semibold text-white/90">{selectedItem.name}</div>
+              <div className="mt-1 line-clamp-2 text-[10px] leading-4 text-white/38">{selectedItem.description}</div>
+            </div>
+            <div className="shrink-0 rounded-md bg-white/8 border border-white/10 px-2 py-1 text-[9px] font-mono uppercase text-white/45">
+              {selectedItem.kind === 'formula' ? 'F' : 'S'}-{String(selectedItem.index + 1).padStart(2, '0')}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 px-3 py-2 focus-within:border-indigo-400/50">
+          <Search size={14} className="text-white/30 shrink-0" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`Search ${activeTab}`}
+            className="min-w-0 flex-1 bg-transparent text-xs text-white/80 placeholder:text-white/25 outline-none"
+          />
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {categories.map((category) => (
+            <button
+              key={category.label}
+              onClick={() => setSelectedCategory(category.label)}
+              className={cn(
+                "rounded-md border px-2.5 py-1 text-[9px] font-mono uppercase tracking-[0.12em] transition-colors",
+                selectedCategory === category.label
+                  ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
+                  : "border-white/10 bg-white/[0.04] text-white/38 hover:text-white/70 hover:bg-white/[0.08]"
+              )}
+              type="button"
+            >
+              {category.label}
+              <span className="ml-1.5 text-white/28">{category.count}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3 text-[9px] font-mono uppercase tracking-[0.16em] text-white/35">
+          <span>{filteredItems.length} Matches</span>
+          <span>Page {currentPage + 1}/{pageCount}</span>
+        </div>
+
+        <div className="mt-3 grid min-h-[300px] lg:min-h-0 flex-1 grid-rows-4 gap-2 overflow-hidden">
+          {visibleItems.map((item) => {
+            const isSelected = itemKey(item) === selectedKey;
+            return (
+              <button
+                key={itemKey(item)}
+                onClick={() => selectItem(item)}
+                className={cn(
+                  "min-h-0 w-full text-left rounded-lg border p-3 transition-all duration-200 group overflow-hidden",
+                  isSelected 
+                    ? "bg-indigo-600/20 border-indigo-400/50" 
+                    : "bg-white/[0.045] border-white/8 hover:border-white/20 hover:bg-white/[0.08]"
+                )}
+                type="button"
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <div className={cn(
+                    "text-[9px] font-mono uppercase",
+                    isSelected ? "text-indigo-200" : "text-white/30"
+                  )}>
+                    {categoryLabel(item.category)}
+                  </div>
+                  {isSelected && (
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                  )}
+                </div>
+                <div className="truncate text-[11px] font-bold uppercase tracking-wide text-white/85">{item.name}</div>
+                <div className="mt-1 line-clamp-2 text-[10px] leading-4 text-white/38 group-hover:text-white/55">
+                  {item.description}
+                </div>
+              </button>
+            );
+          })}
+
+          {visibleItems.length === 0 && (
+            <div className="row-span-4 rounded-lg border border-white/10 bg-white/[0.03] p-4 text-xs text-white/35">
+              No matches.
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setPage((value) => Math.max(0, value - 1))}
+            disabled={currentPage === 0}
+            className="flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.04] py-2 text-[10px] font-mono uppercase text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-30 disabled:hover:bg-white/[0.04] disabled:hover:text-white/45"
+            type="button"
+          >
+            <ChevronLeft size={13} />
+            Prev
+          </button>
+          <button
+            onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
+            disabled={currentPage >= pageCount - 1}
+            className="flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.04] py-2 text-[10px] font-mono uppercase text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-30 disabled:hover:bg-white/[0.04] disabled:hover:text-white/45"
+            type="button"
+          >
+            Next
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-lg p-4 shrink-0">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[9px] text-white/30 uppercase tracking-widest font-mono mb-2">Render Stack</div>
+            <div className="text-[10px] font-mono text-emerald-400">THREE_R185_ACTIVE</div>
+          </div>
+          <div className="flex items-center gap-2 rounded-md bg-emerald-500/10 border border-emerald-400/15 px-2 py-1">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]" />
+            <span className="text-[9px] font-mono uppercase text-emerald-300">Stable</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}

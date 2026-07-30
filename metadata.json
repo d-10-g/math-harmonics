@@ -1,0 +1,6 @@
+{
+  "name": "Math Harmonics",
+  "description": "An interactive mathematical formula visualizer with 2D/3D transformations and time-based harmonics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
