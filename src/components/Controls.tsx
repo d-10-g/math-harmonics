@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { compile } from 'mathjs';
 import { cn } from '../lib/utils';
 import { useClockSnapshot } from '../lib/clock';
+import { glslFragmentError } from '../lib/glsl';
 import {
   Formula,
   ShaderPreset,
@@ -124,6 +125,36 @@ function FormulaField({
       />
       {error && (
         <div className="text-[9px] font-mono text-rose-400 leading-snug" role="alert">{error}</div>
+      )}
+    </div>
+  );
+}
+
+function ShaderField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [error, setError] = useState<string | null>(null);
+
+  // Debounced: compiling on every keystroke is cheap but not free.
+  useEffect(() => {
+    const id = window.setTimeout(() => setError(glslFragmentError(value)), 300);
+    return () => window.clearTimeout(id);
+  }, [value]);
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[9px] font-mono text-white/40 uppercase tracking-widest">GLSL Fragment Source</label>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        spellCheck={false}
+        className={cn(
+          "w-full bg-black/40 border rounded-lg p-3 font-mono text-[10px] text-[#00ffcc] outline-none transition-colors h-40 resize-none custom-scrollbar",
+          error ? "border-rose-500/60 focus:border-rose-400" : "border-white/10 focus:border-indigo-500/50"
+        )}
+      />
+      {error && (
+        <div className="max-h-16 overflow-y-auto custom-scrollbar text-[9px] font-mono text-rose-400 leading-snug whitespace-pre-wrap" role="alert">
+          {error.slice(0, 400)}
+        </div>
       )}
     </div>
   );
@@ -395,15 +426,7 @@ export default function Controls({
             </div>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            <label className="text-[9px] font-mono text-white/40 uppercase tracking-widest">GLSL Fragment Source</label>
-            <textarea 
-              value={selectedShader.fragmentShader}
-              onChange={(e) => onUpdateShader(e.target.value)}
-              spellCheck={false}
-              className="w-full bg-black/40 border border-white/10 rounded-lg p-3 font-mono text-[10px] text-[#00ffcc] outline-none focus:border-indigo-500/50 transition-colors h-40 resize-none custom-scrollbar"
-            />
-          </div>
+          <ShaderField value={selectedShader.fragmentShader} onChange={onUpdateShader} />
         )}
         
         <div className="mt-4 pt-4 border-t border-white/5 flex gap-2 overflow-hidden">
@@ -460,13 +483,12 @@ export default function Controls({
             </div>
           </div>
 
-          {rendererMode === 'webgpu' && (
-            <div className="space-y-4 rounded-lg border border-cyan-400/15 bg-cyan-400/[0.04] p-3">
+          <div className="space-y-4 rounded-lg border border-cyan-400/15 bg-cyan-400/[0.04] p-3">
               <div className="space-y-3 group">
                 <div className="flex justify-between items-center">
                   <div>
-                    <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">WebGPU Lighting</div>
-                    <div className="text-[9px] text-white/30 font-mono">Tone Map / Scene Light</div>
+                    <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Scene Lighting</div>
+                    <div className="text-[9px] text-white/30 font-mono">Exposure / Light Energy (both renderers)</div>
                   </div>
                   <div className="text-[10px] font-mono text-cyan-300">{webgpuLighting.toFixed(2)}x</div>
                 </div>
@@ -501,8 +523,8 @@ export default function Controls({
 
               <div className="space-y-2">
                 <div>
-                  <div className="text-xs font-semibold text-white/80">WebGPU Light Rig</div>
-                  <div className="text-[9px] text-white/30 font-mono">Preset Light Direction</div>
+                  <div className="text-xs font-semibold text-white/80">Light Rig</div>
+                  <div className="text-[9px] text-white/30 font-mono">Preset Light Direction &amp; Color</div>
                 </div>
                 <select
                   value={webgpuLightingPreset}
@@ -555,8 +577,8 @@ export default function Controls({
 
               <div className="space-y-2">
                 <div>
-                  <div className="text-xs font-semibold text-white/80">WebGPU Geometry</div>
-                  <div className="text-[9px] text-white/30 font-mono">Formula Shape Mode</div>
+                  <div className="text-xs font-semibold text-white/80">Geometry Override</div>
+                  <div className="text-[9px] text-white/30 font-mono">Auto = Formula's Own Shape</div>
                 </div>
                 <select
                   value={webgpuGeometry}
@@ -610,8 +632,8 @@ export default function Controls({
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <div>
-                    <div className="text-xs font-semibold text-white/80">WebGPU Material</div>
-                    <div className="text-[9px] text-white/30 font-mono">Node Surface Profile</div>
+                    <div className="text-xs font-semibold text-white/80">Material Profile</div>
+                    <div className="text-[9px] text-white/30 font-mono">PBR Surface — Auto = Shader Look</div>
                   </div>
                 </div>
                 <select
@@ -663,7 +685,6 @@ export default function Controls({
                 </div>
               </div>
             </div>
-          )}
 
           <div className="h-[1px] bg-white/5" />
 

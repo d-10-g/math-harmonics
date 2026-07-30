@@ -3,11 +3,22 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { MeshReflectorMaterial, OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { compile } from 'mathjs';
-import { Formula, FormulaGeometryMode, ShaderPreset, PRESET_FORMULAS } from '../constants';
+import {
+  Formula,
+  FormulaGeometryMode,
+  ShaderPreset,
+  PRESET_FORMULAS,
+  WebGPUGeometryProfile,
+  WebGPULightingPreset,
+  WebGPUMaterialProfile
+} from '../constants';
 import { DEFAULT_VERTEX_SHADER, PRESET_SHADERS } from '../shaders';
 import { XR, XROrigin, useXR, useXRInputSourceState } from '@react-three/xr';
 import { getClockTime, reportVerts } from '../lib/clock';
+import { lightingRigSettings } from '../lib/lighting';
+import { createPhysicalMaterial } from '../lib/materials';
 
 // 3D geometry is rebuilt on this cadence instead of every frame; the material
 // time uniform and group motion still animate at full framerate in between.
@@ -928,6 +939,10 @@ function buildFormulaGeometry(points: THREE.Vector3[], mode: FormulaGeometryMode
 interface GraphViewProps {
   formula: Formula;
   shader: ShaderPreset;
+  webgpuLighting: number;
+  webgpuLightingPreset: WebGPULightingPreset;
+  webgpuMaterial: WebGPUMaterialProfile;
+  webgpuGeometry: WebGPUGeometryProfile;
   show3D: boolean;
   setShow3D?: (show: boolean) => void;
   showWireframe: boolean;
@@ -967,12 +982,14 @@ function FormulaLine({
   shader,
   show3D,
   showWireframe,
+  materialProfile = 'auto',
   geometryMode: geometryModeOverride
 }: {
   formula: Formula;
   shader: ShaderPreset;
   show3D: boolean;
   showWireframe: boolean;
+  materialProfile?: WebGPUMaterialProfile;
   geometryMode?: FormulaGeometryMode;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -1052,6 +1069,20 @@ function FormulaLine({
   useEffect(() => {
     return () => shaderMaterial.dispose();
   }, [shaderMaterial]);
+
+  // 'auto' keeps the GLSL preset shader; a concrete profile switches the 3D
+  // mesh to a lit MeshPhysicalMaterial (transmission/iridescence/sheen/...),
+  // matching the WebGPU path's material picker. 2D lines always use GLSL.
+  const physicalMaterial = useMemo(
+    () => (materialProfile !== 'auto' ? createPhysicalMaterial(materialProfile, showWireframe) : null),
+    [materialProfile, showWireframe]
+  );
+
+  useEffect(() => {
+    return () => physicalMaterial?.dispose();
+  }, [physicalMaterial]);
+
+  const meshMaterial = physicalMaterial ?? shaderMaterial;
 
   const groupRef = useRef<THREE.Group>(null);
 
@@ -1136,10 +1167,54 @@ function FormulaLine({
       {show3D && geometry3D && (
         <mesh ref={meshRef} frustumCulled={false}>
           <primitive object={geometry3D} attach="geometry" />
-          <primitive object={shaderMaterial} attach="material" />
+          <primitive object={meshMaterial} attach="material" />
         </mesh>
       )}
     </group>
+  );
+}
+
+// Procedural PMREM environment (no network fetch) so metals, glass and
+// clearcoat profiles have something to reflect on the WebGL path.
+function StudioEnvironment() {
+  const { gl, scene } = useThree();
+
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTexture;
+    return () => {
+      if (scene.environment === envTexture) scene.environment = null;
+      envTexture.dispose();
+      pmrem.dispose();
+    };
+  }, [gl, scene]);
+
+  return null;
+}
+
+// Declarative version of the WebGPU path's light rigs (shared data table).
+function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; intensity: number }) {
+  const { gl } = useThree();
+  const rig = lightingRigSettings(preset);
+  const light = THREE.MathUtils.clamp(intensity, 0.45, 3.5);
+
+  useEffect(() => {
+    const previousExposure = gl.toneMappingExposure;
+    gl.toneMappingExposure = light;
+    return () => {
+      gl.toneMappingExposure = previousExposure;
+    };
+  }, [gl, light]);
+
+  return (
+    <>
+      <ambientLight color={rig.ambient} intensity={0.42 + light * rig.ambientScale} />
+      <hemisphereLight color={rig.ambient} groundColor={rig.ground} intensity={0.62 + light * rig.hemiScale} />
+      <directionalLight color={rig.key} position={rig.keyPosition} intensity={rig.keyScale * light} />
+      <pointLight color={rig.rim} position={rig.rimPosition} intensity={rig.rimScale * light} distance={36} />
+      <pointLight color={rig.fill} position={rig.fillPosition} intensity={rig.fillScale * light} distance={32} />
+    </>
   );
 }
 
@@ -2456,6 +2531,10 @@ function XRVisualThumbstickControls({ setXrVisualTransform }: { setXrVisualTrans
 export default function GraphView({
   formula,
   shader,
+  webgpuLighting,
+  webgpuLightingPreset,
+  webgpuMaterial,
+  webgpuGeometry,
   show3D,
   setShow3D,
   showWireframe,
@@ -2494,7 +2573,9 @@ export default function GraphView({
   const [xrGeometrySelection, setXrGeometrySelection] = useState<GraphGeometrySelection>('formula');
   const xrOriginRef = useRef<THREE.Group>(null);
   const xrDragOffsetRef = useRef(new THREE.Vector3());
-  const geometryMode = xrGeometrySelection === 'formula' ? formulaGeometryMode : xrGeometrySelection;
+  // Priority: in-XR HUD selection > desktop geometry override > formula default
+  const baseGeometryMode = webgpuGeometry !== 'auto' ? webgpuGeometry : formulaGeometryMode;
+  const geometryMode = xrGeometrySelection === 'formula' ? baseGeometryMode : xrGeometrySelection;
   const resetXRViewer = () => {
     xrDragOffsetRef.current.set(0, 0, 0);
     if (!xrOriginRef.current) return;
@@ -2510,10 +2591,9 @@ export default function GraphView({
           <XRJoystickLocomotion originRef={xrOriginRef} />
           <XRVisualThumbstickControls setXrVisualTransform={setXrVisualTransform} />
           <XRAlphaController />
+          <StudioEnvironment />
           <SpatialWrapper xrVisualTransform={xrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
-            <ambientLight intensity={0.5} />
-            <pointLight position={[10, 10, 10]} intensity={1} />
-            <pointLight position={[-10, 4, -6]} intensity={0.65} color="#67e8f9" />
+            <LightingRig preset={webgpuLightingPreset} intensity={webgpuLighting} />
             
             {showArtifacts && (
               <group>
@@ -2540,7 +2620,7 @@ export default function GraphView({
             )}
 
             {showMirrors && <AngledMirrorSurfaces show3D={show3D} />}
-            <FormulaLine formula={formula} shader={shader} show3D={show3D} showWireframe={showWireframe} geometryMode={geometryMode} />
+            <FormulaLine formula={formula} shader={shader} show3D={show3D} showWireframe={showWireframe} materialProfile={webgpuMaterial} geometryMode={geometryMode} />
           </SpatialWrapper>
 
           <ImmersiveHUD 

@@ -309,8 +309,10 @@ export default function App() {
     return () => clearInterval(interval);
   }, [autoCycleShader, shaderCycleSpeed, audioSync]);
 
+  // Lighting/geometry/material cycling applies to both renderer paths now
+  // that the WebGL view consumes the same rigs and material profiles.
   useEffect(() => {
-    if (!autoCycleWebgpuLighting || rendererMode !== 'webgpu') return;
+    if (!autoCycleWebgpuLighting) return;
     const interval = setInterval(() => {
       setWebgpuLightingPreset((prev) => {
         const currentIndex = WEBGPU_LIGHTING_PRESETS.indexOf(prev);
@@ -318,10 +320,10 @@ export default function App() {
       });
     }, webgpuLightingCycleSpeed * 1000);
     return () => clearInterval(interval);
-  }, [autoCycleWebgpuLighting, webgpuLightingCycleSpeed, rendererMode]);
+  }, [autoCycleWebgpuLighting, webgpuLightingCycleSpeed]);
 
   useEffect(() => {
-    if (!autoCycleWebgpuGeometry || rendererMode !== 'webgpu') return;
+    if (!autoCycleWebgpuGeometry) return;
     const interval = setInterval(() => {
       setWebgpuGeometry((prev) => {
         const currentIndex = WEBGPU_GEOMETRY_PRESETS.indexOf(prev as Exclude<WebGPUGeometryProfile, 'auto'>);
@@ -329,10 +331,10 @@ export default function App() {
       });
     }, webgpuGeometryCycleSpeed * 1000);
     return () => clearInterval(interval);
-  }, [autoCycleWebgpuGeometry, webgpuGeometryCycleSpeed, rendererMode]);
+  }, [autoCycleWebgpuGeometry, webgpuGeometryCycleSpeed]);
 
   useEffect(() => {
-    if (!autoCycleWebgpuMaterial || rendererMode !== 'webgpu') return;
+    if (!autoCycleWebgpuMaterial) return;
     const interval = setInterval(() => {
       setWebgpuMaterial((prev) => {
         const currentIndex = WEBGPU_MATERIAL_PRESETS.indexOf(prev as Exclude<WebGPUMaterialProfile, 'auto'>);
@@ -340,7 +342,7 @@ export default function App() {
       });
     }, webgpuMaterialCycleSpeed * 1000);
     return () => clearInterval(interval);
-  }, [autoCycleWebgpuMaterial, webgpuMaterialCycleSpeed, rendererMode]);
+  }, [autoCycleWebgpuMaterial, webgpuMaterialCycleSpeed]);
 
   // The animation clock runs outside React (src/lib/clock.ts); playback
   // parameters are mirrored into it so the tick loop never re-renders the tree.
@@ -557,6 +559,10 @@ export default function App() {
               <GraphView
                 formula={selectedFormula}
                 shader={selectedShader}
+                webgpuLighting={webgpuLighting}
+                webgpuLightingPreset={webgpuLightingPreset}
+                webgpuMaterial={webgpuMaterial}
+                webgpuGeometry={webgpuGeometry}
                 show3D={show3D}
                 setShow3D={setShow3D}
                 showWireframe={showWireframe}
@@ -676,7 +682,7 @@ export default function App() {
         <div className="flex gap-8">
           <span>Phase t: [0, 4π]</span>
           <FooterVerts />
-          <span>Mode: {show3D ? (selectedFormula.geometryMode?.toUpperCase() || 'VARIED_3D') : 'ORTHO_2D'}</span>
+          <span>Mode: {show3D ? ((webgpuGeometry !== 'auto' ? webgpuGeometry : selectedFormula.geometryMode)?.toUpperCase() || 'VARIED_3D') : 'ORTHO_2D'}</span>
         </div>
         <FooterStats />
       </footer>
