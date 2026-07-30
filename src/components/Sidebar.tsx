@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Shuffle, Sparkles, Star } from 'lucide-react';
 import { Formula, PRESET_FORMULAS, ShaderPreset } from '../constants';
 import { PRESET_SHADERS } from '../shaders';
 import { cn } from '../lib/utils';
+import { formulaThumbnail, shaderThumbnail } from '../lib/thumbnails';
 
 interface SidebarProps {
   selectedFormula: Formula;
@@ -61,6 +62,54 @@ function categoryLabel(category?: string) {
 
 function itemKey(item: LibraryItem) {
   return `${item.kind}-${item.id}`;
+}
+
+// Generates its thumbnail lazily: only once scrolled near the viewport, and
+// during idle time so fast scrolling stays smooth. Cached per id in
+// lib/thumbnails, so revisits are instant.
+function PresetThumb({ item }: { item: LibraryItem }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const holderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSrc(null);
+    const holder = holderRef.current;
+    if (!holder) return;
+
+    let cancelled = false;
+    const generate = () => {
+      if (cancelled) return;
+      const url = item.kind === 'formula'
+        ? formulaThumbnail(PRESET_FORMULAS[item.index])
+        : shaderThumbnail(PRESET_SHADERS[item.index]);
+      if (!cancelled) setSrc(url || null);
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        observer.disconnect();
+        const idle = (window as any).requestIdleCallback as ((cb: () => void) => number) | undefined;
+        if (idle) idle(generate);
+        else window.setTimeout(generate, 30);
+      }
+    }, { rootMargin: '160px' });
+
+    observer.observe(holder);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [item.kind, item.id, item.index]);
+
+  return (
+    <div
+      ref={holderRef}
+      className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40"
+      aria-hidden="true"
+    >
+      {src && <img src={src} alt="" className="h-full w-full object-cover" draggable={false} />}
+    </div>
+  );
 }
 
 export default function Sidebar({
@@ -297,23 +346,26 @@ export default function Sidebar({
               >
                 <button
                   onClick={() => selectItem(item)}
-                  className="flex-1 min-w-0 text-left p-3"
+                  className="flex-1 min-w-0 text-left p-2.5 flex items-center gap-3"
                   type="button"
                 >
-                  <div className="flex justify-between items-start mb-1">
-                    <div className={cn(
-                      "text-[9px] font-mono uppercase",
-                      isSelected ? "text-indigo-200" : "text-white/30"
-                    )}>
-                      {categoryLabel(item.category)}
+                  <PresetThumb item={item} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex justify-between items-start mb-0.5">
+                      <div className={cn(
+                        "text-[9px] font-mono uppercase",
+                        isSelected ? "text-indigo-200" : "text-white/30"
+                      )}>
+                        {categoryLabel(item.category)}
+                      </div>
+                      {isSelected && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                      )}
                     </div>
-                    {isSelected && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-                    )}
-                  </div>
-                  <div className="truncate text-[11px] font-bold uppercase tracking-wide text-white/85">{item.name}</div>
-                  <div className="mt-1 line-clamp-2 text-[10px] leading-4 text-white/38 group-hover:text-white/55">
-                    {item.description}
+                    <div className="truncate text-[11px] font-bold uppercase tracking-wide text-white/85">{item.name}</div>
+                    <div className="line-clamp-1 text-[10px] leading-4 text-white/38 group-hover:text-white/55">
+                      {item.description}
+                    </div>
                   </div>
                 </button>
                 <button

@@ -10,6 +10,17 @@ export default defineConfig(({mode}) => {
   return {
     base: './',
     plugins: [react(), tailwindcss()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (id.includes('node_modules/three')) return 'three';
+            if (id.includes('node_modules/mathjs')) return 'mathjs';
+            if (id.includes('node_modules/react')) return 'react';
+          },
+        },
+      },
+    },
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },

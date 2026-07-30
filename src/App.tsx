@@ -3,11 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import Sidebar from './components/Sidebar';
 import GraphView from './components/GraphView';
-import WebGPUView from './components/WebGPUView';
 import Controls from './components/Controls';
+
+// The WebGPU path (three/webgpu + TSL) is a large chunk; load it only when
+// the WebGPU renderer is actually selected. Headsets default to WebGL.
+const WebGPUView = lazy(() => import('./components/WebGPUView'));
 import {
   PRESET_FORMULAS,
   Formula,
@@ -541,6 +544,13 @@ export default function App() {
         <section className="min-h-[520px] xl:min-h-0 bg-white/5 border border-white/10 rounded-lg relative overflow-hidden flex flex-col group">
           <div className="flex-1 relative">
             {rendererMode === 'webgpu' ? (
+              <Suspense
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
+                    Loading WebGPU engine…
+                  </div>
+                }
+              >
               <WebGPUView
                 formula={selectedFormula}
                 shader={selectedShader}
@@ -555,6 +565,7 @@ export default function App() {
                 speed={speed}
                 isPlaying={isPlaying}
               />
+              </Suspense>
             ) : (
               <GraphView
                 formula={selectedFormula}
