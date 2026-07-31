@@ -26,6 +26,7 @@ import { createXRStore } from '@react-three/xr';
 import { clearAudioBands, clearLoop, markBeat, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, startClock, useClockSnapshot } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
+import { COMBOS, Combo } from './lib/combos';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 
@@ -174,6 +175,22 @@ const initialShared = loadSharedState();
 // mid-session take effect immediately.
 const FAVORITES_KEY = 'harmonics.favorites.v1';
 
+// First run only (no favorites saved yet): seed the stars with the curated
+// combo ingredients so the best of the library is one filter away. Runs at
+// module load so the Sidebar's initial read already sees it.
+try {
+  if (!localStorage.getItem(FAVORITES_KEY)) {
+    const seeds = new Set<string>();
+    COMBOS.forEach((combo) => {
+      seeds.add(`formula-${combo.formulaId}`);
+      if (combo.shaderId) seeds.add(`shader-${combo.shaderId}`);
+    });
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...seeds]));
+  }
+} catch {
+  // Storage unavailable; favorites just start empty.
+}
+
 function favoriteIdSet(kind: 'formula' | 'shader'): Set<string> {
   try {
     const raw = localStorage.getItem(FAVORITES_KEY);
@@ -300,7 +317,7 @@ export default function App() {
     let source: MediaStreamAudioSourceNode;
     let animationId: number;
     let lastBeatTime = 0;
-    let lastAverage = 0;
+    let energyFloor = 0;
     
     // Beat counters for skipping beats (positive quantization)
     let fBeatCount = 0;
@@ -341,14 +358,25 @@ export default function App() {
           const average = sum / 8;
 
           // Smoothed band energies for audio-reactive materials and lights.
+          // Gain-boosted: laptop-mic music typically peaks bands around
+          // 0.15-0.35 raw, which read as invisible; soft-clamped 2.2-2.6x
+          // brings reactions into the visible range.
           bassEma = bassEma * 0.72 + bandAverage(0, 8) * 0.28;
           midEma = midEma * 0.72 + bandAverage(8, 40) * 0.28;
           trebleEma = trebleEma * 0.72 + bandAverage(40, 116) * 0.28;
-          setAudioBands(bassEma, midEma, trebleEma);
+          setAudioBands(
+            Math.min(1, bassEma * 2.2),
+            Math.min(1, midEma * 2.4),
+            Math.min(1, trebleEma * 2.6)
+          );
 
           const now = performance.now();
-          // Dynamic peak detection: must be loud enough (80) and 15% louder than recent floating average
-          if (average > 80 && average > lastAverage * 1.15 && now - lastBeatTime > 300) {
+          // Adaptive beat detection: compare against a rolling energy floor
+          // instead of a fixed absolute level, so quiet playback (laptop mic
+          // across the room) still produces beats.
+          energyFloor = energyFloor * 0.94 + average * 0.06;
+          const beatThreshold = Math.max(26, energyFloor * 1.32);
+          if (average > beatThreshold && now - lastBeatTime > 280) {
              const interval = lastBeatTime > 0 ? now - lastBeatTime : 500;
              lastBeatTime = now;
              setBpmInterval(interval);
@@ -392,9 +420,6 @@ export default function App() {
                }
              }
           }
-          
-          // Slowly track the floating baseline average
-          lastAverage = lastAverage * 0.9 + average * 0.1;
           
           animationId = requestAnimationFrame(detectBeat);
         };
@@ -527,10 +552,38 @@ export default function App() {
     });
   };
 
+  // Combos apply an exact designed scene; the skip ref stops the Auto-Style
+  // effect from immediately overriding the combo's material/rig choice.
+  const skipAutoStyleRef = useRef(false);
+  const applyCombo = (combo: Combo) => {
+    const formula = PRESET_FORMULAS.find((f) => f.id === combo.formulaId);
+    if (!formula) return;
+    // Only skip the auto-style pass if the formula change will re-trigger it.
+    if (formula.id !== selectedFormula.id) skipAutoStyleRef.current = true;
+    setSelectedFormula(formula);
+    if (combo.shaderId) {
+      const shader = PRESET_SHADERS.find((s) => s.id === combo.shaderId);
+      if (shader) setSelectedShader(shader);
+    }
+    setWebgpuMaterial(combo.material);
+    setWebgpuLightingPreset(combo.lighting);
+    if (combo.bloom !== undefined) {
+      setBloomIntensity(combo.bloom);
+      setPostFX(true);
+    }
+    if (combo.speed !== undefined) setSpeed(combo.speed);
+    setShow3D(combo.show3D ?? true);
+    if (combo.lineWidth !== undefined) setLineWidth(combo.lineWidth);
+  };
+
   // Art direction: presets that declare a preferred material + light rig
   // (and optionally a speed) apply them on selection while Auto-Style is on,
   // so cycling the library lands on designed combinations instead of leftovers.
   useEffect(() => {
+    if (skipAutoStyleRef.current) {
+      skipAutoStyleRef.current = false;
+      return;
+    }
     if (!autoStyle) return;
     const style = selectedFormula.style;
     if (style) {
@@ -755,8 +808,9 @@ export default function App() {
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px] gap-5 overflow-y-auto xl:overflow-hidden custom-scrollbar">
         
         {/* Left: Formula Library */}
-        <Sidebar 
-          selectedFormula={selectedFormula} 
+        <Sidebar
+          selectedFormula={selectedFormula}
+          onApplyCombo={applyCombo}
           onSelect={handleSelectPreset}
           selectedShader={selectedShader}
           onSelectShader={handleSelectShader}

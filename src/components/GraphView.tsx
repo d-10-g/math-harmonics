@@ -1180,6 +1180,9 @@ function FormulaLine({
 
     // Custom float effect for 3D mode (replaces Drei's Float component to avoid THREE.Clock warnings)
     if (groupRef.current) {
+      // Universal audio pulse: scales the whole visual with the bass so even
+      // unlit GLSL looks visibly react to music.
+      groupRef.current.scale.setScalar(clock.audioSync ? 1 + clock.bass * 0.055 : 1);
       if (show3D) {
         groupRef.current.position.y = Math.sin(time * 2) * 0.5;
         groupRef.current.rotation.x = Math.sin(time * 0.5) * 0.1;
@@ -1323,9 +1326,31 @@ function GroundShadows({ show3D }: { show3D: boolean }) {
 // composer entirely (EffectComposer and WebXR layers don't mix).
 function PostEffects({ enabled, bloom }: { enabled: boolean; bloom: number }) {
   const session = useXR((state) => state.session);
+  // NOTE: do not pass a ref to <Bloom> — @react-three/postprocessing
+  // JSON.stringifies effect props to memoize them, and once the ref holds
+  // the live effect (which references the scene graph) that stringify hits
+  // a circular structure and crashes the canvas on the next re-render.
+  // The composer ref is safe; we duck-type the bloom effect out of its
+  // passes to drive the bass pulse.
+  const composerRef = useRef<any>(null);
+
+  useFrame(() => {
+    const composer = composerRef.current;
+    if (!composer) return;
+    const state = clockStore.getState();
+    const target = bloom * (state.audioSync ? 1 + state.bass * 1.5 : 1);
+    for (const pass of composer.passes ?? []) {
+      for (const effect of (pass as any).effects ?? []) {
+        if ('intensity' in effect && (effect as any).luminanceMaterial) {
+          (effect as any).intensity = target;
+        }
+      }
+    }
+  });
+
   if (!enabled || session) return null;
   return (
-    <EffectComposer multisampling={4}>
+    <EffectComposer ref={composerRef} multisampling={4}>
       <Bloom intensity={bloom} luminanceThreshold={0.7} luminanceSmoothing={0.2} mipmapBlur radius={0.75} />
       <Vignette eskil={false} offset={0.18} darkness={0.6} />
     </EffectComposer>
@@ -1839,6 +1864,15 @@ function PhotoMode({
         renderer.setSize(width, height, false);
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.6;
+        // A fresh WebGL canvas is backed by recycled GPU memory and can show
+        // garbage (often stale screen contents) until first cleared — which
+        // looked like a frozen "bad PNG" when scene build stalled. Clear now,
+        // and paint the status line before the synchronous BVH build blocks.
+        renderer.setClearColor(0x05060a, 1);
+        renderer.clear();
+        setStatus('Building path-traced scene…');
+        await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+        if (disposed) return;
 
         const rig = lightingRigSettings(lightingPreset);
         scene = new THREE.Scene();
@@ -1866,8 +1900,11 @@ function PhotoMode({
         const mesh = new THREE.Mesh(geometry, createPhysicalMaterial(profile, false));
         scene.add(mesh);
 
+        geometry.computeBoundingSphere();
+        const radius = Math.max(4, geometry.boundingSphere?.radius ?? 12);
+
         const floor = new THREE.Mesh(
-          new THREE.PlaneGeometry(160, 160),
+          new THREE.PlaneGeometry(radius * 14, radius * 14),
           new THREE.MeshStandardMaterial({
             color: new THREE.Color(rig.ground).multiplyScalar(1.15),
             roughness: 0.9,
@@ -1875,7 +1912,7 @@ function PhotoMode({
           })
         );
         floor.rotation.x = -Math.PI / 2;
-        floor.position.y = -16;
+        floor.position.y = -radius * 1.18 - 1;
         scene.add(floor);
 
         const key = new THREE.RectAreaLight(rig.key, 30, 22, 16);
@@ -1895,9 +1932,11 @@ function PhotoMode({
         dome.lookAt(0, 0, 0);
         scene.add(dome);
 
-        const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 400);
-        camera.position.set(17, 10, 21);
-        camera.lookAt(0, -1.5, 0);
+        // Auto-frame from the actual bounds so every formula fills the shot.
+        const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, radius * 40);
+        const distance = radius * 2.35;
+        camera.position.set(distance * 0.74, distance * 0.46, distance * 0.9);
+        camera.lookAt(0, -radius * 0.1, 0);
 
         pathTracer = new WebGLPathTracer(renderer);
         pathTracer.bounces = 6;
@@ -1909,8 +1948,14 @@ function PhotoMode({
 
         const loop = () => {
           if (disposed || !pathTracer) return;
-          pathTracer.renderSample();
-          setSamples(Math.floor(pathTracer.samples));
+          try {
+            pathTracer.renderSample();
+            setSamples(Math.floor(pathTracer.samples));
+          } catch (error: any) {
+            console.warn('Path tracer render error:', error);
+            setStatus(`Path tracer error: ${error?.message ?? error}`);
+            return;
+          }
           raf = requestAnimationFrame(loop);
         };
         loop();

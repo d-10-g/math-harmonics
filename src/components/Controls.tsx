@@ -239,6 +239,35 @@ function DataPorting() {
   );
 }
 
+// Live bass/mid/treble meter + beat flash: instant feedback that the mic is
+// heard and the thresholds are firing.
+function BandMeter() {
+  const clock = useClockSnapshot(15);
+  const beatFresh = clock.lastBeatAt > 0 && performance.now() - clock.lastBeatAt < 200;
+  const bands: Array<[string, number, string]> = [
+    ['BASS', clock.bass, 'bg-rose-400'],
+    ['MID', clock.mid, 'bg-emerald-400'],
+    ['TREB', clock.treble, 'bg-sky-400']
+  ];
+
+  return (
+    <div className="flex items-end gap-2 rounded-md border border-indigo-400/15 bg-black/40 px-2.5 py-2">
+      {bands.map(([label, value, color]) => (
+        <div key={label} className="flex flex-col items-center gap-1">
+          <div className="flex h-10 w-3 items-end overflow-hidden rounded-sm bg-white/5">
+            <div className={cn('w-full transition-all duration-75', color)} style={{ height: `${Math.round(Math.min(1, value) * 100)}%` }} />
+          </div>
+          <div className="text-[7px] font-mono text-white/35">{label}</div>
+        </div>
+      ))}
+      <div className="ml-1 flex flex-col items-center gap-1">
+        <div className={cn('h-3 w-3 rounded-full transition-all duration-75', beatFresh ? 'bg-amber-300 shadow-[0_0_10px_rgba(252,211,77,0.9)]' : 'bg-white/10')} />
+        <div className="text-[7px] font-mono text-white/35">BEAT</div>
+      </div>
+    </div>
+  );
+}
+
 function LiveStats() {
   const clock = useClockSnapshot(2);
   const verts = clock.verts >= 1000 ? `${(clock.verts / 1000).toFixed(1)}K` : `${clock.verts}`;
@@ -1023,7 +1052,7 @@ export default function Controls({
                 <div className="text-xs font-semibold text-indigo-300 group-hover:text-indigo-200 transition-colors">Audio Beat Sync</div>
                 <div className="text-[9px] text-indigo-400/50 font-mono">Microphone Analysis</div>
               </div>
-              <button 
+              <button
                 onClick={() => setAudioSync(!audioSync)}
                 className={cn(
                   "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center px-1",
@@ -1036,6 +1065,8 @@ export default function Controls({
                 )} />
               </button>
             </div>
+
+            {audioSync && <BandMeter />}
 
             {/* Shuffle order */}
             <div className="flex items-center justify-between group">

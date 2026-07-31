@@ -4,10 +4,12 @@ import { Formula, PRESET_FORMULAS, ShaderPreset } from '../constants';
 import { PRESET_SHADERS } from '../shaders';
 import { cn } from '../lib/utils';
 import { formulaThumbnail, shaderThumbnail } from '../lib/thumbnails';
+import { COMBOS, Combo } from '../lib/combos';
 
 interface SidebarProps {
   selectedFormula: Formula;
   onSelect: (formula: Formula) => void;
+  onApplyCombo: (combo: Combo) => void;
   selectedShader: ShaderPreset;
   onSelectShader: (shader: ShaderPreset) => void;
   activeTab: 'formulas' | 'shaders';
@@ -117,6 +119,7 @@ function PresetThumb({ item }: { item: LibraryItem }) {
 export default function Sidebar({
   selectedFormula,
   onSelect,
+  onApplyCombo,
   selectedShader,
   onSelectShader,
   activeTab,
@@ -304,7 +307,27 @@ export default function Sidebar({
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 px-3 py-2 focus-within:border-indigo-400/50">
+        <div className="mt-4">
+          <div className="mb-1.5 flex items-center gap-2 text-[9px] font-mono uppercase tracking-[0.18em] text-fuchsia-300">
+            <Sparkles size={11} />
+            <span>Combos — one-tap scenes</span>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto custom-scrollbar pb-1.5">
+            {COMBOS.map((combo) => (
+              <button
+                key={combo.id}
+                onClick={() => onApplyCombo(combo)}
+                className="shrink-0 rounded-md border border-fuchsia-400/25 bg-fuchsia-500/10 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-[0.08em] text-fuchsia-200/90 transition-colors hover:bg-fuchsia-500/25 hover:text-fuchsia-100"
+                title={`${combo.name}: applies formula + material + light rig + tempo`}
+                type="button"
+              >
+                {combo.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 px-3 py-2 focus-within:border-indigo-400/50">
           <Search size={14} className="text-white/30 shrink-0" />
           <input
             value={query}
