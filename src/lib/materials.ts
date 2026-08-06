@@ -31,7 +31,7 @@ type PhysicalProfile = {
 
 const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, PhysicalProfile> = {
   plasma: {
-    color: 0x8b5cf6, emissive: 0x22d3ee, emissiveIntensity: 0.85,
+    color: 0x8b5cf6, emissive: 0x22d3ee, emissiveIntensity: 0.55,
     metalness: 0.1, roughness: 0.22, opacity: 1, transparent: false, envMapIntensity: 1.1
   },
   'liquid-metal': {
@@ -61,8 +61,8 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
     clearcoat: 1.0, clearcoatRoughness: 0.14, envMapIntensity: 1.0
   },
   hologram: {
-    color: 0x22d3ee, emissive: 0xf472b6, emissiveIntensity: 1.2,
-    metalness: 0.0, roughness: 0.1, opacity: 0.55, transparent: true, additive: true,
+    color: 0x155e75, emissive: 0xf472b6, emissiveIntensity: 0.65,
+    metalness: 0.0, roughness: 0.12, opacity: 0.72, transparent: true,
     iridescence: 0.8, iridescenceIOR: 1.6, envMapIntensity: 0.8
   },
   obsidian: {
@@ -80,9 +80,9 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
     transmission: 0.55, thickness: 1.5, ior: 1.6, envMapIntensity: 0.9
   },
   xray: {
-    color: 0x60a5fa, emissive: 0x93c5fd, emissiveIntensity: 1.0,
-    metalness: 0.0, roughness: 0.2, opacity: 0.35, transparent: true, additive: true,
-    envMapIntensity: 0.4
+    color: 0x1d4ed8, emissive: 0x93c5fd, emissiveIntensity: 0.55,
+    metalness: 0.0, roughness: 0.2, opacity: 0.5, transparent: true,
+    envMapIntensity: 0.45
   },
   carbon: {
     color: 0x1f2937, emissive: 0xf97316, emissiveIntensity: 0.18,
@@ -104,9 +104,9 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
     transmission: 0.95, thickness: 1.0, ior: 1.31, envMapIntensity: 1.2
   },
   neon: {
-    color: 0x22d3ee, emissive: 0xf0abfc, emissiveIntensity: 1.6,
-    metalness: 0.0, roughness: 0.15, opacity: 0.75, transparent: true, additive: true,
-    envMapIntensity: 0.6
+    color: 0x0e7490, emissive: 0xf0abfc, emissiveIntensity: 0.7,
+    metalness: 0.0, roughness: 0.18, opacity: 0.92, transparent: true,
+    envMapIntensity: 0.7
   }
 };
 

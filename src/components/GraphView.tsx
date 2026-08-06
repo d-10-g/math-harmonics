@@ -1364,33 +1364,40 @@ function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; inte
   const { gl } = useThree();
   const rig = lightingRigSettings(preset);
   const light = THREE.MathUtils.clamp(intensity, 0.45, 3.5);
+  // The WebGL path stacks rig lights + PMREM environment + bloom, so both
+  // exposure and the rig's point-light scales run tamer than the raw table
+  // (which was tuned for the WebGPU path without an environment).
+  const exposure = 0.55 + light * 0.4;
+  const keyTame = 0.8;
+  const rimTame = 0.55;
+  const fillTame = 0.6;
   const keyRef = useRef<THREE.DirectionalLight>(null);
   const rimRef = useRef<THREE.PointLight>(null);
   const fillRef = useRef<THREE.PointLight>(null);
 
   useEffect(() => {
     const previousExposure = gl.toneMappingExposure;
-    gl.toneMappingExposure = light;
+    gl.toneMappingExposure = exposure;
     return () => {
       gl.toneMappingExposure = previousExposure;
     };
-  }, [gl, light]);
+  }, [gl, exposure]);
 
   useFrame(() => {
     const state = clockStore.getState();
     const active = state.audioSync;
-    if (keyRef.current) keyRef.current.intensity = rig.keyScale * light * (active ? 1 + state.bass * 1.1 : 1);
-    if (rimRef.current) rimRef.current.intensity = rig.rimScale * light * (active ? 1 + state.treble * 1.6 : 1);
-    if (fillRef.current) fillRef.current.intensity = rig.fillScale * light * (active ? 1 + state.mid * 0.9 : 1);
+    if (keyRef.current) keyRef.current.intensity = rig.keyScale * light * keyTame * (active ? 1 + state.bass * 1.1 : 1);
+    if (rimRef.current) rimRef.current.intensity = rig.rimScale * light * rimTame * (active ? 1 + state.treble * 1.6 : 1);
+    if (fillRef.current) fillRef.current.intensity = rig.fillScale * light * fillTame * (active ? 1 + state.mid * 0.9 : 1);
   });
 
   return (
     <>
-      <ambientLight color={rig.ambient} intensity={0.42 + light * rig.ambientScale} />
-      <hemisphereLight color={rig.ambient} groundColor={rig.ground} intensity={0.62 + light * rig.hemiScale} />
-      <directionalLight ref={keyRef} color={rig.key} position={rig.keyPosition} intensity={rig.keyScale * light} />
-      <pointLight ref={rimRef} color={rig.rim} position={rig.rimPosition} intensity={rig.rimScale * light} distance={36} />
-      <pointLight ref={fillRef} color={rig.fill} position={rig.fillPosition} intensity={rig.fillScale * light} distance={32} />
+      <ambientLight color={rig.ambient} intensity={0.3 + light * rig.ambientScale * 0.8} />
+      <hemisphereLight color={rig.ambient} groundColor={rig.ground} intensity={0.45 + light * rig.hemiScale * 0.8} />
+      <directionalLight ref={keyRef} color={rig.key} position={rig.keyPosition} intensity={rig.keyScale * light * keyTame} />
+      <pointLight ref={rimRef} color={rig.rim} position={rig.rimPosition} intensity={rig.rimScale * light * rimTame} distance={36} />
+      <pointLight ref={fillRef} color={rig.fill} position={rig.fillPosition} intensity={rig.fillScale * light * fillTame} distance={32} />
     </>
   );
 }

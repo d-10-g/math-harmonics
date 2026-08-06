@@ -209,16 +209,16 @@ function markWelcomed() {
 
 if (FIRST_VISIT) {
   Object.assign(initialShared, {
-    formulaId: 'surf-12', // Squish Torus (Neon Reactor combo)
+    formulaId: 'surf-02', // Klein Bottle (Smoked Sunset Glass combo)
     // The WebGL path carries the audio-reactive rendering (bloom pulse,
     // light pulses, scale pulse) — the demo needs it.
     rendererMode: 'webgl',
     show3D: true,
-    webgpuMaterial: 'neon',
-    webgpuLightingPreset: 'underlight',
+    webgpuMaterial: 'glass',
+    webgpuLightingPreset: 'sunset',
     postFX: true,
-    bloomIntensity: 1.8,
-    speed: 0.7,
+    bloomIntensity: 1.1,
+    speed: 0.4,
     audioSource: 'midi'
   } satisfies Partial<typeof initialShared>);
 }
@@ -724,6 +724,9 @@ export default function App() {
 
   const handleSelectShader = (shader: ShaderPreset) => {
     setSelectedShader(shader);
+    // Browsing shaders while a PBR material override is active would be
+    // invisible in 3D — picking a shader means "show me this shader".
+    setWebgpuMaterial('auto');
   };
 
   const handleNextFormula = () => {
@@ -944,8 +947,8 @@ export default function App() {
   const startDemo = () => {
     setShowWelcome(false);
     markWelcomed();
-    const neonReactor = COMBOS.find((combo) => combo.id === 'combo-neon-reactor');
-    if (neonReactor) applyCombo(neonReactor);
+    const opener = COMBOS.find((combo) => combo.id === 'combo-smoked-glass');
+    if (opener) applyCombo(opener);
     setRendererMode('webgl'); // audio-reactive rendering lives on this path
     setAutoCycleFormula(true);
     setFormulaQuant(3); // new formula every 4th beat
@@ -996,7 +999,7 @@ export default function App() {
           <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center">
             <div className="w-4 h-4 border-2 border-white rounded-sm rotate-45"></div>
           </div>
-          <h1 className="text-xl font-medium tracking-tight">Harmonic.OS <span className="text-white/30 font-mono text-xs ml-2 uppercase tracking-widest">{APP_VERSION}</span></h1>
+          <h1 className="text-xl font-medium tracking-tight">Harmonic.OS <span className="text-indigo-300/80 font-mono text-xs ml-2 uppercase tracking-widest">{APP_VERSION}</span></h1>
         </div>
         <div className="flex gap-4 items-center">
           <button
@@ -1251,7 +1254,9 @@ export default function App() {
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-400">
               <svg viewBox="0 0 64 64" className="h-7 w-7"><path d="M8 32 C 14 12, 20 12, 26 32 S 38 52, 44 32 S 54 16, 58 24" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round" /></svg>
             </div>
-            <h1 className="text-lg font-bold tracking-[0.18em] text-white">HARMONIC.OS</h1>
+            <h1 className="text-lg font-bold tracking-[0.18em] text-white">
+              HARMONIC.OS <span className="ml-1 font-mono text-[11px] font-normal tracking-widest text-indigo-300">{APP_VERSION}</span>
+            </h1>
             <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-white/60">
               A living mathematical instrument. This demo performs{' '}
               <span className="text-fuchsia-300">Martina&apos;s Sonata</span> while the score itself drives the
