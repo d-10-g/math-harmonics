@@ -23,7 +23,7 @@ import {
 } from './constants';
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
-import { clearAudioBands, clearLoop, markBeat, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteSignals, startClock, useClockSnapshot } from './lib/clock';
+import { ActiveNote, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteSignals, startClock, useClockSnapshot } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 import { COMBOS, Combo } from './lib/combos';
@@ -311,6 +311,7 @@ export default function App() {
   const audioSyncRef = useRef(audioSync);
   useEffect(() => { audioSyncRef.current = audioSync; }, [audioSync]);
   const [audioSource, setAudioSource] = useState<'mic' | 'midi'>(initialShared.audioSource ?? 'mic');
+  const [noteMeshes, setNoteMeshes] = useState(initialShared.noteMeshes ?? false);
   const audioSourceRef = useRef(audioSource);
   useEffect(() => { audioSourceRef.current = audioSource; }, [audioSource]);
   const [midiInfo, setMidiInfo] = useState<(ParsedMidi & { name: string }) | null>(null);
@@ -489,6 +490,12 @@ export default function App() {
     let melodyTarget = 0.5;
     let notePulse = 0;
 
+    // Sounding notes for the constellation renderer: envelope shape is a
+    // fast attack, sustain until the score's note-off, then a release tail.
+    const ATTACK = 0.045;
+    const RELEASE = 0.4;
+    let sounding: Array<{ id: number; time: number; end: number; pitch: number; velocity: number }> = [];
+
     const step = () => {
       const t = audio.currentTime;
       if (t < lastTime) {
@@ -497,6 +504,7 @@ export default function App() {
         if (beatIndex < 0) beatIndex = midiInfo.beats.length;
         noteIndex = midiInfo.notes.findIndex((n) => n.time >= t);
         if (noteIndex < 0) noteIndex = midiInfo.notes.length;
+        sounding = [];
       }
       lastTime = t;
 
@@ -505,6 +513,7 @@ export default function App() {
       treble *= 0.9;
       notePulse *= 0.9;
       while (noteIndex < midiInfo.notes.length && midiInfo.notes[noteIndex].time <= t) {
+        const id = noteIndex;
         const note = midiInfo.notes[noteIndex++];
         const energy = Math.min(1, note.velocity / 96);
         if (note.pitch < lowSplit) bass = Math.min(1.2, bass + energy * 0.9);
@@ -512,12 +521,22 @@ export default function App() {
         else treble = Math.min(1.2, treble + energy * 0.85);
         melodyTarget = (note.pitch - minPitch) / pitchSpan;
         notePulse = Math.min(1, notePulse + energy * 0.55);
+        sounding.push({ id, time: note.time, end: note.time + note.duration, pitch: note.pitch, velocity: note.velocity });
       }
       melody += (melodyTarget - melody) * 0.16;
+
+      sounding = sounding.filter((n) => t <= n.end + RELEASE);
+      if (sounding.length > 12) sounding = sounding.slice(-12);
 
       if (!audio.paused) {
         setAudioBands(Math.min(1, bass), Math.min(1, mid), Math.min(1, treble));
         setNoteSignals(melody, notePulse);
+        setActiveNotes(sounding.map((n): ActiveNote => ({
+          id: n.id,
+          pitch01: (n.pitch - minPitch) / pitchSpan,
+          velocity01: Math.min(1, n.velocity / 96),
+          env: Math.min(1, (t - n.time) / ATTACK) * (t > n.end ? Math.max(0, 1 - (t - n.end) / RELEASE) : 1)
+        })));
 
         while (beatIndex < midiInfo.beats.length && midiInfo.beats[beatIndex] <= t) {
           const beatTime = midiInfo.beats[beatIndex++];
@@ -891,9 +910,10 @@ export default function App() {
       autoPilotShuffle,
       postFX,
       bloomIntensity,
-      audioSource
+      audioSource,
+      noteMeshes
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -1153,6 +1173,7 @@ export default function App() {
               <GraphView
                 formula={selectedFormula}
                 shader={selectedShader}
+                noteMeshes={noteMeshes && audioSync && audioSource === 'midi' && !!midiInfo}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
@@ -1268,6 +1289,8 @@ export default function App() {
           audioSource={audioSource}
           setAudioSource={setAudioSource}
           midiName={midiInfo ? `${midiInfo.name} · ${midiInfo.notes.length} notes · ${midiInfo.bpm} BPM` : null}
+          noteMeshes={noteMeshes}
+          setNoteMeshes={setNoteMeshes}
           onLoadMidiFile={(file) => { void loadMidiSource(file); }}
           onLoadAudioFile={(file) => {
             if (midiAudioRef.current) midiAudioRef.current.src = URL.createObjectURL(file);

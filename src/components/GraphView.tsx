@@ -966,6 +966,9 @@ interface GraphViewProps {
   setFormulaCycleSpeed?: (s: number) => void;
   shaderCycleSpeed: number;
   setShaderCycleSpeed?: (s: number) => void;
+  // True while note-constellation mode should replace the single center mesh
+  // (toggle on + live MIDI session); App owns the gating.
+  noteMeshes?: boolean;
 }
 
 function FormulaLine({
@@ -1279,6 +1282,183 @@ function FormulaLine({
           <primitive object={meshMaterial} attach="material" />
         </mesh>
       )}
+    </group>
+  );
+}
+
+// One mesh per sounding note: every note-on births an echo of the current
+// formula at its pitch position (low notes left, high notes right, arced
+// back at the edges), sized by velocity, popped in over the attack and
+// shrunk away over the release. All copies share one throttled geometry;
+// per-note life lives entirely in transforms and material modulation, so
+// a 6-note chord costs 6 draw calls, not 6 rebuilds.
+const NOTE_MESH_POOL = 12;
+
+function NoteConstellation({
+  formula,
+  showWireframe,
+  materialProfile = 'auto',
+  geometryMode: geometryModeOverride
+}: {
+  formula: Formula;
+  showWireframe: boolean;
+  materialProfile?: WebGPUMaterialProfile;
+  geometryMode?: FormulaGeometryMode;
+}) {
+  const geometryMode = geometryModeOverride ?? resolveFormulaGeometryMode(formula);
+  const scalarTarget = useMemo(() => resolveFormulaScalarTarget(formula), [formula]);
+  const compiled = useMemo(() => {
+    try {
+      return { x: compile(scalarTarget.x), y: compile(scalarTarget.y), z: compile(scalarTarget.z), valid: true };
+    } catch {
+      return { valid: false, x: null, y: null, z: null };
+    }
+  }, [scalarTarget]);
+
+  const groupRef = useRef<THREE.Group>(null);
+  const meshRefs = useRef<Array<THREE.Mesh | null>>([]);
+  // Note id -> pool slot, so a sustained note keeps its mesh while
+  // neighbours come and go.
+  const slotByIdRef = useRef(new Map<number, number>());
+
+  // Pool materials: one clone per slot so each note can carry its own
+  // emissive level and pitch-tinted hue. 'auto' (GLSL shader) falls back to
+  // pearl, same as Photo Mode.
+  const materials = useMemo(() => {
+    const profile = materialProfile !== 'auto' ? materialProfile : 'pearl';
+    return Array.from({ length: NOTE_MESH_POOL }, () => {
+      const material = createPhysicalMaterial(profile, showWireframe);
+      material.userData.baseEmissive = material.emissive.clone();
+      material.userData.baseEmissiveIntensity = material.emissiveIntensity;
+      return material;
+    });
+  }, [materialProfile, showWireframe]);
+
+  useEffect(() => () => materials.forEach((m) => m.dispose()), [materials]);
+
+  // One shared geometry for every note mesh, rebuilt on a relaxed cadence
+  // (XR-tier segment counts: up to 12 copies are on screen).
+  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
+  const lastRebuildRef = useRef(0);
+
+  useEffect(() => {
+    if (!compiled.valid) return;
+    const t = getClockTime();
+    if (formula.parametric) {
+      setGeometry(buildParametricGeometry(formula, compiled, t, scalarTarget.baseScalar, SURFACE_SEGMENTS_XR));
+    } else {
+      const points = sampleFormulaPoints(compiled, t, scalarTarget.baseScalar, 320);
+      setGeometry(buildFormulaGeometry(points, geometryMode, formula.name, t));
+    }
+    lastRebuildRef.current = performance.now();
+  }, [compiled, formula, geometryMode, scalarTarget.baseScalar]);
+
+  useEffect(() => () => geometry?.dispose(), [geometry]);
+
+  useFrame(() => {
+    const time = getClockTime();
+    const clock = clockStore.getState();
+    const active = clock.activeNotes;
+
+    const now = performance.now();
+    if (compiled.valid && now - lastRebuildRef.current >= 420) {
+      lastRebuildRef.current = now;
+      if (formula.parametric) {
+        setGeometry(buildParametricGeometry(formula, compiled, time, scalarTarget.baseScalar, SURFACE_SEGMENTS_XR));
+      } else {
+        const points = sampleFormulaPoints(compiled, time, scalarTarget.baseScalar, 320);
+        setGeometry(buildFormulaGeometry(points, geometryMode, formula.name, time));
+      }
+    }
+
+    if (groupRef.current) {
+      groupRef.current.scale.setScalar(1 + clock.bass * 0.04);
+      groupRef.current.position.y = Math.sin(time * 1.4) * 0.35;
+    }
+
+    // Reconcile note ids to pool slots.
+    const slots = slotByIdRef.current;
+    const liveIds = new Set(active.map((n) => n.id));
+    for (const [id, slot] of slots) {
+      if (!liveIds.has(id)) slots.delete(id);
+    }
+    const used = new Set(slots.values());
+    for (const note of active) {
+      if (slots.has(note.id)) continue;
+      for (let slot = 0; slot < NOTE_MESH_POOL; slot++) {
+        if (!used.has(slot)) {
+          used.add(slot);
+          slots.set(note.id, slot);
+          break;
+        }
+      }
+    }
+
+    const assigned: Array<{ note: (typeof active)[number]; slot: number }> = [];
+    for (const note of active) {
+      const slot = slots.get(note.id);
+      if (slot !== undefined) assigned.push({ note, slot });
+    }
+
+    for (let slot = 0; slot < NOTE_MESH_POOL; slot++) {
+      const mesh = meshRefs.current[slot];
+      if (!mesh) continue;
+      const entry = assigned.find((a) => a.slot === slot);
+      const material = materials[slot];
+
+      if (!entry) {
+        // Idle stage: with no notes sounding (before play, long rests, or a
+        // paused engine) slot 0 stands in as a single centered visual so the
+        // constellation never leaves an empty stage.
+        if (slot === 0 && active.length === 0) {
+          mesh.visible = true;
+          mesh.position.set(0, 0, 0);
+          mesh.rotation.set(0, time * 0.2, 0);
+          mesh.scale.setScalar(0.85);
+          material.emissiveIntensity = material.userData.baseEmissiveIntensity as number;
+          (material.emissive as THREE.Color).copy(material.userData.baseEmissive as THREE.Color);
+        } else {
+          mesh.visible = false;
+        }
+        continue;
+      }
+
+      const { pitch01, velocity01, env } = entry.note;
+      const eased = 1 - Math.pow(1 - env, 3);
+      mesh.visible = eased > 0.01;
+      mesh.position.set(
+        (pitch01 - 0.5) * 17,
+        (pitch01 - 0.5) * 3.5 + Math.sin(time * 1.6 + slot * 1.3) * 0.5,
+        -Math.abs(pitch01 - 0.5) * 6
+      );
+      mesh.rotation.set(
+        Math.sin(time * 0.7 + entry.note.id) * 0.18,
+        time * (0.35 + pitch01 * 0.45) + entry.note.id * 0.9,
+        0
+      );
+      mesh.scale.setScalar((0.17 + velocity01 * 0.12) * eased);
+
+      // Pitch tints the emissive: low notes warm, high notes cool.
+      const base = material.userData.baseEmissive as THREE.Color;
+      (material.emissive as THREE.Color).copy(base).offsetHSL((pitch01 - 0.5) * 0.22, 0.05, 0);
+      material.emissiveIntensity = (material.userData.baseEmissiveIntensity as number) * (0.6 + env * 1.5);
+    }
+  });
+
+  if (!geometry) return null;
+
+  return (
+    <group ref={groupRef}>
+      {Array.from({ length: NOTE_MESH_POOL }, (_, slot) => (
+        <mesh
+          key={slot}
+          ref={(mesh) => { meshRefs.current[slot] = mesh; }}
+          geometry={geometry}
+          material={materials[slot]}
+          frustumCulled={false}
+          visible={false}
+        />
+      ))}
     </group>
   );
 }
@@ -2174,7 +2354,8 @@ export default function GraphView({
   formulaCycleSpeed,
   setFormulaCycleSpeed,
   shaderCycleSpeed,
-  setShaderCycleSpeed
+  setShaderCycleSpeed,
+  noteMeshes = false
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
@@ -2274,7 +2455,11 @@ export default function GraphView({
             )}
 
             {showMirrors && <AngledMirrorSurfaces show3D={show3D} />}
-            <FormulaLine formula={formula} shader={shader} show3D={show3D} showWireframe={showWireframe} materialProfile={webgpuMaterial} lineWidth={lineWidth} geometryMode={geometryMode} />
+            {noteMeshes && show3D ? (
+              <NoteConstellation formula={formula} showWireframe={showWireframe} materialProfile={webgpuMaterial} geometryMode={geometryMode} />
+            ) : (
+              <FormulaLine formula={formula} shader={shader} show3D={show3D} showWireframe={showWireframe} materialProfile={webgpuMaterial} lineWidth={lineWidth} geometryMode={geometryMode} />
+            )}
           </SpatialWrapper>
 
           <SpatialConsole

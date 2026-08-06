@@ -7,6 +7,13 @@ import { useEffect, useState } from 'react';
 
 export const PHASE_RANGE = Math.PI * 4;
 
+export type ActiveNote = {
+  id: number; // index into the parsed score's note list — stable identity
+  pitch01: number; // normalized to the file's own pitch range
+  velocity01: number;
+  env: number; // attack -> sustain -> release envelope, 0..1
+};
+
 export type ClockState = {
   time: number;
   isPlaying: boolean;
@@ -30,6 +37,10 @@ export type ClockState = {
   melody: number;
   notePulse: number;
   midiLive: boolean;
+  // Currently-sounding MIDI notes with per-note envelopes, for the
+  // one-mesh-per-note constellation renderer. Published by the MIDI engine
+  // each frame while the music plays; frozen on pause; empty otherwise.
+  activeNotes: ActiveNote[];
   // A/B loop: when both are set, playback wraps inside [loopStart, loopEnd).
   loopStart: number | null;
   loopEnd: number | null;
@@ -52,6 +63,7 @@ export const clockStore = createStore<ClockState>(() => ({
   melody: 0.5,
   notePulse: 0,
   midiLive: false,
+  activeNotes: [],
   loopStart: null,
   loopEnd: null
 }));
@@ -76,10 +88,12 @@ export const setAudioBands = (bass: number, mid: number, treble: number) =>
   clockStore.setState({ bass, mid, treble });
 
 export const clearAudioBands = () =>
-  clockStore.setState({ bass: 0, mid: 0, treble: 0, melody: 0.5, notePulse: 0, midiLive: false });
+  clockStore.setState({ bass: 0, mid: 0, treble: 0, melody: 0.5, notePulse: 0, midiLive: false, activeNotes: [] });
 
 export const setNoteSignals = (melody: number, notePulse: number) =>
   clockStore.setState({ melody, notePulse, midiLive: true });
+
+export const setActiveNotes = (activeNotes: ActiveNote[]) => clockStore.setState({ activeNotes });
 
 export const markBeat = () => clockStore.setState({ lastBeatAt: performance.now() });
 

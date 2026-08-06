@@ -75,6 +75,8 @@ interface ControlsProps {
   audioSource: 'mic' | 'midi';
   setAudioSource: (source: 'mic' | 'midi') => void;
   midiName: string | null;
+  noteMeshes: boolean;
+  setNoteMeshes: (on: boolean) => void;
   onLoadMidiFile: (file: File) => void;
   onLoadAudioFile: (file: File) => void;
   midiAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -342,6 +344,8 @@ export default function Controls({
   audioSource,
   setAudioSource,
   midiName,
+  noteMeshes,
+  setNoteMeshes,
   onLoadMidiFile,
   onLoadAudioFile,
   midiAudioRef,
@@ -1147,6 +1151,26 @@ export default function Controls({
                       </div>
                       <div className="text-[9px] font-mono text-white/40 truncate">
                         {midiName ?? 'Load a .mid score + its audio rendition (.mp3/.wav)'}
+                      </div>
+                      <div className="flex items-center justify-between group">
+                        <div>
+                          <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Note Constellation</div>
+                          <div className="text-[9px] text-white/30 font-mono">One Mesh Per Sounding Note (3D)</div>
+                        </div>
+                        <button
+                          onClick={() => setNoteMeshes(!noteMeshes)}
+                          aria-label="One mesh per sounding note"
+                          aria-pressed={noteMeshes}
+                          className={cn(
+                            "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center px-1",
+                            noteMeshes ? "bg-fuchsia-500" : "bg-white/10"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm",
+                            noteMeshes ? "translate-x-5" : "translate-x-0"
+                          )} />
+                        </button>
                       </div>
                     </div>
                   )}

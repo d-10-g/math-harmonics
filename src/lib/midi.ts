@@ -5,6 +5,7 @@
 
 export type MidiNote = {
   time: number; // seconds
+  duration: number; // seconds (note-off matched; fallback when unterminated)
   pitch: number;
   velocity: number; // 1-127
   track: number;
@@ -77,8 +78,11 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   if (division & 0x8000) throw new Error('SMPTE time division is not supported');
   const ticksPerBeat = division || 480;
 
-  type RawNote = { tick: number; pitch: number; velocity: number; track: number; channel: number };
+  type RawNote = { tick: number; durTick: number; pitch: number; velocity: number; track: number; channel: number };
   const rawNotes: RawNote[] = [];
+  // Open notes awaiting their note-off, keyed by track:channel:pitch. A stack
+  // per key handles (rare) re-struck pitches before the first release.
+  const openNotes = new Map<string, number[]>();
   const tempoEvents: Array<{ tick: number; usPerBeat: number }> = [];
   let maxTick = 0;
 
@@ -130,7 +134,15 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
           const data1 = reader.u8();
           const data2 = reader.u8();
           if (kind === 0x90 && data2 > 0) {
-            rawNotes.push({ tick, pitch: data1, velocity: data2, track: trackIndex, channel });
+            const key = `${trackIndex}:${channel}:${data1}`;
+            let stack = openNotes.get(key);
+            if (!stack) openNotes.set(key, (stack = []));
+            stack.push(rawNotes.length);
+            rawNotes.push({ tick, durTick: 0, pitch: data1, velocity: data2, track: trackIndex, channel });
+          } else if (kind === 0x80 || (kind === 0x90 && data2 === 0)) {
+            const stack = openNotes.get(`${trackIndex}:${channel}:${data1}`);
+            const noteIndex = stack?.shift();
+            if (noteIndex !== undefined) rawNotes[noteIndex].durTick = tick - rawNotes[noteIndex].tick;
           }
         }
       }
@@ -162,13 +174,21 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   };
 
   const notes = rawNotes
-    .map((raw) => ({
-      time: tickToSeconds(raw.tick),
-      pitch: raw.pitch,
-      velocity: raw.velocity,
-      track: raw.track,
-      channel: raw.channel
-    }))
+    .map((raw) => {
+      const time = tickToSeconds(raw.tick);
+      // Unterminated notes (no matching note-off) get half a second.
+      const duration = raw.durTick > 0
+        ? Math.max(0.05, tickToSeconds(raw.tick + raw.durTick) - time)
+        : 0.5;
+      return {
+        time,
+        duration,
+        pitch: raw.pitch,
+        velocity: raw.velocity,
+        track: raw.track,
+        channel: raw.channel
+      };
+    })
     .sort((a, b) => a.time - b.time);
 
   const beats: number[] = [];
