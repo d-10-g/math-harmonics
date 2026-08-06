@@ -219,7 +219,8 @@ if (FIRST_VISIT) {
     postFX: true,
     bloomIntensity: 1.1,
     speed: 0.4,
-    audioSource: 'midi'
+    audioSource: 'midi',
+    noteMeshes: true
   } satisfies Partial<typeof initialShared>);
 }
 
@@ -311,7 +312,9 @@ export default function App() {
   const audioSyncRef = useRef(audioSync);
   useEffect(() => { audioSyncRef.current = audioSync; }, [audioSync]);
   const [audioSource, setAudioSource] = useState<'mic' | 'midi'>(initialShared.audioSource ?? 'mic');
-  const [noteMeshes, setNoteMeshes] = useState(initialShared.noteMeshes ?? false);
+  // Constellation is the default MIDI experience; the gate below keeps it
+  // inert until a MIDI session is actually live, so mic users see no change.
+  const [noteMeshes, setNoteMeshes] = useState(initialShared.noteMeshes ?? true);
   const audioSourceRef = useRef(audioSource);
   useEffect(() => { audioSourceRef.current = audioSource; }, [audioSource]);
   const [midiInfo, setMidiInfo] = useState<(ParsedMidi & { name: string }) | null>(null);
@@ -1035,6 +1038,9 @@ export default function App() {
     setFormulaQuant(3); // new formula every 4th beat
     setAudioSync(true);
     setAudioSource('midi');
+    // The demo is the constellation's stage: re-enable it even if a returning
+    // visitor had toggled it off — the chip promises the curated experience.
+    setNoteMeshes(true);
     const audio = midiAudioRef.current;
     if (audio) {
       audio.src = DEMO_AUDIO_URL;
@@ -1344,7 +1350,8 @@ export default function App() {
             <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-white/60">
               A living mathematical instrument. This demo performs{' '}
               <span className="text-fuchsia-300">Martina&apos;s Sonata</span> while the score itself drives the
-              visuals — every fourth beat sculpts a new formula, and the music lights the scene.
+              visuals — every note takes the stage as its own floating form, low notes left and high notes
+              right, and every fourth beat sculpts them all into a new formula.
             </p>
             <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
               <button
