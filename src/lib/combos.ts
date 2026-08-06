@@ -51,7 +51,7 @@ export const COMBOS: Combo[] = [
     formulaId: 'surf-12', // Squish Torus
     material: 'neon',
     lighting: 'underlight',
-    bloom: 1.8,
+    bloom: 1.5,
     speed: 0.7
   },
   {

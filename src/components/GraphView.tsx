@@ -1351,7 +1351,7 @@ function PostEffects({ enabled, bloom }: { enabled: boolean; bloom: number }) {
   if (!enabled || session) return null;
   return (
     <EffectComposer ref={composerRef} multisampling={4}>
-      <Bloom intensity={bloom} luminanceThreshold={0.7} luminanceSmoothing={0.2} mipmapBlur radius={0.75} />
+      <Bloom intensity={bloom} luminanceThreshold={0.85} luminanceSmoothing={0.25} mipmapBlur radius={0.62} />
       <Vignette eskil={false} offset={0.18} darkness={0.6} />
     </EffectComposer>
   );

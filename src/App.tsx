@@ -795,6 +795,9 @@ export default function App() {
     if (style) {
       setWebgpuMaterial(style.material);
       setWebgpuLightingPreset(style.lighting);
+      // Bloom travels with the material: emissives get headroom, bright
+      // diffuse/metal looks get restraint (fixes white washout mid-cycling).
+      setBloomIntensity(style.bloom ?? 0.9);
     }
     if (selectedFormula.speedHint !== undefined) {
       setSpeed(selectedFormula.speedHint);
