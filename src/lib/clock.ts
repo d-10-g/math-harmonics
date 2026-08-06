@@ -23,6 +23,13 @@ export type ClockState = {
   mid: number;
   treble: number;
   lastBeatAt: number;
+  // MIDI note-level signals: melody is the normalized pitch of the latest
+  // note (eased, 0..1 across the file's own pitch range), notePulse is a
+  // velocity-scaled impulse that decays between note-ons. midiLive gates
+  // note-driven morphing so mic mode and silence leave geometry untouched.
+  melody: number;
+  notePulse: number;
+  midiLive: boolean;
   // A/B loop: when both are set, playback wraps inside [loopStart, loopEnd).
   loopStart: number | null;
   loopEnd: number | null;
@@ -42,9 +49,16 @@ export const clockStore = createStore<ClockState>(() => ({
   mid: 0,
   treble: 0,
   lastBeatAt: 0,
+  melody: 0.5,
+  notePulse: 0,
+  midiLive: false,
   loopStart: null,
   loopEnd: null
 }));
+
+// Dev-only debugging handle: lets a console (or automated test) watch the
+// live signal state without touching production bundles.
+if (import.meta.env.DEV) (globalThis as any).__harmonicsClock = clockStore;
 
 export const getClockTime = () => clockStore.getState().time;
 
@@ -61,7 +75,11 @@ export const reportVerts = (verts: number) => {
 export const setAudioBands = (bass: number, mid: number, treble: number) =>
   clockStore.setState({ bass, mid, treble });
 
-export const clearAudioBands = () => clockStore.setState({ bass: 0, mid: 0, treble: 0 });
+export const clearAudioBands = () =>
+  clockStore.setState({ bass: 0, mid: 0, treble: 0, melody: 0.5, notePulse: 0, midiLive: false });
+
+export const setNoteSignals = (melody: number, notePulse: number) =>
+  clockStore.setState({ melody, notePulse, midiLive: true });
 
 export const markBeat = () => clockStore.setState({ lastBeatAt: performance.now() });
 

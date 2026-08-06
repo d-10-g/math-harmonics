@@ -35,15 +35,17 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
     metalness: 0.1, roughness: 0.22, opacity: 1, transparent: false, envMapIntensity: 1.1
   },
   'liquid-metal': {
-    color: 0xb6c7d8, emissive: 0x0b1220, emissiveIntensity: 0.12,
+    color: 0xa8b9cb, emissive: 0x0b1220, emissiveIntensity: 0.12,
     metalness: 1.0, roughness: 0.07, opacity: 1, transparent: false,
-    clearcoat: 0.6, clearcoatRoughness: 0.08, envMapIntensity: 1.6
+    clearcoat: 0.6, clearcoatRoughness: 0.08, envMapIntensity: 1.4
   },
   pearl: {
-    color: 0xf8fafc, emissive: 0xa5b4fc, emissiveIntensity: 0.08,
+    // Near-white bases blow out under the default light level + bloom; the
+    // pearl look survives on a cooler mid-gray with the iridescence intact.
+    color: 0xbac8da, emissive: 0xa5b4fc, emissiveIntensity: 0.08,
     metalness: 0.05, roughness: 0.34, opacity: 1, transparent: false,
     iridescence: 1.0, iridescenceIOR: 1.3, sheen: 0.45, sheenColor: 0xf9a8d4, sheenRoughness: 0.4,
-    envMapIntensity: 1.2
+    envMapIntensity: 0.7
   },
   glass: {
     color: 0x9fd8ff, emissive: 0x0a2438, emissiveIntensity: 0.1,
@@ -56,9 +58,9 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
     sheen: 1.0, sheenColor: 0xf0abfc, sheenRoughness: 0.5, envMapIntensity: 0.5
   },
   ceramic: {
-    color: 0xf8fafc, emissive: 0x22d3ee, emissiveIntensity: 0.04,
+    color: 0xdde5f0, emissive: 0x22d3ee, emissiveIntensity: 0.04,
     metalness: 0.0, roughness: 0.36, opacity: 1, transparent: false,
-    clearcoat: 1.0, clearcoatRoughness: 0.14, envMapIntensity: 1.0
+    clearcoat: 1.0, clearcoatRoughness: 0.14, envMapIntensity: 0.8
   },
   hologram: {
     color: 0x155e75, emissive: 0xf472b6, emissiveIntensity: 0.65,
@@ -90,8 +92,8 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
     clearcoat: 0.5, clearcoatRoughness: 0.3, envMapIntensity: 0.8
   },
   chrome: {
-    color: 0xe5e7eb, emissive: 0x111827, emissiveIntensity: 0.05,
-    metalness: 1.0, roughness: 0.03, opacity: 1, transparent: false, envMapIntensity: 1.8
+    color: 0xc7ccd4, emissive: 0x111827, emissiveIntensity: 0.05,
+    metalness: 1.0, roughness: 0.03, opacity: 1, transparent: false, envMapIntensity: 1.45
   },
   ruby: {
     color: 0xbe123c, emissive: 0x2a050b, emissiveIntensity: 0.25,
@@ -99,9 +101,9 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
     transmission: 0.7, thickness: 1.6, ior: 1.76, envMapIntensity: 1.3
   },
   ice: {
-    color: 0xbfe8ff, emissive: 0x082f49, emissiveIntensity: 0.15,
+    color: 0xa3d3ef, emissive: 0x082f49, emissiveIntensity: 0.15,
     metalness: 0.0, roughness: 0.26, opacity: 1, transparent: true,
-    transmission: 0.95, thickness: 1.0, ior: 1.31, envMapIntensity: 1.2
+    transmission: 0.95, thickness: 1.0, ior: 1.31, envMapIntensity: 1.0
   },
   neon: {
     color: 0x0e7490, emissive: 0xf0abfc, emissiveIntensity: 0.7,

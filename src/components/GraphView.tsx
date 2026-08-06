@@ -1026,6 +1026,14 @@ function FormulaLine({
       return scalarTarget.baseScalar * handMod;
     }
 
+    // MIDI note morphing: the melody line steers the same morph handle the
+    // XR hand does — pitch reshapes the geometry, note-on velocity kicks it.
+    const clockState = clockStore.getState();
+    if (clockState.midiLive) {
+      const melodyMod = THREE.MathUtils.lerp(0.78, 1.5, clockState.melody);
+      return scalarTarget.baseScalar * melodyMod * (1 + clockState.notePulse * 0.16);
+    }
+
     return scalarTarget.baseScalar;
   };
 
@@ -1168,7 +1176,8 @@ function FormulaLine({
         physicalMaterial.userData.baseEmissive = physicalMaterial.emissiveIntensity;
       }
       const base = physicalMaterial.userData.baseEmissive as number;
-      physicalMaterial.emissiveIntensity = clock.audioSync ? base + (0.25 + base * 1.8) * clock.bass : base;
+      const emissiveDrive = Math.max(clock.bass, clock.notePulse * 0.75);
+      physicalMaterial.emissiveIntensity = clock.audioSync ? base + (0.25 + base * 1.8) * emissiveDrive : base;
     }
     const nextScalar = getSValue();
     const scalarThreshold = Math.max(0.005, Math.abs(scalarTarget.baseScalar) * 0.003);
@@ -1182,7 +1191,7 @@ function FormulaLine({
     if (groupRef.current) {
       // Universal audio pulse: scales the whole visual with the bass so even
       // unlit GLSL looks visibly react to music.
-      groupRef.current.scale.setScalar(clock.audioSync ? 1 + clock.bass * 0.055 : 1);
+      groupRef.current.scale.setScalar(clock.audioSync ? 1 + clock.bass * 0.055 + clock.notePulse * 0.045 : 1);
       if (show3D) {
         groupRef.current.position.y = Math.sin(time * 2) * 0.5;
         groupRef.current.rotation.x = Math.sin(time * 0.5) * 0.1;
@@ -1351,7 +1360,10 @@ function PostEffects({ enabled, bloom }: { enabled: boolean; bloom: number }) {
   if (!enabled || session) return null;
   return (
     <EffectComposer ref={composerRef} multisampling={4}>
-      <Bloom intensity={bloom} luminanceThreshold={0.85} luminanceSmoothing={0.25} mipmapBlur radius={0.62} />
+      {/* Threshold sits above the luminance of a well-lit pale surface so
+          bloom only catches emissives and true speculars — a white material
+          under the key light must read as a surface, not a flare. */}
+      <Bloom intensity={bloom} luminanceThreshold={0.92} luminanceSmoothing={0.18} mipmapBlur radius={0.58} />
       <Vignette eskil={false} offset={0.18} darkness={0.6} />
     </EffectComposer>
   );
@@ -1367,7 +1379,7 @@ function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; inte
   // The WebGL path stacks rig lights + PMREM environment + bloom, so both
   // exposure and the rig's point-light scales run tamer than the raw table
   // (which was tuned for the WebGPU path without an environment).
-  const exposure = 0.55 + light * 0.4;
+  const exposure = 0.53 + light * 0.35;
   const keyTame = 0.8;
   const rimTame = 0.55;
   const fillTame = 0.6;
@@ -1393,8 +1405,11 @@ function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; inte
 
   return (
     <>
-      <ambientLight color={rig.ambient} intensity={0.3 + light * rig.ambientScale * 0.8} />
-      <hemisphereLight color={rig.ambient} groundColor={rig.ground} intensity={0.45 + light * rig.hemiScale * 0.8} />
+      {/* Ambient/hemi are the flatteners: past ~1x light they erase shading
+          contrast and pale materials read as blank white. Grow them slower
+          than the key/rim/fill so raising the light level adds punch, not fog. */}
+      <ambientLight color={rig.ambient} intensity={0.25 + light * rig.ambientScale * 0.5} />
+      <hemisphereLight color={rig.ambient} groundColor={rig.ground} intensity={0.4 + light * rig.hemiScale * 0.55} />
       <directionalLight ref={keyRef} color={rig.key} position={rig.keyPosition} intensity={rig.keyScale * light * keyTame} />
       <pointLight ref={rimRef} color={rig.rim} position={rig.rimPosition} intensity={rig.rimScale * light * rimTame} distance={36} />
       <pointLight ref={fillRef} color={rig.fill} position={rig.fillPosition} intensity={rig.fillScale * light * fillTame} distance={32} />

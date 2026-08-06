@@ -23,7 +23,7 @@ import {
 } from './constants';
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
-import { clearAudioBands, clearLoop, markBeat, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, startClock, useClockSnapshot } from './lib/clock';
+import { clearAudioBands, clearLoop, markBeat, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteSignals, startClock, useClockSnapshot } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 import { COMBOS, Combo } from './lib/combos';
@@ -311,9 +311,52 @@ export default function App() {
   const audioSyncRef = useRef(audioSync);
   useEffect(() => { audioSyncRef.current = audioSync; }, [audioSync]);
   const [audioSource, setAudioSource] = useState<'mic' | 'midi'>(initialShared.audioSource ?? 'mic');
+  const audioSourceRef = useRef(audioSource);
+  useEffect(() => { audioSourceRef.current = audioSource; }, [audioSource]);
   const [midiInfo, setMidiInfo] = useState<(ParsedMidi & { name: string }) | null>(null);
   const midiAudioRef = useRef<HTMLAudioElement | null>(null);
-  
+
+  // Unified transport: while a MIDI session is live, Space and the Play/Pause
+  // button drive the *music*, and the visual clock follows the audio element
+  // (play/pause events below) — pausing the piece freezes the scene with it.
+  // Without a MIDI session the button toggles the visual clock as before.
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const midiTransportLive = audioSync && audioSource === 'midi' && !!midiInfo;
+  const transportShowsPause = midiTransportLive ? audioPlaying : isPlaying;
+  const toggleTransport = () => {
+    const audio = midiAudioRef.current;
+    if (audioSync && audioSource === 'midi' && midiInfo && audio && audio.src) {
+      if (audio.paused) void audio.play().catch(() => setIsPlaying((p) => !p));
+      else audio.pause();
+      return;
+    }
+    setIsPlaying((p) => !p);
+  };
+  const toggleTransportRef = useRef(toggleTransport);
+  useEffect(() => { toggleTransportRef.current = toggleTransport; });
+
+  useEffect(() => {
+    const audio = midiAudioRef.current;
+    if (!audio) return;
+    const midiTransport = () => audioSyncRef.current && audioSourceRef.current === 'midi';
+    const onPlay = () => {
+      setAudioPlaying(true);
+      if (midiTransport()) setIsPlaying(true);
+    };
+    // A finished piece fires 'pause' with ended=true — let the scene keep
+    // moving on its own clock instead of freezing on the final chord.
+    const onPause = () => {
+      setAudioPlaying(false);
+      if (midiTransport()) setIsPlaying(audio.ended);
+    };
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    return () => {
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+    };
+  }, []);
+
   // Quantization (-10 to +10)
   const [speedQuant, setSpeedQuant] = useState(0); 
   const [formulaQuant, setFormulaQuant] = useState(FIRST_VISIT ? 3 : 0); // demo: new formula every 4th beat
@@ -433,6 +476,19 @@ export default function App() {
     let fBeatCount = 0;
     let sBeatCount = 0;
 
+    // Band splits adapt to the file's own pitch range (terciles) so every
+    // piece exercises all three bands — a notation export that never dips
+    // below MIDI 52 would otherwise leave the bass band (and everything it
+    // drives: scale pulse, bloom pulse, key light) permanently dark.
+    const pitches = midiInfo.notes.map((n) => n.pitch).sort((a, b) => a - b);
+    const lowSplit = pitches[Math.floor(pitches.length / 3)] ?? 52;
+    const highSplit = pitches[Math.floor((2 * pitches.length) / 3)] ?? 74;
+    const minPitch = pitches[0] ?? 0;
+    const pitchSpan = Math.max(1, (pitches[pitches.length - 1] ?? 127) - minPitch);
+    let melody = 0.5;
+    let melodyTarget = 0.5;
+    let notePulse = 0;
+
     const step = () => {
       const t = audio.currentTime;
       if (t < lastTime) {
@@ -447,16 +503,21 @@ export default function App() {
       bass *= 0.9;
       mid *= 0.9;
       treble *= 0.9;
+      notePulse *= 0.9;
       while (noteIndex < midiInfo.notes.length && midiInfo.notes[noteIndex].time <= t) {
         const note = midiInfo.notes[noteIndex++];
         const energy = Math.min(1, note.velocity / 96);
-        if (note.pitch < 52) bass = Math.min(1.2, bass + energy * 0.9);
-        else if (note.pitch <= 74) mid = Math.min(1.2, mid + energy * 0.7);
+        if (note.pitch < lowSplit) bass = Math.min(1.2, bass + energy * 0.9);
+        else if (note.pitch <= highSplit) mid = Math.min(1.2, mid + energy * 0.7);
         else treble = Math.min(1.2, treble + energy * 0.85);
+        melodyTarget = (note.pitch - minPitch) / pitchSpan;
+        notePulse = Math.min(1, notePulse + energy * 0.55);
       }
+      melody += (melodyTarget - melody) * 0.16;
 
       if (!audio.paused) {
         setAudioBands(Math.min(1, bass), Math.min(1, mid), Math.min(1, treble));
+        setNoteSignals(melody, notePulse);
 
         while (beatIndex < midiInfo.beats.length && midiInfo.beats[beatIndex] <= t) {
           const beatTime = midiInfo.beats[beatIndex++];
@@ -851,7 +912,7 @@ export default function App() {
           break;
         case ' ':
           e.preventDefault();
-          setIsPlaying(p => !p);
+          toggleTransportRef.current();
           break;
         case 'ArrowRight':
           e.preventDefault();
@@ -1112,8 +1173,8 @@ export default function App() {
                 xrStore={xrStore}
                 onNextFormula={handleNextFormula}
                 onNextShader={handleNextShader}
-                isPlaying={isPlaying}
-                onTogglePlay={() => setIsPlaying(!isPlaying)}
+                isPlaying={transportShowsPause}
+                onTogglePlay={toggleTransport}
                 onSelectFormula={handleSelectPreset}
                 onSelectShader={handleSelectShader}
                 audioSync={audioSync}
@@ -1145,10 +1206,10 @@ export default function App() {
             </div>
             <div className="w-full h-8 flex items-center px-2 gap-4">
               <button
-                onClick={() => setIsPlaying(!isPlaying)}
+                onClick={toggleTransport}
                 className="px-3 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/50 rounded text-[9px] font-mono uppercase transition-colors shrink-0"
               >
-                {isPlaying ? 'Pause' : 'Play'}
+                {midiTransportLive ? (audioPlaying ? '⏸ Music' : '▶ Music') : transportShowsPause ? 'Pause' : 'Play'}
               </button>
               <TimeScrubber onScrub={() => setIsPlaying(false)} />
             </div>
