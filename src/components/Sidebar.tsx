@@ -10,6 +10,7 @@ interface SidebarProps {
   selectedFormula: Formula;
   onSelect: (formula: Formula) => void;
   onApplyCombo: (combo: Combo) => void;
+  audioSync: boolean;
   selectedShader: ShaderPreset;
   onSelectShader: (shader: ShaderPreset) => void;
   activeTab: 'formulas' | 'shaders';
@@ -120,6 +121,7 @@ export default function Sidebar({
   selectedFormula,
   onSelect,
   onApplyCombo,
+  audioSync,
   selectedShader,
   onSelectShader,
   activeTab,
@@ -142,16 +144,20 @@ export default function Sidebar({
       }));
     }
 
-    return PRESET_SHADERS.map((shader, index) => ({
-      id: shader.id,
-      name: shader.name,
-      description: shader.description,
-      category: shader.category,
-      source: shader.category || shader.description,
-      index,
-      kind: 'shader'
-    }));
-  }, [activeTab]);
+    return PRESET_SHADERS
+      .map((shader, index) => ({
+        id: shader.id,
+        name: shader.name,
+        description: shader.description,
+        category: shader.category,
+        source: shader.category || shader.description,
+        index,
+        kind: 'shader' as const
+      }))
+      // Audio-reactive shaders only exist while audio sync runs — hidden
+      // otherwise so they never present as "broken" static visuals.
+      .filter((item) => audioSync || item.category !== 'Audio-reactive shaders');
+  }, [activeTab, audioSync]);
 
   const selectedItem = useMemo<LibraryItem>(() => {
     if (activeTab === 'formulas') {

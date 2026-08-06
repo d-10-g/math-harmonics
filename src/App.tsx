@@ -27,6 +27,7 @@ import { clearAudioBands, clearLoop, markBeat, setAudioBands, setClockPlayback, 
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 import { COMBOS, Combo } from './lib/combos';
+import { parseMidi, ParsedMidi } from './lib/midi';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 
@@ -255,6 +256,11 @@ export default function App() {
   const [formulaCycleSpeed, setFormulaCycleSpeed] = useState(3); // Seconds
   const [shaderCycleSpeed, setShaderCycleSpeed] = useState(5); // Seconds
   const [audioSync, setAudioSync] = useState(false);
+  const audioSyncRef = useRef(audioSync);
+  useEffect(() => { audioSyncRef.current = audioSync; }, [audioSync]);
+  const [audioSource, setAudioSource] = useState<'mic' | 'midi'>(initialShared.audioSource ?? 'mic');
+  const [midiInfo, setMidiInfo] = useState<(ParsedMidi & { name: string }) | null>(null);
+  const midiAudioRef = useRef<HTMLAudioElement | null>(null);
   
   // Quantization (-10 to +10)
   const [speedQuant, setSpeedQuant] = useState(0); 
@@ -273,6 +279,15 @@ export default function App() {
   
   const shaderQuantRef = useRef(shaderQuant);
   useEffect(() => { shaderQuantRef.current = shaderQuant; }, [shaderQuant]);
+
+  // Audio-reactive shaders are only meaningful (and only visible) while
+  // audio sync runs; cycling skips them otherwise.
+  const shaderCyclePool = () => {
+    const base = audioSyncRef.current
+      ? PRESET_SHADERS
+      : PRESET_SHADERS.filter((s) => s.category !== 'Audio-reactive shaders');
+    return cyclePool(base, cycleFavoritesOnlyRef.current, 'shader');
+  };
 
   // Auto-pilot advance, shared by beat-triggered and timer-based cycling:
   // honors the favorites-only pool and the shuffle toggle.
@@ -294,7 +309,7 @@ export default function App() {
 
   const autoAdvanceShader = () => {
     setSelectedShader(prev => {
-      const pool = cyclePool(PRESET_SHADERS, cycleFavoritesOnlyRef.current, 'shader');
+      const pool = shaderCyclePool();
       if (autoPilotShuffleRef.current) {
         if (pool.length <= 1) return pool[0] ?? prev;
         let next = prev;
@@ -308,9 +323,148 @@ export default function App() {
     });
   };
 
+  // Audio-only content is hidden while sync is off; if an audio shader is
+  // still selected when the section closes, step off it.
+  useEffect(() => {
+    if (audioSync) return;
+    setSelectedShader((prev) => {
+      if (prev.category !== 'Audio-reactive shaders') return prev;
+      return PRESET_SHADERS.find((s) => s.category !== 'Audio-reactive shaders') ?? prev;
+    });
+  }, [audioSync]);
+
+  // Load a MIDI file (and optionally its audio rendition) for MIDI-driven
+  // sync. Also exposed as window.harmonicsMidi.load(midiUrl, audioUrl).
+  const loadMidiSource = async (midiSource: File | string, audioSrc?: File | string) => {
+    const buffer = typeof midiSource === 'string'
+      ? await fetch(midiSource).then((r) => r.arrayBuffer())
+      : await midiSource.arrayBuffer();
+    const parsed = parseMidi(buffer);
+    const name = typeof midiSource === 'string'
+      ? midiSource.split('/').pop() ?? 'midi'
+      : midiSource.name;
+    setMidiInfo({ ...parsed, name });
+    if (audioSrc && midiAudioRef.current) {
+      midiAudioRef.current.src = typeof audioSrc === 'string' ? audioSrc : URL.createObjectURL(audioSrc);
+    }
+  };
+
+  useEffect(() => {
+    (window as any).harmonicsMidi = {
+      load: (midiUrl: string, audioUrl?: string) => {
+        setAudioSync(true);
+        setAudioSource('midi');
+        return loadMidiSource(midiUrl, audioUrl);
+      }
+    };
+    return () => {
+      delete (window as any).harmonicsMidi;
+    };
+  }, []);
+
+  // MIDI-driven sync: ground-truth note events and the tempo-map beat grid
+  // drive the same clock-store signals the mic path feeds, so every
+  // audio-reactive visual (bands, bloom pulse, beat cycling with quant)
+  // works identically — but sample-accurate to the score.
+  useEffect(() => {
+    if (!audioSync || audioSource !== 'midi' || !midiInfo) return;
+    const audio = midiAudioRef.current;
+    if (!audio) return;
+
+    let raf = 0;
+    let beatIndex = 0;
+    let noteIndex = 0;
+    let lastTime = -1;
+    let bass = 0;
+    let mid = 0;
+    let treble = 0;
+    let fBeatCount = 0;
+    let sBeatCount = 0;
+
+    const step = () => {
+      const t = audio.currentTime;
+      if (t < lastTime) {
+        // Seek backwards: re-anchor both pointers.
+        beatIndex = midiInfo.beats.findIndex((b) => b >= t);
+        if (beatIndex < 0) beatIndex = midiInfo.beats.length;
+        noteIndex = midiInfo.notes.findIndex((n) => n.time >= t);
+        if (noteIndex < 0) noteIndex = midiInfo.notes.length;
+      }
+      lastTime = t;
+
+      bass *= 0.9;
+      mid *= 0.9;
+      treble *= 0.9;
+      while (noteIndex < midiInfo.notes.length && midiInfo.notes[noteIndex].time <= t) {
+        const note = midiInfo.notes[noteIndex++];
+        const energy = Math.min(1, note.velocity / 96);
+        if (note.pitch < 52) bass = Math.min(1.2, bass + energy * 0.9);
+        else if (note.pitch <= 74) mid = Math.min(1.2, mid + energy * 0.7);
+        else treble = Math.min(1.2, treble + energy * 0.85);
+      }
+
+      if (!audio.paused) {
+        setAudioBands(Math.min(1, bass), Math.min(1, mid), Math.min(1, treble));
+
+        while (beatIndex < midiInfo.beats.length && midiInfo.beats[beatIndex] <= t) {
+          const beatTime = midiInfo.beats[beatIndex++];
+          const nextBeat = midiInfo.beats[beatIndex];
+          if (nextBeat !== undefined) setBpmInterval(Math.max(120, (nextBeat - beatTime) * 1000));
+          markBeat();
+
+          if (autoCycleFormulaRef.current) {
+            const fq = formulaQuantRef.current;
+            const fMult = fq >= 0 ? fq + 1 : 1 / (Math.abs(fq) + 1);
+            if (fMult >= 1) {
+              fBeatCount++;
+              if (fBeatCount >= fMult) {
+                fBeatCount = 0;
+                autoAdvanceFormula();
+              }
+            } else {
+              const subBeats = Math.abs(fq) + 1;
+              const interval = ((nextBeat ?? beatTime + 0.5) - beatTime) * 1000;
+              autoAdvanceFormula();
+              for (let i = 1; i < subBeats; i++) {
+                setTimeout(autoAdvanceFormula, (interval / subBeats) * i);
+              }
+            }
+          }
+
+          if (autoCycleShaderRef.current) {
+            const sq = shaderQuantRef.current;
+            const sMult = sq >= 0 ? sq + 1 : 1 / (Math.abs(sq) + 1);
+            if (sMult >= 1) {
+              sBeatCount++;
+              if (sBeatCount >= sMult) {
+                sBeatCount = 0;
+                autoAdvanceShader();
+              }
+            } else {
+              const subBeats = Math.abs(sq) + 1;
+              const interval = ((nextBeat ?? beatTime + 0.5) - beatTime) * 1000;
+              autoAdvanceShader();
+              for (let i = 1; i < subBeats; i++) {
+                setTimeout(autoAdvanceShader, (interval / subBeats) * i);
+              }
+            }
+          }
+        }
+      }
+
+      raf = requestAnimationFrame(step);
+    };
+
+    raf = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearAudioBands();
+    };
+  }, [audioSync, audioSource, midiInfo]);
+
   // Audio Reactivity & Quantization Logic
   useEffect(() => {
-    if (!audioSync) return;
+    if (!audioSync || audioSource !== 'mic') return;
     
     let audioCtx: AudioContext;
     let analyser: AnalyserNode;
@@ -430,13 +584,13 @@ export default function App() {
       }
     };
     startAudio();
-    
+
     return () => {
       if (animationId) cancelAnimationFrame(animationId);
       if (audioCtx) audioCtx.close();
       clearAudioBands();
     };
-  }, [audioSync]);
+  }, [audioSync, audioSource]);
 
   // Time-based interval (Only runs if Audio Sync is OFF)
   useEffect(() => {
@@ -538,7 +692,7 @@ export default function App() {
 
   const handleNextShader = () => {
     setSelectedShader(prev => {
-      const pool = cyclePool(PRESET_SHADERS, cycleFavoritesOnlyRef.current, 'shader');
+      const pool = shaderCyclePool();
       const currentIndex = pool.findIndex(s => s.id === prev.id);
       return pool[(currentIndex + 1) % pool.length];
     });
@@ -546,7 +700,7 @@ export default function App() {
 
   const handlePrevShader = () => {
     setSelectedShader(prev => {
-      const pool = cyclePool(PRESET_SHADERS, cycleFavoritesOnlyRef.current, 'shader');
+      const pool = shaderCyclePool();
       const currentIndex = pool.findIndex(s => s.id === prev.id);
       return pool[(currentIndex - 1 + pool.length) % pool.length];
     });
@@ -617,9 +771,10 @@ export default function App() {
       cycleFavoritesOnly,
       autoPilotShuffle,
       postFX,
-      bloomIntensity
+      bloomIntensity,
+      audioSource
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -811,6 +966,7 @@ export default function App() {
         <Sidebar
           selectedFormula={selectedFormula}
           onApplyCombo={applyCombo}
+          audioSync={audioSync}
           onSelect={handleSelectPreset}
           selectedShader={selectedShader}
           onSelectShader={handleSelectShader}
@@ -961,6 +1117,14 @@ export default function App() {
           setShaderCycleSpeed={setShaderCycleSpeed}
           audioSync={audioSync}
           setAudioSync={setAudioSync}
+          audioSource={audioSource}
+          setAudioSource={setAudioSource}
+          midiName={midiInfo ? `${midiInfo.name} · ${midiInfo.notes.length} notes · ${midiInfo.bpm} BPM` : null}
+          onLoadMidiFile={(file) => { void loadMidiSource(file); }}
+          onLoadAudioFile={(file) => {
+            if (midiAudioRef.current) midiAudioRef.current.src = URL.createObjectURL(file);
+          }}
+          midiAudioRef={midiAudioRef}
           speedQuant={speedQuant}
           setSpeedQuant={setSpeedQuant}
           formulaQuant={formulaQuant}

@@ -34,6 +34,7 @@ export type SharedState = {
   autoPilotShuffle?: boolean;
   postFX?: boolean;
   bloomIntensity?: number;
+  audioSource?: 'mic' | 'midi';
 };
 
 const GEOMETRY_VALUES: WebGPUGeometryProfile[] = ['auto', 'tube', 'ribbon', 'extrude', 'lathe', 'crystal', 'surface', 'helix', 'shell', 'terrain', 'constellation', 'knot', 'mandala', 'lattice', 'ripple', 'prism', 'vortex'];
@@ -68,6 +69,7 @@ function parseParams(params: URLSearchParams): SharedState {
   state.cycleFavoritesOnly = flag('cf');
   state.autoPilotShuffle = flag('sh');
   state.postFX = flag('fx');
+  state.audioSource = oneOf(read('asrc'), ['mic', 'midi'] as const);
   const bloom = read('bl');
   if (bloom !== undefined && Number.isFinite(parseFloat(bloom))) state.bloomIntensity = Math.min(3, Math.max(0, parseFloat(bloom)));
   const lineWidth = read('lw');
@@ -114,6 +116,7 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('sh', state.autoPilotShuffle ? '1' : '0');
   params.set('fx', state.postFX ? '1' : '0');
   params.set('bl', state.bloomIntensity.toFixed(2));
+  params.set('asrc', state.audioSource);
 
   try {
     history.replaceState(null, '', `#${params.toString()}`);

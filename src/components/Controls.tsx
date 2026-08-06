@@ -72,6 +72,12 @@ interface ControlsProps {
   setShaderCycleSpeed: (speed: number) => void;
   audioSync: boolean;
   setAudioSync: (sync: boolean) => void;
+  audioSource: 'mic' | 'midi';
+  setAudioSource: (source: 'mic' | 'midi') => void;
+  midiName: string | null;
+  onLoadMidiFile: (file: File) => void;
+  onLoadAudioFile: (file: File) => void;
+  midiAudioRef: React.RefObject<HTMLAudioElement | null>;
   speedQuant: number;
   setSpeedQuant: (q: number) => void;
   formulaQuant: number;
@@ -333,6 +339,12 @@ export default function Controls({
   setShaderCycleSpeed,
   audioSync,
   setAudioSync,
+  audioSource,
+  setAudioSource,
+  midiName,
+  onLoadMidiFile,
+  onLoadAudioFile,
+  midiAudioRef,
   speedQuant,
   setSpeedQuant,
   formulaQuant,
@@ -1046,27 +1058,111 @@ export default function Controls({
           <div className="h-[1px] bg-white/5" />
           
           <div className="space-y-4">
-            {/* Audio Sync Toggle */}
-            <div className="flex items-center justify-between group bg-indigo-500/10 p-2 rounded-lg border border-indigo-500/20">
-              <div>
-                <div className="text-xs font-semibold text-indigo-300 group-hover:text-indigo-200 transition-colors">Audio Beat Sync</div>
-                <div className="text-[9px] text-indigo-400/50 font-mono">Microphone Analysis</div>
+            {/* AUDIO section: one master switch. Everything audio-specific
+                (source, meters, MIDI loader, audio shaders in the library)
+                exists only while this is on. */}
+            <div className={cn(
+              "space-y-3 rounded-lg border p-3 transition-colors",
+              audioSync ? "border-indigo-400/30 bg-indigo-500/10" : "border-white/10 bg-white/[0.03]"
+            )}>
+              <div className="flex items-center justify-between group">
+                <div>
+                  <div className="text-xs font-semibold text-indigo-300 group-hover:text-indigo-200 transition-colors">Audio Sync</div>
+                  <div className="text-[9px] text-indigo-400/50 font-mono">
+                    {audioSync ? 'Audio shaders + reactive visuals active' : 'Enables audio shaders, meters & beat cycling'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAudioSync(!audioSync)}
+                  aria-label="Audio sync"
+                  aria-pressed={audioSync}
+                  className={cn(
+                    "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center px-1",
+                    audioSync ? "bg-indigo-500" : "bg-white/10"
+                  )}
+                >
+                  <div className={cn(
+                    "w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm",
+                    audioSync ? "translate-x-5" : "translate-x-0"
+                  )} />
+                </button>
               </div>
-              <button
-                onClick={() => setAudioSync(!audioSync)}
-                className={cn(
-                  "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center px-1",
-                  audioSync ? "bg-indigo-500" : "bg-white/10"
-                )}
-              >
-                <div className={cn(
-                  "w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm",
-                  audioSync ? "translate-x-5" : "translate-x-0"
-                )} />
-              </button>
-            </div>
 
-            {audioSync && <BandMeter />}
+              {audioSync && (
+                <>
+                  <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-black/30 p-1">
+                    <button
+                      onClick={() => setAudioSource('mic')}
+                      aria-pressed={audioSource === 'mic'}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors",
+                        audioSource === 'mic' ? "bg-indigo-500/30 text-indigo-100" : "text-white/35 hover:bg-white/[0.08] hover:text-white/70"
+                      )}
+                      type="button"
+                    >
+                      Microphone
+                    </button>
+                    <button
+                      onClick={() => setAudioSource('midi')}
+                      aria-pressed={audioSource === 'midi'}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors",
+                        audioSource === 'midi' ? "bg-fuchsia-500/25 text-fuchsia-100" : "text-white/35 hover:bg-white/[0.08] hover:text-white/70"
+                      )}
+                      type="button"
+                    >
+                      MIDI File
+                    </button>
+                  </div>
+
+                  {audioSource === 'midi' && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="rounded-md border border-fuchsia-400/25 bg-fuchsia-500/10 py-1.5 text-center text-[9px] font-mono uppercase text-fuchsia-200 transition-colors hover:bg-fuchsia-500/25 cursor-pointer">
+                          Load .mid
+                          <input
+                            type="file"
+                            accept=".mid,.midi,audio/midi"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) onLoadMidiFile(file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        <label className="rounded-md border border-white/10 bg-white/[0.05] py-1.5 text-center text-[9px] font-mono uppercase text-white/55 transition-colors hover:bg-white/[0.12] cursor-pointer">
+                          Load audio
+                          <input
+                            type="file"
+                            accept="audio/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) onLoadAudioFile(file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <div className="text-[9px] font-mono text-white/40 truncate">
+                        {midiName ?? 'Load a .mid score + its audio rendition (.mp3/.wav)'}
+                      </div>
+                    </div>
+                  )}
+
+                  <BandMeter />
+                </>
+              )}
+
+              {/* Always mounted so the ref survives source switches and the
+                  window.harmonicsMidi.load() hook can set src immediately. */}
+              <audio
+                ref={midiAudioRef}
+                controls
+                className={cn("w-full h-8", audioSync && audioSource === 'midi' ? '' : 'hidden')}
+              />
+            </div>
 
             {/* Shuffle order */}
             <div className="flex items-center justify-between group">
