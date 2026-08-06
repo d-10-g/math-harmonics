@@ -185,6 +185,28 @@ const FIRST_VISIT = (() => {
   }
 })();
 
+// The welcome overlay shows once per person (not just per pristine browser):
+// gated by its own flag so users whose saved state predates the demo still
+// get the intro exactly once. `?demo` in the URL forces it any time.
+const WELCOMED_KEY = 'harmonics.welcomed.v2';
+const SHOW_WELCOME = (() => {
+  try {
+    if (new URLSearchParams(location.search).has('demo')) return true;
+    if (location.hash) return false; // share links go straight to their scene
+    return !localStorage.getItem(WELCOMED_KEY);
+  } catch {
+    return false;
+  }
+})();
+
+function markWelcomed() {
+  try {
+    localStorage.setItem(WELCOMED_KEY, '1');
+  } catch {
+    // Storage unavailable; the overlay may show again next visit.
+  }
+}
+
 if (FIRST_VISIT) {
   Object.assign(initialShared, {
     formulaId: 'surf-12', // Squish Torus (Neon Reactor combo)
@@ -909,10 +931,17 @@ export default function App() {
   };
 
   const [showHelp, setShowHelp] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(FIRST_VISIT);
+  const [showWelcome, setShowWelcome] = useState(SHOW_WELCOME);
 
+  // Stages the full demo from ANY state (returning users included), so it
+  // also powers the permanent "Sonata Demo" chip in the sidebar.
   const startDemo = () => {
     setShowWelcome(false);
+    markWelcomed();
+    const neonReactor = COMBOS.find((combo) => combo.id === 'combo-neon-reactor');
+    if (neonReactor) applyCombo(neonReactor);
+    setAutoCycleFormula(true);
+    setFormulaQuant(3); // new formula every 4th beat
     setAudioSync(true);
     setAudioSource('midi');
     const audio = midiAudioRef.current;
@@ -926,6 +955,7 @@ export default function App() {
 
   const skipDemo = () => {
     setShowWelcome(false);
+    markWelcomed();
     setAudioSync(false);
   };
   const [copiedLink, setCopiedLink] = useState(false);
@@ -1012,6 +1042,7 @@ export default function App() {
         <Sidebar
           selectedFormula={selectedFormula}
           onApplyCombo={applyCombo}
+          onPlayDemo={startDemo}
           audioSync={audioSync}
           onSelect={handleSelectPreset}
           selectedShader={selectedShader}

@@ -10,6 +10,7 @@ interface SidebarProps {
   selectedFormula: Formula;
   onSelect: (formula: Formula) => void;
   onApplyCombo: (combo: Combo) => void;
+  onPlayDemo: () => void;
   audioSync: boolean;
   selectedShader: ShaderPreset;
   onSelectShader: (shader: ShaderPreset) => void;
@@ -121,6 +122,7 @@ export default function Sidebar({
   selectedFormula,
   onSelect,
   onApplyCombo,
+  onPlayDemo,
   audioSync,
   selectedShader,
   onSelectShader,
@@ -319,6 +321,14 @@ export default function Sidebar({
             <span>Combos — one-tap scenes</span>
           </div>
           <div className="flex gap-1.5 overflow-x-auto custom-scrollbar pb-1.5">
+            <button
+              onClick={onPlayDemo}
+              className="shrink-0 rounded-md border border-amber-400/40 bg-gradient-to-r from-amber-500/20 to-fuchsia-500/20 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-[0.08em] text-amber-200 transition-colors hover:from-amber-500/35 hover:to-fuchsia-500/35"
+              title="Play the built-in sonata demo: the score drives the visuals"
+              type="button"
+            >
+              ♪ Sonata Demo
+            </button>
             {COMBOS.map((combo) => (
               <button
                 key={combo.id}
