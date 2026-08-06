@@ -171,6 +171,33 @@ function FooterVerts() {
 // Read once at module load: URL hash > localStorage > defaults.
 const initialShared = loadSharedState();
 
+// A truly fresh visit (base URL, nothing saved) opens on the demo scene:
+// Neon Reactor staged with the bundled sonata, ready for one-tap playback.
+// The welcome overlay's Play button provides the autoplay gesture browsers
+// require. Share links and returning visitors are untouched.
+const DEMO_MIDI_URL = './demo/martina-sonata.mid';
+const DEMO_AUDIO_URL = './demo/martina-sonata.mp3';
+const FIRST_VISIT = (() => {
+  try {
+    return !location.hash && !localStorage.getItem('harmonics.state.v1');
+  } catch {
+    return false;
+  }
+})();
+
+if (FIRST_VISIT) {
+  Object.assign(initialShared, {
+    formulaId: 'surf-12', // Squish Torus (Neon Reactor combo)
+    show3D: true,
+    webgpuMaterial: 'neon',
+    webgpuLightingPreset: 'underlight',
+    postFX: true,
+    bloomIntensity: 1.8,
+    speed: 0.7,
+    audioSource: 'midi'
+  } satisfies Partial<typeof initialShared>);
+}
+
 // Favorites live in the Sidebar's localStorage set as `formula-<id>` /
 // `shader-<id>` keys; cycling reads them fresh each step so stars toggled
 // mid-session take effect immediately.
@@ -251,11 +278,11 @@ export default function App() {
   const [webgpuGeometryCycleSpeed, setWebgpuGeometryCycleSpeed] = useState(5);
   const [webgpuMaterialCycleSpeed, setWebgpuMaterialCycleSpeed] = useState(4.5);
   
-  const [autoCycleFormula, setAutoCycleFormula] = useState(false);
+  const [autoCycleFormula, setAutoCycleFormula] = useState(FIRST_VISIT);
   const [autoCycleShader, setAutoCycleShader] = useState(false);
   const [formulaCycleSpeed, setFormulaCycleSpeed] = useState(3); // Seconds
   const [shaderCycleSpeed, setShaderCycleSpeed] = useState(5); // Seconds
-  const [audioSync, setAudioSync] = useState(false);
+  const [audioSync, setAudioSync] = useState(FIRST_VISIT);
   const audioSyncRef = useRef(audioSync);
   useEffect(() => { audioSyncRef.current = audioSync; }, [audioSync]);
   const [audioSource, setAudioSource] = useState<'mic' | 'midi'>(initialShared.audioSource ?? 'mic');
@@ -264,7 +291,7 @@ export default function App() {
   
   // Quantization (-10 to +10)
   const [speedQuant, setSpeedQuant] = useState(0); 
-  const [formulaQuant, setFormulaQuant] = useState(0);
+  const [formulaQuant, setFormulaQuant] = useState(FIRST_VISIT ? 3 : 0); // demo: new formula every 4th beat
   const [shaderQuant, setShaderQuant] = useState(0);
   const [bpmInterval, setBpmInterval] = useState(500); // ms
 
@@ -882,6 +909,25 @@ export default function App() {
   };
 
   const [showHelp, setShowHelp] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(FIRST_VISIT);
+
+  const startDemo = () => {
+    setShowWelcome(false);
+    setAudioSync(true);
+    setAudioSource('midi');
+    const audio = midiAudioRef.current;
+    if (audio) {
+      audio.src = DEMO_AUDIO_URL;
+      // Called inside the click gesture, so autoplay is permitted.
+      void audio.play().catch((error) => console.warn('Demo playback blocked:', error));
+    }
+    void loadMidiSource(DEMO_MIDI_URL);
+  };
+
+  const skipDemo = () => {
+    setShowWelcome(false);
+    setAudioSync(false);
+  };
   const [copiedLink, setCopiedLink] = useState(false);
   const copyShareLink = async () => {
     try {
@@ -1160,6 +1206,39 @@ export default function App() {
         </div>
         <FooterStats />
       </footer>
+
+      {showWelcome && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md" role="dialog" aria-label="Welcome">
+          <div className="w-[min(92vw,560px)] rounded-2xl border border-fuchsia-400/25 bg-[#0b0e1a] p-8 text-center shadow-2xl shadow-fuchsia-950/30">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-400">
+              <svg viewBox="0 0 64 64" className="h-7 w-7"><path d="M8 32 C 14 12, 20 12, 26 32 S 38 52, 44 32 S 54 16, 58 24" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round" /></svg>
+            </div>
+            <h1 className="text-lg font-bold tracking-[0.18em] text-white">HARMONIC.OS</h1>
+            <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-white/60">
+              A living mathematical instrument. This demo performs{' '}
+              <span className="text-fuchsia-300">Martina&apos;s Sonata</span> while the score itself drives the
+              visuals — every fourth beat sculpts a new formula, and the music lights the scene.
+            </p>
+            <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
+              <button
+                onClick={startDemo}
+                className="rounded-xl border border-fuchsia-400/40 bg-gradient-to-r from-fuchsia-600/80 to-indigo-600/80 px-6 py-3 text-[12px] font-bold uppercase tracking-[0.18em] text-white transition-all hover:from-fuchsia-500/90 hover:to-indigo-500/90 active:scale-[0.98]"
+              >
+                ▶ Play the sonata
+              </button>
+              <button
+                onClick={skipDemo}
+                className="rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-[12px] font-bold uppercase tracking-[0.18em] text-white/55 transition-colors hover:bg-white/10 hover:text-white/80"
+              >
+                Explore silently
+              </button>
+            </div>
+            <p className="mt-4 text-[10px] font-mono text-white/30">
+              Works in the browser, on Apple Vision Pro, and Meta Quest (WebXR) · press ? for help
+            </p>
+          </div>
+        </div>
+      )}
 
       {showHelp && (
         <div
