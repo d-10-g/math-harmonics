@@ -210,6 +210,9 @@ function markWelcomed() {
 if (FIRST_VISIT) {
   Object.assign(initialShared, {
     formulaId: 'surf-12', // Squish Torus (Neon Reactor combo)
+    // The WebGL path carries the audio-reactive rendering (bloom pulse,
+    // light pulses, scale pulse) — the demo needs it.
+    rendererMode: 'webgl',
     show3D: true,
     webgpuMaterial: 'neon',
     webgpuLightingPreset: 'underlight',
@@ -940,6 +943,7 @@ export default function App() {
     markWelcomed();
     const neonReactor = COMBOS.find((combo) => combo.id === 'combo-neon-reactor');
     if (neonReactor) applyCombo(neonReactor);
+    setRendererMode('webgl'); // audio-reactive rendering lives on this path
     setAutoCycleFormula(true);
     setFormulaQuant(3); // new formula every 4th beat
     setAudioSync(true);
