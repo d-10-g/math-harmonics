@@ -304,7 +304,7 @@ export default function App() {
   const [webgpuGeometryCycleSpeed, setWebgpuGeometryCycleSpeed] = useState(5);
   const [webgpuMaterialCycleSpeed, setWebgpuMaterialCycleSpeed] = useState(4.5);
   
-  const [autoCycleFormula, setAutoCycleFormula] = useState(FIRST_VISIT);
+  const [autoCycleFormula, setAutoCycleFormula] = useState(false);
   const [autoCycleShader, setAutoCycleShader] = useState(false);
   const [formulaCycleSpeed, setFormulaCycleSpeed] = useState(3); // Seconds
   const [shaderCycleSpeed, setShaderCycleSpeed] = useState(5); // Seconds
@@ -362,8 +362,8 @@ export default function App() {
   }, []);
 
   // Quantization (-10 to +10)
-  const [speedQuant, setSpeedQuant] = useState(0); 
-  const [formulaQuant, setFormulaQuant] = useState(FIRST_VISIT ? 3 : 0); // demo: new formula every 4th beat
+  const [speedQuant, setSpeedQuant] = useState(-6); // 1/7x — calm phase drift under audio sync
+  const [formulaQuant, setFormulaQuant] = useState(0);
   const [shaderQuant, setShaderQuant] = useState(0);
   const [bpmInterval, setBpmInterval] = useState(500); // ms
 
@@ -434,6 +434,11 @@ export default function App() {
 
   // Load a MIDI file (and optionally its audio rendition) for MIDI-driven
   // sync. Also exposed as window.harmonicsMidi.load(midiUrl, audioUrl).
+  // URL loads with no explicit audio probe the same folder for a rendition
+  // sharing the basename (.mp3/.wav/.aif/.aiff) and use the first that
+  // exists. Local file picks can't do that — the browser sandbox has no
+  // access to a picked file's folder — so the file dialog accepts a
+  // multi-select and pairs the audio from the same selection instead.
   const loadMidiSource = async (midiSource: File | string, audioSrc?: File | string) => {
     const buffer = typeof midiSource === 'string'
       ? await fetch(midiSource).then((r) => r.arrayBuffer())
@@ -445,7 +450,34 @@ export default function App() {
     setMidiInfo({ ...parsed, name });
     if (audioSrc && midiAudioRef.current) {
       midiAudioRef.current.src = typeof audioSrc === 'string' ? audioSrc : URL.createObjectURL(audioSrc);
+    } else if (typeof midiSource === 'string' && midiAudioRef.current) {
+      const base = midiSource.replace(/\.[^./]+$/, '');
+      for (const ext of ['mp3', 'wav', 'aif', 'aiff']) {
+        const candidate = `${base}.${ext}`;
+        try {
+          const head = await fetch(candidate, { method: 'HEAD' });
+          // Dev/SPA servers answer missing paths with 200 text/html fallbacks.
+          const type = head.headers.get('content-type') ?? '';
+          if (head.ok && !type.includes('text/html')) {
+            midiAudioRef.current.src = candidate;
+            break;
+          }
+        } catch {
+          // Unreachable candidate; keep probing.
+        }
+      }
     }
+  };
+
+  // File-dialog path: one multi-select can carry the .mid and its audio
+  // rendition together; pair them by kind.
+  const loadMidiFiles = async (files: File[]) => {
+    const mid = files.find((f) => /\.midi?$/i.test(f.name));
+    if (!mid) return;
+    const audio = files.find(
+      (f) => f !== mid && (/\.(mp3|wav|aif|aiff|m4a|ogg|flac)$/i.test(f.name) || (f.type.startsWith('audio/') && !f.type.includes('midi')))
+    );
+    await loadMidiSource(mid, audio);
   };
 
   useEffect(() => {
@@ -1034,8 +1066,6 @@ export default function App() {
     const opener = COMBOS.find((combo) => combo.id === 'combo-smoked-glass');
     if (opener) applyCombo(opener);
     setRendererMode('webgl'); // audio-reactive rendering lives on this path
-    setAutoCycleFormula(true);
-    setFormulaQuant(3); // new formula every 4th beat
     setAudioSync(true);
     setAudioSource('midi');
     // The demo is the constellation's stage: re-enable it even if a returning
@@ -1297,7 +1327,7 @@ export default function App() {
           midiName={midiInfo ? `${midiInfo.name} · ${midiInfo.notes.length} notes · ${midiInfo.bpm} BPM` : null}
           noteMeshes={noteMeshes}
           setNoteMeshes={setNoteMeshes}
-          onLoadMidiFile={(file) => { void loadMidiSource(file); }}
+          onLoadMidiFile={(files) => { void loadMidiFiles(files); }}
           onLoadAudioFile={(file) => {
             if (midiAudioRef.current) midiAudioRef.current.src = URL.createObjectURL(file);
           }}
@@ -1351,7 +1381,7 @@ export default function App() {
               A living mathematical instrument. This demo performs{' '}
               <span className="text-fuchsia-300">Martina&apos;s Sonata</span> while the score itself drives the
               visuals — every note takes the stage as its own floating form, low notes left and high notes
-              right, and every fourth beat sculpts them all into a new formula.
+              right, swelling and fading exactly as the score sounds them.
             </p>
             <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
               <button

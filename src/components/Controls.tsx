@@ -77,7 +77,7 @@ interface ControlsProps {
   midiName: string | null;
   noteMeshes: boolean;
   setNoteMeshes: (on: boolean) => void;
-  onLoadMidiFile: (file: File) => void;
+  onLoadMidiFile: (files: File[]) => void;
   onLoadAudioFile: (file: File) => void;
   midiAudioRef: React.RefObject<HTMLAudioElement | null>;
   speedQuant: number;
@@ -1123,14 +1123,15 @@ export default function Controls({
                     <div className="space-y-2">
                       <div className="grid grid-cols-2 gap-2">
                         <label className="rounded-md border border-fuchsia-400/25 bg-fuchsia-500/10 py-1.5 text-center text-[9px] font-mono uppercase text-fuchsia-200 transition-colors hover:bg-fuchsia-500/25 cursor-pointer">
-                          Load .mid
+                          Load .mid (+audio)
                           <input
                             type="file"
-                            accept=".mid,.midi,audio/midi"
+                            multiple
+                            accept=".mid,.midi,audio/midi,.mp3,.wav,.aif,.aiff,.m4a,.ogg,.flac,audio/*"
                             className="hidden"
                             onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) onLoadMidiFile(file);
+                              const files = Array.from(e.target.files ?? []);
+                              if (files.length) onLoadMidiFile(files);
                               e.target.value = '';
                             }}
                           />
@@ -1150,7 +1151,7 @@ export default function Controls({
                         </label>
                       </div>
                       <div className="text-[9px] font-mono text-white/40 truncate">
-                        {midiName ?? 'Load a .mid score + its audio rendition (.mp3/.wav)'}
+                        {midiName ?? 'Select the .mid and its audio rendition together (one multi-select works)'}
                       </div>
                       <div className="flex items-center justify-between group">
                         <div>

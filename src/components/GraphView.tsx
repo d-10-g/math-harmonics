@@ -1407,19 +1407,10 @@ function NoteConstellation({
       const material = materials[slot];
 
       if (!entry) {
-        // Idle stage: with no notes sounding (before play, long rests, or a
-        // paused engine) slot 0 stands in as a single centered visual so the
-        // constellation never leaves an empty stage.
-        if (slot === 0 && active.length === 0) {
-          mesh.visible = true;
-          mesh.position.set(0, 0, 0);
-          mesh.rotation.set(0, time * 0.2, 0);
-          mesh.scale.setScalar(0.85);
-          material.emissiveIntensity = material.userData.baseEmissiveIntensity as number;
-          (material.emissive as THREE.Color).copy(material.userData.baseEmissive as THREE.Color);
-        } else {
-          mesh.visible = false;
-        }
+        // Silence means an empty stage: the constellation exists only while
+        // notes sound, so rests read as rests instead of summoning a lone
+        // oversized stand-in.
+        mesh.visible = false;
         continue;
       }
 
