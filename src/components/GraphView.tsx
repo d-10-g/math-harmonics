@@ -18,6 +18,7 @@ import { DEFAULT_VERTEX_SHADER, PRESET_SHADERS } from '../shaders';
 import { XR, XROrigin, useXR, useXRInputSourceState } from '@react-three/xr';
 import { clockStore, getClockTime, reportVerts } from '../lib/clock';
 import { lightingRigSettings } from '../lib/lighting';
+import { COMBOS } from '../lib/combos';
 import { createPhysicalMaterial } from '../lib/materials';
 import { buildParametricGeometry, surfaceMidQ, SURFACE_SEGMENTS_DESKTOP, SURFACE_SEGMENTS_XR } from '../lib/parametricSurface';
 import { buildRigEnvironmentScene, disposeEnvironmentScene } from '../lib/environments';
@@ -1031,10 +1032,13 @@ function FormulaLine({
 
     // MIDI note morphing: the melody line steers the same morph handle the
     // XR hand does — pitch reshapes the geometry, note-on velocity kicks it.
+    // The Note FX dials scale the depth and can gate the channel entirely.
     const clockState = clockStore.getState();
-    if (clockState.midiLive) {
-      const melodyMod = THREE.MathUtils.lerp(0.78, 1.5, clockState.melody);
-      return scalarTarget.baseScalar * melodyMod * (1 + clockState.notePulse * 0.16);
+    const morphOn = clockState.noteFxMode === 'both' || clockState.noteFxMode === 'morph';
+    if (clockState.midiLive && morphOn && clockState.noteFxAmount > 0) {
+      const amount = clockState.noteFxAmount;
+      const melodyMod = 1 + (THREE.MathUtils.lerp(0.78, 1.5, clockState.melody) - 1) * amount;
+      return scalarTarget.baseScalar * melodyMod * (1 + clockState.notePulse * 0.16 * amount);
     }
 
     return scalarTarget.baseScalar;
@@ -1179,7 +1183,9 @@ function FormulaLine({
         physicalMaterial.userData.baseEmissive = physicalMaterial.emissiveIntensity;
       }
       const base = physicalMaterial.userData.baseEmissive as number;
-      const emissiveDrive = Math.max(clock.bass, clock.notePulse * 0.75);
+      const pulseOn = clock.noteFxMode === 'both' || clock.noteFxMode === 'pulse';
+      const pulseAmt = pulseOn ? clock.noteFxAmount : 0;
+      const emissiveDrive = Math.min(1.2, Math.max(clock.bass, clock.notePulse * 0.75 * pulseAmt));
       physicalMaterial.emissiveIntensity = clock.audioSync ? base + (0.25 + base * 1.8) * emissiveDrive : base;
     }
     const nextScalar = getSValue();
@@ -1194,7 +1200,8 @@ function FormulaLine({
     if (groupRef.current) {
       // Universal audio pulse: scales the whole visual with the bass so even
       // unlit GLSL looks visibly react to music.
-      groupRef.current.scale.setScalar(clock.audioSync ? 1 + clock.bass * 0.055 + clock.notePulse * 0.045 : 1);
+      const scalePulseAmt = clock.noteFxMode === 'both' || clock.noteFxMode === 'pulse' ? clock.noteFxAmount : 0;
+      groupRef.current.scale.setScalar(clock.audioSync ? 1 + clock.bass * 0.055 + clock.notePulse * 0.045 * scalePulseAmt : 1);
       if (show3D) {
         groupRef.current.position.y = Math.sin(time * 2) * 0.5;
         groupRef.current.rotation.x = Math.sin(time * 0.5) * 0.1;
@@ -1286,13 +1293,22 @@ function FormulaLine({
   );
 }
 
-// One mesh per sounding note: every note-on births an echo of the current
-// formula at its pitch position (low notes left, high notes right, arced
-// back at the edges), sized by velocity, popped in over the attack and
-// shrunk away over the release. All copies share one throttled geometry;
-// per-note life lives entirely in transforms and material modulation, so
-// a 6-note chord costs 6 draw calls, not 6 rebuilds.
-const NOTE_MESH_POOL = 12;
+// One mesh per sounding note: every note-on births an echo of a formula at
+// its pitch position (low notes left, high notes right, arced back at the
+// edges), sized by velocity, popped in over the attack and shrunk away over
+// the release. Multi-instrument scores split into groups (distinct
+// track:channel pairs ranked by note count, capped) and each group renders
+// as its own formula + material on its own depth layer, so instruments are
+// tellable apart at a glance. All meshes in a group share one throttled
+// geometry, and rebuilds round-robin one group per tick — four instruments
+// cost the same per-frame rebuild budget as one.
+const NOTE_GROUP_CAP = 4;
+const NOTE_GROUP_POOL = 6; // concurrent meshes per instrument group
+const NOTE_GROUP_REBUILD_MS = 240;
+
+// Distinct, tone-safe looks for groups beyond the first; group 0 wears the
+// user's selected material.
+const NOTE_GROUP_PROFILES: Exclude<WebGPUMaterialProfile, 'auto'>[] = ['glass', 'ruby', 'copper', 'ice', 'jade'];
 
 function NoteConstellation({
   formula,
@@ -1305,70 +1321,108 @@ function NoteConstellation({
   materialProfile?: WebGPUMaterialProfile;
   geometryMode?: FormulaGeometryMode;
 }) {
-  const geometryMode = geometryModeOverride ?? resolveFormulaGeometryMode(formula);
-  const scalarTarget = useMemo(() => resolveFormulaScalarTarget(formula), [formula]);
-  const compiled = useMemo(() => {
-    try {
-      return { x: compile(scalarTarget.x), y: compile(scalarTarget.y), z: compile(scalarTarget.z), valid: true };
-    } catch {
-      return { valid: false, x: null, y: null, z: null };
+  // Group 0 plays the selected formula; further instrument groups take
+  // distinct formulas from the curated combos so each instrument keeps a
+  // recognizable silhouette.
+  const groupFormulas = useMemo(() => {
+    const list: Formula[] = [formula];
+    for (const combo of COMBOS) {
+      if (list.length >= NOTE_GROUP_CAP) break;
+      const candidate = PRESET_FORMULAS.find((p) => p.id === combo.formulaId);
+      if (candidate && !list.some((f) => f.id === candidate.id)) list.push(candidate);
     }
-  }, [scalarTarget]);
+    for (const candidate of PRESET_FORMULAS) {
+      if (list.length >= NOTE_GROUP_CAP) break;
+      if (!list.some((f) => f.id === candidate.id)) list.push(candidate);
+    }
+    return list;
+  }, [formula]);
+
+  const groupCompiled = useMemo(() => groupFormulas.map((groupFormula) => {
+    const scalarTarget = resolveFormulaScalarTarget(groupFormula);
+    try {
+      return {
+        formula: groupFormula,
+        scalarTarget,
+        x: compile(scalarTarget.x),
+        y: compile(scalarTarget.y),
+        z: compile(scalarTarget.z),
+        valid: true
+      };
+    } catch {
+      return { formula: groupFormula, scalarTarget, x: null, y: null, z: null, valid: false };
+    }
+  }), [groupFormulas]);
 
   const groupRef = useRef<THREE.Group>(null);
   const meshRefs = useRef<Array<THREE.Mesh | null>>([]);
-  // Note id -> pool slot, so a sustained note keeps its mesh while
-  // neighbours come and go.
-  const slotByIdRef = useRef(new Map<number, number>());
+  // Per-group note id -> slot maps, so a sustained note keeps its mesh
+  // while neighbours come and go.
+  const slotMapsRef = useRef(Array.from({ length: NOTE_GROUP_CAP }, () => new Map<number, number>()));
 
-  // Pool materials: one clone per slot so each note can carry its own
-  // emissive level and pitch-tinted hue. 'auto' (GLSL shader) falls back to
-  // pearl, same as Photo Mode.
   const materials = useMemo(() => {
-    const profile = materialProfile !== 'auto' ? materialProfile : 'pearl';
-    return Array.from({ length: NOTE_MESH_POOL }, () => {
+    const first = materialProfile !== 'auto' ? materialProfile : 'pearl';
+    const profiles: Exclude<WebGPUMaterialProfile, 'auto'>[] = [first];
+    for (const profile of NOTE_GROUP_PROFILES) {
+      if (profiles.length >= NOTE_GROUP_CAP) break;
+      if (!profiles.includes(profile)) profiles.push(profile);
+    }
+    return profiles.map((profile) => Array.from({ length: NOTE_GROUP_POOL }, () => {
       const material = createPhysicalMaterial(profile, showWireframe);
       material.userData.baseEmissive = material.emissive.clone();
       material.userData.baseEmissiveIntensity = material.emissiveIntensity;
       return material;
-    });
+    }));
   }, [materialProfile, showWireframe]);
 
-  useEffect(() => () => materials.forEach((m) => m.dispose()), [materials]);
+  useEffect(() => () => materials.flat().forEach((m) => m.dispose()), [materials]);
 
-  // One shared geometry for every note mesh, rebuilt on a relaxed cadence
-  // (XR-tier segment counts: up to 12 copies are on screen).
-  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
+  // Group geometries live in a ref and are swapped from the frame loop; the
+  // version bump re-renders so the mesh JSX picks up new objects.
+  const geometriesRef = useRef<(THREE.BufferGeometry | null)[]>(Array(NOTE_GROUP_CAP).fill(null));
+  const [, setGeometryVersion] = useState(0);
   const lastRebuildRef = useRef(0);
+  const rebuildCursorRef = useRef(0);
 
+  const buildGroupGeometry = (g: number, t: number) => {
+    const entry = groupCompiled[g];
+    if (!entry || !entry.valid) return;
+    const geometryMode = g === 0
+      ? (geometryModeOverride ?? resolveFormulaGeometryMode(entry.formula))
+      : resolveFormulaGeometryMode(entry.formula);
+    const built = entry.formula.parametric
+      ? buildParametricGeometry(entry.formula, entry, t, entry.scalarTarget.baseScalar, SURFACE_SEGMENTS_XR)
+      : buildFormulaGeometry(sampleFormulaPoints(entry, t, entry.scalarTarget.baseScalar, 320), geometryMode, entry.formula.name, t);
+    geometriesRef.current[g]?.dispose();
+    geometriesRef.current[g] = built;
+    setGeometryVersion((v) => v + 1);
+  };
+
+  // Formula switches rebuild the lead group immediately; the other groups
+  // refresh on the round-robin within a second.
   useEffect(() => {
-    if (!compiled.valid) return;
-    const t = getClockTime();
-    if (formula.parametric) {
-      setGeometry(buildParametricGeometry(formula, compiled, t, scalarTarget.baseScalar, SURFACE_SEGMENTS_XR));
-    } else {
-      const points = sampleFormulaPoints(compiled, t, scalarTarget.baseScalar, 320);
-      setGeometry(buildFormulaGeometry(points, geometryMode, formula.name, t));
-    }
+    buildGroupGeometry(0, getClockTime());
     lastRebuildRef.current = performance.now();
-  }, [compiled, formula, geometryMode, scalarTarget.baseScalar]);
+  }, [groupCompiled, geometryModeOverride]);
 
-  useEffect(() => () => geometry?.dispose(), [geometry]);
+  useEffect(() => () => {
+    geometriesRef.current.forEach((geometry) => geometry?.dispose());
+    geometriesRef.current = Array(NOTE_GROUP_CAP).fill(null);
+  }, []);
 
   useFrame(() => {
     const time = getClockTime();
     const clock = clockStore.getState();
     const active = clock.activeNotes;
+    const usedGroups = Math.max(1, Math.min(NOTE_GROUP_CAP, clock.noteGroupCount));
+    const fxAmount = clock.noteFxAmount;
 
     const now = performance.now();
-    if (compiled.valid && now - lastRebuildRef.current >= 420) {
+    if (now - lastRebuildRef.current >= NOTE_GROUP_REBUILD_MS) {
       lastRebuildRef.current = now;
-      if (formula.parametric) {
-        setGeometry(buildParametricGeometry(formula, compiled, time, scalarTarget.baseScalar, SURFACE_SEGMENTS_XR));
-      } else {
-        const points = sampleFormulaPoints(compiled, time, scalarTarget.baseScalar, 320);
-        setGeometry(buildFormulaGeometry(points, geometryMode, formula.name, time));
-      }
+      const g = rebuildCursorRef.current % usedGroups;
+      rebuildCursorRef.current = (rebuildCursorRef.current + 1) % usedGroups;
+      buildGroupGeometry(g, time);
     }
 
     if (groupRef.current) {
@@ -1376,80 +1430,88 @@ function NoteConstellation({
       groupRef.current.position.y = Math.sin(time * 1.4) * 0.35;
     }
 
-    // Reconcile note ids to pool slots.
-    const slots = slotByIdRef.current;
-    const liveIds = new Set(active.map((n) => n.id));
-    for (const [id, slot] of slots) {
-      if (!liveIds.has(id)) slots.delete(id);
-    }
-    const used = new Set(slots.values());
-    for (const note of active) {
-      if (slots.has(note.id)) continue;
-      for (let slot = 0; slot < NOTE_MESH_POOL; slot++) {
-        if (!used.has(slot)) {
-          used.add(slot);
-          slots.set(note.id, slot);
-          break;
+    for (let g = 0; g < NOTE_GROUP_CAP; g++) {
+      const slots = slotMapsRef.current[g];
+      const groupNotes = active.filter((n) => n.group === g);
+      const liveIds = new Set(groupNotes.map((n) => n.id));
+      for (const [id] of slots) {
+        if (!liveIds.has(id)) slots.delete(id);
+      }
+      const used = new Set(slots.values());
+      for (const note of groupNotes) {
+        if (slots.has(note.id)) continue;
+        for (let slot = 0; slot < NOTE_GROUP_POOL; slot++) {
+          if (!used.has(slot)) {
+            used.add(slot);
+            slots.set(note.id, slot);
+            break;
+          }
         }
       }
-    }
 
-    const assigned: Array<{ note: (typeof active)[number]; slot: number }> = [];
-    for (const note of active) {
-      const slot = slots.get(note.id);
-      if (slot !== undefined) assigned.push({ note, slot });
-    }
+      // Each instrument gets its own depth layer and a gentle vertical
+      // stagger so groups read as parallel voices, not one crowd.
+      const depth = -g * 2.4;
+      const lift = (g - (usedGroups - 1) / 2) * 1.15;
 
-    for (let slot = 0; slot < NOTE_MESH_POOL; slot++) {
-      const mesh = meshRefs.current[slot];
-      if (!mesh) continue;
-      const entry = assigned.find((a) => a.slot === slot);
-      const material = materials[slot];
+      for (let slot = 0; slot < NOTE_GROUP_POOL; slot++) {
+        const mesh = meshRefs.current[g * NOTE_GROUP_POOL + slot];
+        if (!mesh) continue;
+        const note = groupNotes.find((n) => slots.get(n.id) === slot);
+        const material = materials[g]?.[slot];
 
-      if (!entry) {
-        // Silence means an empty stage: the constellation exists only while
-        // notes sound, so rests read as rests instead of summoning a lone
-        // oversized stand-in.
-        mesh.visible = false;
-        continue;
+        if (!note || !material) {
+          // Silence means an empty stage: the constellation exists only
+          // while notes sound, so rests read as rests.
+          mesh.visible = false;
+          continue;
+        }
+
+        const { pitch01, velocity01, env, id } = note;
+        const eased = 1 - Math.pow(1 - env, 3);
+        mesh.visible = eased > 0.01;
+        mesh.position.set(
+          (pitch01 - 0.5) * 17,
+          (pitch01 - 0.5) * 3.5 + lift + Math.sin(time * 1.6 + slot * 1.3 + g * 2.1) * 0.5,
+          -Math.abs(pitch01 - 0.5) * 6 + depth
+        );
+        mesh.rotation.set(
+          Math.sin(time * 0.7 + id) * 0.18,
+          time * (0.35 + pitch01 * 0.45) + id * 0.9,
+          0
+        );
+        // The FX amount dial scales the velocity accent, not the note's
+        // core lifecycle — at 0 every note is still born and released.
+        mesh.scale.setScalar((0.17 + velocity01 * 0.12 * fxAmount) * eased);
+
+        // Pitch tints the emissive: low notes warm, high notes cool.
+        const base = material.userData.baseEmissive as THREE.Color;
+        (material.emissive as THREE.Color).copy(base).offsetHSL((pitch01 - 0.5) * 0.22, 0.05, 0);
+        material.emissiveIntensity = (material.userData.baseEmissiveIntensity as number) * (0.6 + env * 1.5 * Math.max(0.35, fxAmount));
       }
-
-      const { pitch01, velocity01, env } = entry.note;
-      const eased = 1 - Math.pow(1 - env, 3);
-      mesh.visible = eased > 0.01;
-      mesh.position.set(
-        (pitch01 - 0.5) * 17,
-        (pitch01 - 0.5) * 3.5 + Math.sin(time * 1.6 + slot * 1.3) * 0.5,
-        -Math.abs(pitch01 - 0.5) * 6
-      );
-      mesh.rotation.set(
-        Math.sin(time * 0.7 + entry.note.id) * 0.18,
-        time * (0.35 + pitch01 * 0.45) + entry.note.id * 0.9,
-        0
-      );
-      mesh.scale.setScalar((0.17 + velocity01 * 0.12) * eased);
-
-      // Pitch tints the emissive: low notes warm, high notes cool.
-      const base = material.userData.baseEmissive as THREE.Color;
-      (material.emissive as THREE.Color).copy(base).offsetHSL((pitch01 - 0.5) * 0.22, 0.05, 0);
-      material.emissiveIntensity = (material.userData.baseEmissiveIntensity as number) * (0.6 + env * 1.5);
     }
   });
 
-  if (!geometry) return null;
-
   return (
     <group ref={groupRef}>
-      {Array.from({ length: NOTE_MESH_POOL }, (_, slot) => (
-        <mesh
-          key={slot}
-          ref={(mesh) => { meshRefs.current[slot] = mesh; }}
-          geometry={geometry}
-          material={materials[slot]}
-          frustumCulled={false}
-          visible={false}
-        />
-      ))}
+      {Array.from({ length: NOTE_GROUP_CAP }, (_, g) => {
+        const geometry = geometriesRef.current[g];
+        if (!geometry) return null;
+        return (
+          <group key={g}>
+            {Array.from({ length: NOTE_GROUP_POOL }, (_, slot) => (
+              <mesh
+                key={slot}
+                ref={(mesh) => { meshRefs.current[g * NOTE_GROUP_POOL + slot] = mesh; }}
+                geometry={geometry}
+                material={materials[g]?.[slot]}
+                frustumCulled={false}
+                visible={false}
+              />
+            ))}
+          </group>
+        );
+      })}
     </group>
   );
 }

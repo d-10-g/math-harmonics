@@ -12,7 +12,12 @@ export type ActiveNote = {
   pitch01: number; // normalized to the file's own pitch range
   velocity01: number;
   env: number; // attack -> sustain -> release envelope, 0..1
+  // Instrument group (distinct track:channel pairs, largest first, capped) —
+  // the constellation gives each group its own formula and material.
+  group: number;
 };
+
+export type NoteFxMode = 'both' | 'morph' | 'pulse' | 'off';
 
 export type ClockState = {
   time: number;
@@ -41,6 +46,10 @@ export type ClockState = {
   // one-mesh-per-note constellation renderer. Published by the MIDI engine
   // each frame while the music plays; frozen on pause; empty otherwise.
   activeNotes: ActiveNote[];
+  noteGroupCount: number;
+  // User dials for the note-driven accents (morph depth, velocity pops).
+  noteFxAmount: number; // 0..2, 1 = the tuned default
+  noteFxMode: NoteFxMode;
   // A/B loop: when both are set, playback wraps inside [loopStart, loopEnd).
   loopStart: number | null;
   loopEnd: number | null;
@@ -64,6 +73,9 @@ export const clockStore = createStore<ClockState>(() => ({
   notePulse: 0,
   midiLive: false,
   activeNotes: [],
+  noteGroupCount: 1,
+  noteFxAmount: 1,
+  noteFxMode: 'both',
   loopStart: null,
   loopEnd: null
 }));
@@ -94,6 +106,11 @@ export const setNoteSignals = (melody: number, notePulse: number) =>
   clockStore.setState({ melody, notePulse, midiLive: true });
 
 export const setActiveNotes = (activeNotes: ActiveNote[]) => clockStore.setState({ activeNotes });
+
+export const setNoteGroupCount = (noteGroupCount: number) => clockStore.setState({ noteGroupCount });
+
+export const setNoteFx = (noteFxAmount: number, noteFxMode: NoteFxMode) =>
+  clockStore.setState({ noteFxAmount, noteFxMode });
 
 export const markBeat = () => clockStore.setState({ lastBeatAt: performance.now() });
 

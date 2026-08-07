@@ -23,11 +23,11 @@ import {
 } from './constants';
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
-import { ActiveNote, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteSignals, startClock, useClockSnapshot } from './lib/clock';
+import { ActiveNote, NoteFxMode, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteFx, setNoteGroupCount, setNoteSignals, startClock, useClockSnapshot } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 import { COMBOS, Combo } from './lib/combos';
-import { parseMidi, ParsedMidi } from './lib/midi';
+import { gmInstrumentName, parseMidi, ParsedMidi } from './lib/midi';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 
@@ -315,6 +315,9 @@ export default function App() {
   // Constellation is the default MIDI experience; the gate below keeps it
   // inert until a MIDI session is actually live, so mic users see no change.
   const [noteMeshes, setNoteMeshes] = useState(initialShared.noteMeshes ?? true);
+  const [noteFxAmount, setNoteFxAmount] = useState(initialShared.noteFxAmount ?? 1);
+  const [noteFxMode, setNoteFxMode] = useState<NoteFxMode>(initialShared.noteFxMode ?? 'both');
+  useEffect(() => { setNoteFx(noteFxAmount, noteFxMode); }, [noteFxAmount, noteFxMode]);
   const audioSourceRef = useRef(audioSource);
   useEffect(() => { audioSourceRef.current = audioSource; }, [audioSource]);
   const [midiInfo, setMidiInfo] = useState<(ParsedMidi & { name: string }) | null>(null);
@@ -529,7 +532,22 @@ export default function App() {
     // fast attack, sustain until the score's note-off, then a release tail.
     const ATTACK = 0.045;
     const RELEASE = 0.4;
-    let sounding: Array<{ id: number; time: number; end: number; pitch: number; velocity: number }> = [];
+    let sounding: Array<{ id: number; time: number; end: number; pitch: number; velocity: number; group: number }> = [];
+
+    // Instrument groups: distinct track:channel pairs ranked by note count.
+    // The constellation renders each group as its own formula + material;
+    // beyond the cap, extra pairs fold onto existing groups.
+    const GROUP_CAP = 4;
+    const pairCounts = new Map<string, number>();
+    for (const note of midiInfo.notes) {
+      const key = `${note.track}:${note.channel}`;
+      pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+    }
+    const groupByPair = new Map<string, number>();
+    [...pairCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([key], rank) => groupByPair.set(key, rank % GROUP_CAP));
+    setNoteGroupCount(Math.min(GROUP_CAP, groupByPair.size));
 
     const step = () => {
       const t = audio.currentTime;
@@ -556,7 +574,14 @@ export default function App() {
         else treble = Math.min(1.2, treble + energy * 0.85);
         melodyTarget = (note.pitch - minPitch) / pitchSpan;
         notePulse = Math.min(1, notePulse + energy * 0.55);
-        sounding.push({ id, time: note.time, end: note.time + note.duration, pitch: note.pitch, velocity: note.velocity });
+        sounding.push({
+          id,
+          time: note.time,
+          end: note.time + note.duration,
+          pitch: note.pitch,
+          velocity: note.velocity,
+          group: groupByPair.get(`${note.track}:${note.channel}`) ?? 0
+        });
       }
       melody += (melodyTarget - melody) * 0.16;
 
@@ -570,7 +595,8 @@ export default function App() {
           id: n.id,
           pitch01: (n.pitch - minPitch) / pitchSpan,
           velocity01: Math.min(1, n.velocity / 96),
-          env: Math.min(1, (t - n.time) / ATTACK) * (t > n.end ? Math.max(0, 1 - (t - n.end) / RELEASE) : 1)
+          env: Math.min(1, (t - n.time) / ATTACK) * (t > n.end ? Math.max(0, 1 - (t - n.end) / RELEASE) : 1),
+          group: n.group
         })));
 
         while (beatIndex < midiInfo.beats.length && midiInfo.beats[beatIndex] <= t) {
@@ -626,6 +652,7 @@ export default function App() {
     return () => {
       cancelAnimationFrame(raf);
       clearAudioBands();
+      setNoteGroupCount(1);
     };
   }, [audioSync, audioSource, midiInfo]);
 
@@ -946,9 +973,11 @@ export default function App() {
       postFX,
       bloomIntensity,
       audioSource,
-      noteMeshes
+      noteMeshes,
+      noteFxAmount,
+      noteFxMode
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -1324,9 +1353,18 @@ export default function App() {
           setAudioSync={setAudioSync}
           audioSource={audioSource}
           setAudioSource={setAudioSource}
-          midiName={midiInfo ? `${midiInfo.name} · ${midiInfo.notes.length} notes · ${midiInfo.bpm} BPM` : null}
+          midiName={midiInfo ? (() => {
+            const channels = [...new Set(midiInfo.notes.map((n) => n.channel))];
+            const instruments = channels.slice(0, 4).map((ch) => gmInstrumentName(ch, midiInfo.programs[ch]));
+            const summary = channels.length > 1 ? ` · ${[...new Set(instruments)].join(' / ')}` : '';
+            return `${midiInfo.name} · ${midiInfo.notes.length} notes · ${midiInfo.bpm} BPM${summary}`;
+          })() : null}
           noteMeshes={noteMeshes}
           setNoteMeshes={setNoteMeshes}
+          noteFxAmount={noteFxAmount}
+          setNoteFxAmount={setNoteFxAmount}
+          noteFxMode={noteFxMode}
+          setNoteFxMode={setNoteFxMode}
           onLoadMidiFile={(files) => { void loadMidiFiles(files); }}
           onLoadAudioFile={(file) => {
             if (midiAudioRef.current) midiAudioRef.current.src = URL.createObjectURL(file);

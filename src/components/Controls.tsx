@@ -77,6 +77,10 @@ interface ControlsProps {
   midiName: string | null;
   noteMeshes: boolean;
   setNoteMeshes: (on: boolean) => void;
+  noteFxAmount: number;
+  setNoteFxAmount: (amount: number) => void;
+  noteFxMode: 'both' | 'morph' | 'pulse' | 'off';
+  setNoteFxMode: (mode: 'both' | 'morph' | 'pulse' | 'off') => void;
   onLoadMidiFile: (files: File[]) => void;
   onLoadAudioFile: (file: File) => void;
   midiAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -346,6 +350,10 @@ export default function Controls({
   midiName,
   noteMeshes,
   setNoteMeshes,
+  noteFxAmount,
+  setNoteFxAmount,
+  noteFxMode,
+  setNoteFxMode,
   onLoadMidiFile,
   onLoadAudioFile,
   midiAudioRef,
@@ -1172,6 +1180,42 @@ export default function Controls({
                             noteMeshes ? "translate-x-5" : "translate-x-0"
                           )} />
                         </button>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-semibold text-white/80">Note FX</div>
+                            <div className="text-[9px] text-white/30 font-mono">Morph = Shape Follows Melody · Pulse = Velocity Pops</div>
+                          </div>
+                          <div className="text-[10px] font-mono text-fuchsia-300">{Math.round(noteFxAmount * 100)}%</div>
+                        </div>
+                        <div className="mt-1.5 grid grid-cols-4 gap-1">
+                          {(['both', 'morph', 'pulse', 'off'] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              onClick={() => setNoteFxMode(mode)}
+                              aria-pressed={noteFxMode === mode}
+                              className={cn(
+                                "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
+                                noteFxMode === mode
+                                  ? "bg-fuchsia-500/25 text-fuchsia-100"
+                                  : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
+                              )}
+                            >
+                              {mode}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={2}
+                          step={0.05}
+                          value={noteFxAmount}
+                          onChange={(e) => setNoteFxAmount(parseFloat(e.target.value))}
+                          aria-label="Note FX amount"
+                          className="mt-1.5 w-full accent-fuchsia-500"
+                        />
                       </div>
                     </div>
                   )}

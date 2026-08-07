@@ -18,7 +18,34 @@ export type ParsedMidi = {
   duration: number; // seconds
   bpm: number; // initial tempo
   trackCount: number;
+  // First program (instrument patch) seen per MIDI channel, and the General
+  // MIDI name for display. Channel 9 is percussion by convention.
+  programs: Record<number, number>;
 };
+
+const GM_FAMILIES = [
+  'Piano', 'Piano', 'Piano', 'Piano', 'Piano', 'Piano', 'Harpsichord', 'Clavinet',
+  'Celesta', 'Glockenspiel', 'Music Box', 'Vibraphone', 'Marimba', 'Xylophone', 'Tubular Bells', 'Dulcimer',
+  'Organ', 'Organ', 'Organ', 'Organ', 'Reed Organ', 'Accordion', 'Harmonica', 'Tango Accordion',
+  'Nylon Guitar', 'Steel Guitar', 'Jazz Guitar', 'Clean Guitar', 'Muted Guitar', 'Overdrive Guitar', 'Distortion Guitar', 'Guitar Harmonics',
+  'Acoustic Bass', 'Finger Bass', 'Pick Bass', 'Fretless Bass', 'Slap Bass', 'Slap Bass', 'Synth Bass', 'Synth Bass',
+  'Violin', 'Viola', 'Cello', 'Contrabass', 'Tremolo Strings', 'Pizzicato', 'Harp', 'Timpani',
+  'Strings', 'Strings', 'Synth Strings', 'Synth Strings', 'Choir Aahs', 'Voice Oohs', 'Synth Voice', 'Orchestra Hit',
+  'Trumpet', 'Trombone', 'Tuba', 'Muted Trumpet', 'French Horn', 'Brass', 'Synth Brass', 'Synth Brass',
+  'Soprano Sax', 'Alto Sax', 'Tenor Sax', 'Baritone Sax', 'Oboe', 'English Horn', 'Bassoon', 'Clarinet',
+  'Piccolo', 'Flute', 'Recorder', 'Pan Flute', 'Blown Bottle', 'Shakuhachi', 'Whistle', 'Ocarina',
+  'Square Lead', 'Saw Lead', 'Calliope', 'Chiff Lead', 'Charang', 'Voice Lead', 'Fifths Lead', 'Bass Lead',
+  'New Age Pad', 'Warm Pad', 'Polysynth', 'Choir Pad', 'Bowed Pad', 'Metallic Pad', 'Halo Pad', 'Sweep Pad',
+  'Rain FX', 'Soundtrack', 'Crystal', 'Atmosphere', 'Brightness', 'Goblins', 'Echoes', 'Sci-Fi',
+  'Sitar', 'Banjo', 'Shamisen', 'Koto', 'Kalimba', 'Bagpipe', 'Fiddle', 'Shanai',
+  'Tinkle Bell', 'Agogo', 'Steel Drums', 'Woodblock', 'Taiko', 'Melodic Tom', 'Synth Drum', 'Reverse Cymbal',
+  'Fret Noise', 'Breath Noise', 'Seashore', 'Bird Tweet', 'Telephone', 'Helicopter', 'Applause', 'Gunshot'
+];
+
+export function gmInstrumentName(channel: number, program: number | undefined): string {
+  if (channel === 9) return 'Drums';
+  return GM_FAMILIES[program ?? 0] ?? 'Instrument';
+}
 
 class Reader {
   private view: DataView;
@@ -83,6 +110,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   // Open notes awaiting their note-off, keyed by track:channel:pitch. A stack
   // per key handles (rare) re-struck pitches before the first release.
   const openNotes = new Map<string, number[]>();
+  const programs: Record<number, number> = {};
   const tempoEvents: Array<{ tick: number; usPerBeat: number }> = [];
   let maxTick = 0;
 
@@ -128,7 +156,10 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
       } else {
         const kind = status & 0xf0;
         const channel = status & 0x0f;
-        if (kind === 0xc0 || kind === 0xd0) {
+        if (kind === 0xc0) {
+          const program = reader.u8();
+          if (programs[channel] === undefined) programs[channel] = program;
+        } else if (kind === 0xd0) {
           reader.skip(1);
         } else {
           const data1 = reader.u8();
@@ -199,5 +230,5 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   const duration = (notes.length ? notes[notes.length - 1].time : 0) + 2;
   const bpm = Math.round(60e6 / (tempoEvents[0]?.usPerBeat ?? 500000));
 
-  return { notes, beats, duration, bpm, trackCount };
+  return { notes, beats, duration, bpm, trackCount, programs };
 }
