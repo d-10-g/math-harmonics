@@ -76,10 +76,10 @@ function parseParams(params: URLSearchParams): SharedState {
   state.audioSource = oneOf(read('asrc'), ['mic', 'midi'] as const);
   state.noteMeshes = flag('nm');
   const noteFx = read('nfa');
-  if (noteFx !== undefined && Number.isFinite(parseFloat(noteFx))) state.noteFxAmount = Math.min(2, Math.max(0, parseFloat(noteFx)));
+  if (noteFx !== undefined && Number.isFinite(parseFloat(noteFx))) state.noteFxAmount = Math.min(8, Math.max(0, parseFloat(noteFx)));
   state.noteFxMode = oneOf(read('nfm'), ['both', 'morph', 'pulse', 'off'] as const);
   const spread = read('nsp');
-  if (spread !== undefined && Number.isFinite(parseFloat(spread))) state.noteSpread = Math.min(2, Math.max(0.5, parseFloat(spread)));
+  if (spread !== undefined && Number.isFinite(parseFloat(spread))) state.noteSpread = Math.min(10, Math.max(0.5, parseFloat(spread)));
   const bloom = read('bl');
   if (bloom !== undefined && Number.isFinite(parseFloat(bloom))) state.bloomIntensity = Math.min(3, Math.max(0, parseFloat(bloom)));
   const lineWidth = read('lw');

@@ -233,7 +233,16 @@ const MIDI_LIBRARY = [
   { id: 'firebird1', name: 'Stravinsky — The Firebird (I)', mid: './demo/library/firebird1.mid', audio: './demo/library/firebird1.mp3' },
   { id: 'megalo-endeka', name: 'Megalo Endeka', mid: './demo/library/megalo-endeka.mid', audio: './demo/library/megalo-endeka.m4a' },
   { id: 'mercury', name: 'Holst — Mercury, the Winged Messenger', mid: './demo/library/mercury.mid', audio: './demo/library/mercury.mp3' },
-  { id: 'martina-sonata', name: "Martina's Sonata (first movement)", mid: './demo/martina-sonata.mid', audio: './demo/martina-sonata.mp3' }
+  { id: 'jupiter', name: 'Holst — Jupiter, the Bringer of Jollity', mid: './demo/library/jupiter.mid', audio: './demo/library/jupiter.m4a' },
+  { id: 'bach-846', name: 'Bach — Prelude in C (WTC I, 846)', mid: './demo/library/bach-846.mid', audio: './demo/library/bach-846.m4a' },
+  { id: 'bach-lute-suite', name: 'Bach — Lute Suite in E minor (BWV 996, V)', mid: './demo/library/bach-lute-suite.mid', audio: './demo/library/bach-lute-suite.m4a' },
+  { id: 'bumblebee', name: 'Rimsky-Korsakov — Flight of the Bumblebee', mid: './demo/library/bumblebee.mid', audio: './demo/library/bumblebee.m4a' },
+  { id: 'rite-of-spring', name: 'Stravinsky — The Rite of Spring', mid: './demo/library/rite-of-spring.mid', audio: './demo/library/rite-of-spring.m4a' },
+  { id: 'faun', name: 'Debussy — Prélude à l’après-midi d’un faune', mid: './demo/library/faun.mid', audio: './demo/library/faun.m4a' },
+  { id: 'snowflakes', name: 'Debussy — Snowflakes Are Dancing', mid: './demo/library/snowflakes.mid', audio: './demo/library/snowflakes.m4a' },
+  { id: 'janacek-sinfonietta', name: 'Janáček — Sinfonietta (I)', mid: './demo/library/janacek-sinfonietta.mid', audio: './demo/library/janacek-sinfonietta.m4a' },
+  { id: 'martina-sonata', name: "Martina's Sonata (first movement)", mid: './demo/martina-sonata.mid', audio: './demo/martina-sonata.mp3' },
+  { id: 'martina-sonata-2', name: "Martina's Sonata (second movement)", mid: './demo/library/martina-sonata-2.mid', audio: './demo/library/martina-sonata-2.m4a' }
 ];
 
 // Saved formula + shader + look combinations from the silent studio.
@@ -407,13 +416,14 @@ export default function App() {
   // Constellation is the default MIDI experience; the gate below keeps it
   // inert until a MIDI session is actually live, so mic users see no change.
   const [noteMeshes, setNoteMeshes] = useState(initialShared.noteMeshes ?? true);
-  const [noteFxAmount, setNoteFxAmount] = useState(initialShared.noteFxAmount ?? 1);
+  const [noteFxAmount, setNoteFxAmount] = useState(initialShared.noteFxAmount ?? 2);
   const [noteFxMode, setNoteFxMode] = useState<NoteFxMode>(initialShared.noteFxMode ?? 'both');
   useEffect(() => { setNoteFx(noteFxAmount, noteFxMode); }, [noteFxAmount, noteFxMode]);
-  const [noteSpread, setNoteSpreadState] = useState(initialShared.noteSpread ?? 1.25);
+  const [noteSpread, setNoteSpreadState] = useState(initialShared.noteSpread ?? 5);
   useEffect(() => { setNoteSpread(noteSpread); }, [noteSpread]);
   const [pageMode, setPageMode] = useState<PageMode>(INITIAL_MODE ?? 'audio');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [controlsCollapsed, setControlsCollapsed] = useState(false);
   const [audioFileError, setAudioFileError] = useState<string | null>(null);
   const [myCombos, setMyCombos] = useState<MyCombo[]>(() => {
     try {
@@ -1085,6 +1095,7 @@ export default function App() {
     setNoteMeshes(true);
     setNoteFxAmount(2);
     setNoteFxMode('both');
+    setNoteSpreadState(5);
     setSpeedQuant(-10); // 1/11x
     setAutoCycleFormula(true);
     setFormulaQuant(7); // every 8th beat
@@ -1452,9 +1463,11 @@ export default function App() {
 
       {/* Main Workspace */}
       <main className={`flex-1 grid grid-cols-1 gap-5 overflow-y-auto xl:overflow-hidden custom-scrollbar ${
+        sidebarCollapsed ? 'lg:grid-cols-[minmax(0,1fr)]' : 'lg:grid-cols-[260px_minmax(0,1fr)]'
+      } ${
         sidebarCollapsed
-          ? 'lg:grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_320px]'
-          : 'lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px]'
+          ? (controlsCollapsed ? 'xl:grid-cols-[minmax(0,1fr)]' : 'xl:grid-cols-[minmax(0,1fr)_320px]')
+          : (controlsCollapsed ? 'xl:grid-cols-[280px_minmax(0,1fr)]' : 'xl:grid-cols-[280px_minmax(0,1fr)_320px]')
       }`}>
 
         {/* Left: Formula Library */}
@@ -1476,22 +1489,33 @@ export default function App() {
             }}
             onDeleteMyCombo={deleteMyCombo}
             onSaveMyCombo={pageMode === 'silent' ? saveCurrentCombo : undefined}
+            onCollapse={() => setSidebarCollapsed(true)}
           />
         )}
 
         {/* Center: Graph View */}
         <section className="min-h-[520px] xl:min-h-0 bg-white/5 border border-white/10 rounded-lg relative overflow-hidden flex flex-col group">
-          {/* Sidebar collapse handle (audio page): full-height sliver on the left edge */}
-          {pageMode === 'audio' && (
+          {/* Expanders for collapsed panels: small chevrons hugging the
+              canvas edges (the panels' own collapse icons live at their tops). */}
+          {sidebarCollapsed && (
             <button
-              onClick={() => setSidebarCollapsed((c) => !c)}
-              title={sidebarCollapsed ? 'Show the formula library' : 'Hide the formula library'}
+              onClick={() => setSidebarCollapsed(false)}
+              title="Show the formula library"
               className="absolute left-0 top-1/2 z-20 -translate-y-1/2 rounded-r-md border border-l-0 border-white/15 bg-black/50 px-1 py-6 text-[10px] text-white/50 backdrop-blur transition-colors hover:bg-black/80 hover:text-white"
             >
-              {sidebarCollapsed ? '⟩' : '⟨'}
+              ⟩
             </button>
           )}
-          <div className="flex-1 relative">
+          {controlsCollapsed && (
+            <button
+              onClick={() => setControlsCollapsed(false)}
+              title="Show the controls panel"
+              className="absolute right-0 top-1/2 z-20 -translate-y-1/2 rounded-l-md border border-r-0 border-white/15 bg-black/50 px-1 py-6 text-[10px] text-white/50 backdrop-blur transition-colors hover:bg-black/80 hover:text-white"
+            >
+              ⟨
+            </button>
+          )}
+          <div className="flex-1 relative min-h-0">
             <ErrorBoundary>
             {rendererMode === 'webgpu' ? (
               <Suspense
@@ -1567,25 +1591,29 @@ export default function App() {
             </ErrorBoundary>
           </div>
 
-          <div className="p-6 bg-[#0a0a0a]/80 border-t border-white/10 backdrop-blur-md">
-            <div className="flex justify-between text-[10px] font-mono text-white/40 mb-3 uppercase tracking-tighter">
-              <span>Temporal Phase (t)</span>
-              <span className="hidden md:inline text-white/25">Space ⏯ · ← → formula · ↑ ↓ shader · F fullscreen</span>
-              <TemporalReadout />
-            </div>
-            <div className="w-full h-8 flex items-center px-2 gap-4">
-              <button
-                onClick={toggleTransport}
-                className="px-3 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/50 rounded text-[9px] font-mono uppercase transition-colors shrink-0"
-              >
-                {midiTransportLive ? (audioPlaying ? '⏸ Music' : '▶ Music') : transportShowsPause ? 'Pause' : 'Play'}
-              </button>
-              <TimeScrubber onScrub={() => setIsPlaying(false)} />
-            </div>
-            {midiTransportLive && (
-              <div className="mt-3 px-2">
-                <MusicTransport audioRef={midiAudioRef} onToggle={toggleTransport} playing={audioPlaying} />
-              </div>
+          {/* Footer: one compact row so it survives short windows. A live
+              MIDI session gets the music transport; otherwise the phase
+              transport as before. */}
+          <div className="px-4 py-3 bg-[#0a0a0a]/80 border-t border-white/10 backdrop-blur-md shrink-0">
+            {midiTransportLive ? (
+              <MusicTransport audioRef={midiAudioRef} onToggle={toggleTransport} playing={audioPlaying} />
+            ) : (
+              <>
+                <div className="flex justify-between text-[10px] font-mono text-white/40 mb-2 uppercase tracking-tighter">
+                  <span>Temporal Phase (t)</span>
+                  <span className="hidden md:inline text-white/25">Space ⏯ · ← → formula · ↑ ↓ shader · F fullscreen</span>
+                  <TemporalReadout />
+                </div>
+                <div className="w-full h-8 flex items-center px-2 gap-4">
+                  <button
+                    onClick={toggleTransport}
+                    className="px-3 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/50 rounded text-[9px] font-mono uppercase transition-colors shrink-0"
+                  >
+                    {transportShowsPause ? 'Pause' : 'Play'}
+                  </button>
+                  <TimeScrubber onScrub={() => setIsPlaying(false)} />
+                </div>
+              </>
             )}
           </div>
         </section>
@@ -1655,6 +1683,8 @@ export default function App() {
           setNoteFxMode={setNoteFxMode}
           noteSpread={noteSpread}
           setNoteSpread={setNoteSpreadState}
+          collapsed={controlsCollapsed}
+          onCollapse={() => setControlsCollapsed(true)}
           pageMode={pageMode}
           midiLibrary={MIDI_LIBRARY.map(({ id, name }) => ({ id, name }))}
           onSelectLibrary={loadLibraryEntry}

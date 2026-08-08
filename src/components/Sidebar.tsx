@@ -22,6 +22,7 @@ interface SidebarProps {
   // Present only in the silent studio — saves the current formula + shader
   // + look as a personal combo chip.
   onSaveMyCombo?: () => void;
+  onCollapse?: () => void;
 }
 
 type LibraryItem = {
@@ -137,7 +138,8 @@ export default function Sidebar({
   myCombos,
   onApplyMyCombo,
   onDeleteMyCombo,
-  onSaveMyCombo
+  onSaveMyCombo,
+  onCollapse
 }: SidebarProps) {
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -299,14 +301,26 @@ export default function Sidebar({
               Shaders
             </button>
           </div>
-          <button
-            onClick={selectRandom}
-            className="h-8 w-8 rounded-md border border-white/10 bg-white/5 text-white/45 hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center"
-            title="Random preset from the current filter"
-            type="button"
-          >
-            <Shuffle size={14} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={selectRandom}
+              className="h-8 w-8 rounded-md border border-white/10 bg-white/5 text-white/45 hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center"
+              title="Random preset from the current filter"
+              type="button"
+            >
+              <Shuffle size={14} />
+            </button>
+            {onCollapse && (
+              <button
+                onClick={onCollapse}
+                className="h-8 w-8 rounded-md border border-white/10 bg-white/5 text-white/45 hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center text-[12px]"
+                title="Collapse this panel"
+                type="button"
+              >
+                ⟨
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3">

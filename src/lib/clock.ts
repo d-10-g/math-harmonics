@@ -48,10 +48,10 @@ export type ClockState = {
   activeNotes: ActiveNote[];
   noteGroupCount: number;
   // User dials for the note-driven accents (morph depth, velocity pops).
-  noteFxAmount: number; // 0..2, 1 = the tuned default
+  noteFxAmount: number; // 0..8, 2 = the tuned default
   noteFxMode: NoteFxMode;
   // Pitch-axis spacing between a channel's note meshes (constellation).
-  noteSpread: number; // 0.5..2
+  noteSpread: number; // 0.5..10
   // A/B loop: when both are set, playback wraps inside [loopStart, loopEnd).
   loopStart: number | null;
   loopEnd: number | null;
@@ -76,9 +76,9 @@ export const clockStore = createStore<ClockState>(() => ({
   midiLive: false,
   activeNotes: [],
   noteGroupCount: 1,
-  noteFxAmount: 1,
+  noteFxAmount: 2,
   noteFxMode: 'both',
-  noteSpread: 1.25,
+  noteSpread: 5,
   loopStart: null,
   loopEnd: null
 }));

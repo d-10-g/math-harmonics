@@ -87,6 +87,10 @@ interface ControlsProps {
   midiLibrary: Array<{ id: string; name: string }>;
   onSelectLibrary: (id: string) => void;
   audioFileError: string | null;
+  // Collapsed hides the panel with CSS only — the <audio> element inside
+  // must stay mounted (App holds its ref and listeners for the session).
+  collapsed: boolean;
+  onCollapse: () => void;
   onLoadMidiFile: (files: File[]) => void;
   onLoadAudioFile: (file: File) => void;
   midiAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -366,6 +370,8 @@ export default function Controls({
   midiLibrary,
   onSelectLibrary,
   audioFileError,
+  collapsed,
+  onCollapse,
   onLoadMidiFile,
   onLoadAudioFile,
   midiAudioRef,
@@ -548,7 +554,20 @@ export default function Controls({
   ];
 
   return (
-    <aside className="min-h-[520px] lg:col-span-2 xl:col-span-1 xl:min-h-0 flex flex-col gap-6 overflow-y-auto pr-1 h-full custom-scrollbar text-[#e0e0e0] pb-4">
+    <aside className={cn(
+      "min-h-[520px] lg:col-span-2 xl:col-span-1 xl:min-h-0 flex flex-col gap-6 overflow-y-auto pr-1 h-full custom-scrollbar text-[#e0e0e0] pb-4",
+      collapsed && "hidden"
+    )}>
+      <div className="sticky top-0 z-10 -mb-5 flex justify-end">
+        <button
+          onClick={onCollapse}
+          className="h-7 w-7 rounded-md border border-white/10 bg-[#101018]/90 text-[12px] text-white/45 backdrop-blur transition-colors hover:bg-white/10 hover:text-white"
+          title="Collapse this panel"
+          type="button"
+        >
+          ⟩
+        </button>
+      </div>
       {/* Dynamic Editor — silent studio only; the audio page keeps the
           music controls on top and the editors out of the way. */}
       <div className={cn("bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col shrink-0", pageMode === 'audio' && "hidden")}>
@@ -1244,8 +1263,8 @@ export default function Controls({
                         <input
                           type="range"
                           min={0}
-                          max={2}
-                          step={0.05}
+                          max={8}
+                          step={0.1}
                           value={noteFxAmount}
                           onChange={(e) => setNoteFxAmount(parseFloat(e.target.value))}
                           aria-label="Note FX amount"
@@ -1263,8 +1282,8 @@ export default function Controls({
                         <input
                           type="range"
                           min={0.5}
-                          max={2}
-                          step={0.05}
+                          max={10}
+                          step={0.1}
                           value={noteSpread}
                           onChange={(e) => setNoteSpread(parseFloat(e.target.value))}
                           aria-label="Note spread"

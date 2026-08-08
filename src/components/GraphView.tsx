@@ -1040,7 +1040,9 @@ function FormulaLine({
     const morphOn = clockState.noteFxMode === 'both' || clockState.noteFxMode === 'morph';
     if (clockState.midiLive && morphOn && clockState.noteFxAmount > 0) {
       const amount = clockState.noteFxAmount;
-      const melodyMod = 1 + (THREE.MathUtils.lerp(0.78, 1.5, clockState.melody) - 1) * amount;
+      // Clamp keeps extreme FX amounts (up to 800%) from flipping the
+      // morph scalar's sign, which would turn shapes inside-out.
+      const melodyMod = THREE.MathUtils.clamp(1 + (THREE.MathUtils.lerp(0.78, 1.5, clockState.melody) - 1) * amount, 0.15, 6);
       return scalarTarget.baseScalar * melodyMod * (1 + clockState.notePulse * 0.16 * amount);
     }
 
@@ -1188,7 +1190,7 @@ function FormulaLine({
       const base = physicalMaterial.userData.baseEmissive as number;
       const pulseOn = clock.noteFxMode === 'both' || clock.noteFxMode === 'pulse';
       const pulseAmt = pulseOn ? clock.noteFxAmount : 0;
-      const emissiveDrive = Math.min(1.2, Math.max(clock.bass, clock.notePulse * 0.75 * pulseAmt));
+      const emissiveDrive = Math.min(2.5, Math.max(clock.bass, clock.notePulse * 0.75 * pulseAmt));
       physicalMaterial.emissiveIntensity = clock.audioSync ? base + (0.25 + base * 1.8) * emissiveDrive : base;
     }
     const nextScalar = getSValue();
@@ -1429,7 +1431,12 @@ function NoteConstellation({
     }
 
     if (groupRef.current) {
-      groupRef.current.scale.setScalar(1 + clock.bass * 0.04);
+      // Auto-fit: high spread values would push extreme pitches out of the
+      // frame, so the whole constellation scales down as spread rises —
+      // notes end up smaller and much farther apart relative to their size,
+      // which is exactly what "more spread" should read as.
+      const constellationFit = Math.min(1, 19 / (8.5 * clock.noteSpread + 4));
+      groupRef.current.scale.setScalar((1 + clock.bass * 0.04) * constellationFit);
       groupRef.current.position.y = Math.sin(time * 1.4) * 0.35;
     }
 
@@ -1491,7 +1498,10 @@ function NoteConstellation({
         // Pitch tints the emissive: low notes warm, high notes cool.
         const base = material.userData.baseEmissive as THREE.Color;
         (material.emissive as THREE.Color).copy(base).offsetHSL((pitch01 - 0.5) * 0.22, 0.05, 0);
-        material.emissiveIntensity = (material.userData.baseEmissiveIntensity as number) * (0.6 + env * 1.5 * Math.max(0.35, fxAmount));
+        // Emissive swing follows the FX dial but caps at 4x — motion and
+        // size may exaggerate freely, brightness must not re-open the
+        // white-washout wound.
+        material.emissiveIntensity = (material.userData.baseEmissiveIntensity as number) * (0.6 + env * 1.5 * Math.min(4, Math.max(0.35, fxAmount)));
       }
     }
   });
