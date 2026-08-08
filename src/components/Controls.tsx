@@ -81,6 +81,12 @@ interface ControlsProps {
   setNoteFxAmount: (amount: number) => void;
   noteFxMode: 'both' | 'morph' | 'pulse' | 'off';
   setNoteFxMode: (mode: 'both' | 'morph' | 'pulse' | 'off') => void;
+  noteSpread: number;
+  setNoteSpread: (spread: number) => void;
+  pageMode: 'audio' | 'silent';
+  midiLibrary: Array<{ id: string; name: string }>;
+  onSelectLibrary: (id: string) => void;
+  audioFileError: string | null;
   onLoadMidiFile: (files: File[]) => void;
   onLoadAudioFile: (file: File) => void;
   midiAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -354,6 +360,12 @@ export default function Controls({
   setNoteFxAmount,
   noteFxMode,
   setNoteFxMode,
+  noteSpread,
+  setNoteSpread,
+  pageMode,
+  midiLibrary,
+  onSelectLibrary,
+  audioFileError,
   onLoadMidiFile,
   onLoadAudioFile,
   midiAudioRef,
@@ -537,8 +549,9 @@ export default function Controls({
 
   return (
     <aside className="min-h-[520px] lg:col-span-2 xl:col-span-1 xl:min-h-0 flex flex-col gap-6 overflow-y-auto pr-1 h-full custom-scrollbar text-[#e0e0e0] pb-4">
-      {/* Dynamic Editor */}
-      <div className="bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col shrink-0">
+      {/* Dynamic Editor — silent studio only; the audio page keeps the
+          music controls on top and the editors out of the way. */}
+      <div className={cn("bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col shrink-0", pageMode === 'audio' && "hidden")}>
         <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300 mb-5">
            {activeTab === 'formulas' ? 'Coordinate Matrix' : 'Shader Core Engine'}
         </h2>
@@ -594,7 +607,7 @@ export default function Controls({
       <div className="bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col shrink-0">
         <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300 mb-5">Output Configuration</h2>
         
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           {/* Renderer Path */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
@@ -1032,8 +1045,8 @@ export default function Controls({
 
           <div className="h-[1px] bg-white/5" />
 
-          {/* Speed Slider */}
-          <div className="space-y-3 group">
+          {/* Speed Slider — leads the panel on the audio page */}
+          <div className={cn("space-y-3 group", pageMode === 'audio' && "-order-2")}>
             <div className="flex justify-between items-center">
               <div>
                 <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Animation Speed</div>
@@ -1069,13 +1082,16 @@ export default function Controls({
           {/* Auto-Pilot Controls */}
           <div className="h-[1px] bg-white/5" />
           
-          <div className="space-y-4">
+          <div className={cn("space-y-4", pageMode === 'audio' && "-order-1")}>
             {/* AUDIO section: one master switch. Everything audio-specific
                 (source, meters, MIDI loader, audio shaders in the library)
-                exists only while this is on. */}
+                exists only while this is on. The silent page hides it
+                entirely (hidden, not unmounted — the <audio> element's ref
+                must survive mode switches). */}
             <div className={cn(
               "space-y-3 rounded-lg border p-3 transition-colors",
-              audioSync ? "border-indigo-400/30 bg-indigo-500/10" : "border-white/10 bg-white/[0.03]"
+              audioSync ? "border-indigo-400/30 bg-indigo-500/10" : "border-white/10 bg-white/[0.03]",
+              pageMode === 'silent' && "hidden"
             )}>
               <div className="flex items-center justify-between group">
                 <div>
@@ -1129,6 +1145,20 @@ export default function Controls({
 
                   {audioSource === 'midi' && (
                     <div className="space-y-2">
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) onSelectLibrary(e.target.value);
+                          e.target.value = '';
+                        }}
+                        aria-label="Load a pre-installed score"
+                        className="w-full rounded-md border border-fuchsia-400/25 bg-[#141420] py-1.5 px-2 text-[10px] font-mono uppercase text-fuchsia-200 cursor-pointer hover:bg-[#1b1b2c] transition-colors"
+                      >
+                        <option value="">♪ Pre-installed scores…</option>
+                        {midiLibrary.map((entry) => (
+                          <option key={entry.id} value={entry.id}>{entry.name}</option>
+                        ))}
+                      </select>
                       <div className="grid grid-cols-2 gap-2">
                         <label className="rounded-md border border-fuchsia-400/25 bg-fuchsia-500/10 py-1.5 text-center text-[9px] font-mono uppercase text-fuchsia-200 transition-colors hover:bg-fuchsia-500/25 cursor-pointer">
                           Load .mid (+audio)
@@ -1161,6 +1191,11 @@ export default function Controls({
                       <div className="text-[9px] font-mono text-white/40 truncate">
                         {midiName ?? 'Select the .mid and its audio rendition together (one multi-select works)'}
                       </div>
+                      {audioFileError && (
+                        <div className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[9px] font-mono text-amber-200">
+                          {audioFileError}
+                        </div>
+                      )}
                       <div className="flex items-center justify-between group">
                         <div>
                           <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Note Constellation</div>
@@ -1214,6 +1249,25 @@ export default function Controls({
                           value={noteFxAmount}
                           onChange={(e) => setNoteFxAmount(parseFloat(e.target.value))}
                           aria-label="Note FX amount"
+                          className="mt-1.5 w-full accent-fuchsia-500"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-semibold text-white/80">Note Spread</div>
+                            <div className="text-[9px] text-white/30 font-mono">Space Between A Channel&apos;s Note Meshes</div>
+                          </div>
+                          <div className="text-[10px] font-mono text-fuchsia-300">{noteSpread.toFixed(2)}x</div>
+                        </div>
+                        <input
+                          type="range"
+                          min={0.5}
+                          max={2}
+                          step={0.05}
+                          value={noteSpread}
+                          onChange={(e) => setNoteSpread(parseFloat(e.target.value))}
+                          aria-label="Note spread"
                           className="mt-1.5 w-full accent-fuchsia-500"
                         />
                       </div>

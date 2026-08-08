@@ -23,7 +23,7 @@ import {
 } from './constants';
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
-import { ActiveNote, NoteFxMode, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteFx, setNoteGroupCount, setNoteSignals, startClock, useClockSnapshot } from './lib/clock';
+import { ActiveNote, NoteFxMode, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteFx, setNoteGroupCount, setNoteSignals, setNoteSpread, startClock, useClockSnapshot } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 import { COMBOS, Combo } from './lib/combos';
@@ -207,6 +207,98 @@ function markWelcomed() {
   }
 }
 
+// Two front doors: 'audio' (music-driven — MIDI library, constellation,
+// transport) and 'silent' (formula/shader studio with no audio UI at all).
+// The choice is stored per person; ?mode= overrides for shareable links.
+type PageMode = 'audio' | 'silent';
+const MODE_KEY = 'harmonics.mode.v1';
+const INITIAL_MODE: PageMode | null = (() => {
+  try {
+    const param = new URLSearchParams(location.search).get('mode');
+    if (param === 'audio' || param === 'silent') return param;
+    if (new URLSearchParams(location.search).has('demo')) return 'audio';
+    const stored = localStorage.getItem(MODE_KEY);
+    if (stored === 'audio' || stored === 'silent') return stored;
+  } catch {
+    // Fall through: the chooser overlay will ask.
+  }
+  return null;
+})();
+
+// Pre-installed score + rendition pairs (bundled with the owner's consent).
+const MIDI_LIBRARY = [
+  { id: 'ravel-pavane', name: 'Ravel — Pavane pour une infante défunte', mid: './demo/library/ravel-pavane.mid', audio: './demo/library/ravel-pavane.mp3' },
+  { id: 'bach-fuga-dm', name: 'Bach — Fuga in D minor', mid: './demo/library/bach-fuga-dm.mid', audio: './demo/library/bach-fuga-dm.mp3' },
+  { id: 'bjspreii', name: 'Bach — Prelude II in C minor', mid: './demo/library/bjspreii.mid', audio: './demo/library/bjspreii.mp3' },
+  { id: 'firebird1', name: 'Stravinsky — The Firebird (I)', mid: './demo/library/firebird1.mid', audio: './demo/library/firebird1.mp3' },
+  { id: 'megalo-endeka', name: 'Megalo Endeka', mid: './demo/library/megalo-endeka.mid', audio: './demo/library/megalo-endeka.m4a' },
+  { id: 'mercury', name: 'Holst — Mercury, the Winged Messenger', mid: './demo/library/mercury.mid', audio: './demo/library/mercury.mp3' },
+  { id: 'martina-sonata', name: "Martina's Sonata (first movement)", mid: './demo/martina-sonata.mid', audio: './demo/martina-sonata.mp3' }
+];
+
+// Saved formula + shader + look combinations from the silent studio.
+export type MyCombo = {
+  id: string;
+  name: string;
+  formulaId: string;
+  shaderId: string;
+  material: WebGPUMaterialProfile;
+  rig: WebGPULightingPreset;
+  light: number;
+  bloom: number;
+  postFX: boolean;
+  lineWidth: number;
+  show3D: boolean;
+};
+const MY_COMBOS_KEY = 'harmonics.mycombos.v1';
+
+// Compact music transport for MIDI sessions: play/pause, seek, time.
+function MusicTransport({ audioRef, onToggle, playing }: {
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  onToggle: () => void;
+  playing: boolean;
+}) {
+  const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const audio = audioRef.current;
+      if (audio) {
+        setTime(audio.currentTime);
+        setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+      }
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [audioRef]);
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  return (
+    <div className="w-full flex items-center gap-3">
+      <button
+        onClick={onToggle}
+        aria-label={playing ? 'Pause music' : 'Play music'}
+        className="h-8 w-8 shrink-0 rounded-full border border-fuchsia-400/40 bg-fuchsia-600/25 hover:bg-fuchsia-600/45 text-[13px] transition-colors"
+      >
+        {playing ? '⏸' : '▶'}
+      </button>
+      <span className="w-10 shrink-0 text-right text-[10px] font-mono text-white/50">{fmt(time)}</span>
+      <input
+        type="range"
+        min={0}
+        max={duration || 1}
+        step={0.1}
+        value={Math.min(time, duration || 1)}
+        onChange={(e) => {
+          const audio = audioRef.current;
+          if (audio) audio.currentTime = parseFloat(e.target.value);
+        }}
+        aria-label="Seek music"
+        className="flex-1 accent-fuchsia-500"
+      />
+      <span className="w-10 shrink-0 text-[10px] font-mono text-white/50">{fmt(duration)}</span>
+    </div>
+  );
+}
+
 if (FIRST_VISIT) {
   Object.assign(initialShared, {
     formulaId: 'surf-02', // Klein Bottle (Smoked Sunset Glass combo)
@@ -318,6 +410,27 @@ export default function App() {
   const [noteFxAmount, setNoteFxAmount] = useState(initialShared.noteFxAmount ?? 1);
   const [noteFxMode, setNoteFxMode] = useState<NoteFxMode>(initialShared.noteFxMode ?? 'both');
   useEffect(() => { setNoteFx(noteFxAmount, noteFxMode); }, [noteFxAmount, noteFxMode]);
+  const [noteSpread, setNoteSpreadState] = useState(initialShared.noteSpread ?? 1.25);
+  useEffect(() => { setNoteSpread(noteSpread); }, [noteSpread]);
+  const [pageMode, setPageMode] = useState<PageMode>(INITIAL_MODE ?? 'audio');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [audioFileError, setAudioFileError] = useState<string | null>(null);
+  const [myCombos, setMyCombos] = useState<MyCombo[]>(() => {
+    try {
+      const raw = localStorage.getItem(MY_COMBOS_KEY);
+      if (raw) return JSON.parse(raw) as MyCombo[];
+    } catch {
+      // Unreadable — start empty.
+    }
+    return [];
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(MY_COMBOS_KEY, JSON.stringify(myCombos));
+    } catch {
+      // Storage unavailable; combos just won't persist.
+    }
+  }, [myCombos]);
   const audioSourceRef = useRef(audioSource);
   useEffect(() => { audioSourceRef.current = audioSource; }, [audioSource]);
   const [midiInfo, setMidiInfo] = useState<(ParsedMidi & { name: string }) | null>(null);
@@ -358,9 +471,25 @@ export default function App() {
     };
     audio.addEventListener('play', onPlay);
     audio.addEventListener('pause', onPause);
+    // Surface decode failures — the most common being AIFF, which Chrome
+    // cannot play at all — instead of failing silently.
+    const onError = () => {
+      const src = audio.currentSrc || audio.src || '';
+      const ext = src.split('.').pop()?.toLowerCase() ?? '';
+      setAudioFileError(
+        ext === 'aif' || ext === 'aiff'
+          ? 'This browser cannot play AIFF (.aif) audio — convert it to .mp3, .m4a or .wav.'
+          : 'The audio file failed to load in this browser.'
+      );
+    };
+    const onLoaded = () => setAudioFileError(null);
+    audio.addEventListener('error', onError);
+    audio.addEventListener('loadeddata', onLoaded);
     return () => {
       audio.removeEventListener('play', onPlay);
       audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('error', onError);
+      audio.removeEventListener('loadeddata', onLoaded);
     };
   }, []);
 
@@ -455,7 +584,15 @@ export default function App() {
       midiAudioRef.current.src = typeof audioSrc === 'string' ? audioSrc : URL.createObjectURL(audioSrc);
     } else if (typeof midiSource === 'string' && midiAudioRef.current) {
       const base = midiSource.replace(/\.[^./]+$/, '');
-      for (const ext of ['mp3', 'wav', 'aif', 'aiff']) {
+      // Probe only formats this browser can actually decode (Chrome, for
+      // one, cannot play AIFF at all).
+      const MIME: Record<string, string> = {
+        mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav',
+        ogg: 'audio/ogg', flac: 'audio/flac', aif: 'audio/aiff', aiff: 'audio/aiff'
+      };
+      const playable = ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aif', 'aiff']
+        .filter((ext) => midiAudioRef.current!.canPlayType(MIME[ext]) !== '');
+      for (const ext of playable) {
         const candidate = `${base}.${ext}`;
         try {
           const head = await fetch(candidate, { method: 'HEAD' });
@@ -927,6 +1064,107 @@ export default function App() {
     if (combo.lineWidth !== undefined) setLineWidth(combo.lineWidth);
   };
 
+  // Mode switching applies each page's tuned defaults. The audio defaults
+  // mirror the owner's field-tested setup: constellation on, Note FX at
+  // 200%, 1/11x phase drift, new formula every 8th beat from favorites,
+  // backdrop off.
+  const selectMode = (mode: PageMode, options?: { loadDefault?: boolean }) => {
+    setPageMode(mode);
+    try {
+      localStorage.setItem(MODE_KEY, mode);
+    } catch {
+      // Non-fatal; the chooser may reappear next visit.
+    }
+    if (mode === 'silent') {
+      setAudioSync(false);
+      midiAudioRef.current?.pause(); // the silent studio is actually silent
+      return;
+    }
+    setAudioSync(true);
+    setAudioSource('midi');
+    setNoteMeshes(true);
+    setNoteFxAmount(2);
+    setNoteFxMode('both');
+    setSpeedQuant(-10); // 1/11x
+    setAutoCycleFormula(true);
+    setFormulaQuant(7); // every 8th beat
+    setAutoCycleShader(false);
+    setCycleFavoritesOnly(true);
+    setShowEnvironment(false);
+    if ((options?.loadDefault ?? true) && !midiInfo) {
+      const lib = MIDI_LIBRARY[0];
+      const audio = midiAudioRef.current;
+      if (audio) audio.src = lib.audio;
+      void loadMidiSource(lib.mid);
+    }
+  };
+
+  // Chooser "music" path: start the default piece inside the click gesture
+  // so playback is permitted.
+  const startAudioMode = () => {
+    setShowWelcome(false);
+    markWelcomed();
+    selectMode('audio', { loadDefault: false });
+    const lib = MIDI_LIBRARY[0];
+    const audio = midiAudioRef.current;
+    if (audio) {
+      audio.src = lib.audio;
+      void audio.play().catch((error) => console.warn('Autoplay blocked:', error));
+    }
+    void loadMidiSource(lib.mid);
+  };
+
+  const loadLibraryEntry = (id: string) => {
+    const entry = MIDI_LIBRARY.find((l) => l.id === id);
+    if (!entry) return;
+    const audio = midiAudioRef.current;
+    if (audio) {
+      audio.src = entry.audio;
+      // Selecting from the dropdown is a gesture: start playing right away.
+      void audio.play().catch(() => {
+        // Autoplay refused (e.g. programmatic selection) — transport will start it.
+      });
+    }
+    void loadMidiSource(entry.mid);
+  };
+
+  // Silent-studio combo saving: capture the current formula + shader + look.
+  const saveCurrentCombo = () => {
+    const entry: MyCombo = {
+      id: `mc-${Date.now().toString(36)}`,
+      name: `${selectedFormula.name} × ${selectedShader.name}`,
+      formulaId: selectedFormula.id,
+      shaderId: selectedShader.id,
+      material: webgpuMaterial,
+      rig: webgpuLightingPreset,
+      light: webgpuLighting,
+      bloom: bloomIntensity,
+      postFX,
+      lineWidth,
+      show3D
+    };
+    setMyCombos((prev) => [entry, ...prev].slice(0, 24));
+  };
+
+  const applyMyCombo = (combo: MyCombo) => {
+    const formula = PRESET_FORMULAS.find((f) => f.id === combo.formulaId);
+    const shader = PRESET_SHADERS.find((s) => s.id === combo.shaderId);
+    if (formula) {
+      if (formula.id !== selectedFormula.id) skipAutoStyleRef.current = true;
+      setSelectedFormula(formula);
+    }
+    if (shader) setSelectedShader(shader);
+    setWebgpuMaterial(combo.material);
+    setWebgpuLightingPreset(combo.rig);
+    setWebgpuLighting(combo.light);
+    setBloomIntensity(combo.bloom);
+    setPostFX(combo.postFX);
+    setLineWidth(combo.lineWidth);
+    setShow3D(combo.show3D);
+  };
+
+  const deleteMyCombo = (id: string) => setMyCombos((prev) => prev.filter((c) => c.id !== id));
+
   // Art direction: presets that declare a preferred material + light rig
   // (and optionally a speed) apply them on selection while Auto-Style is on,
   // so cycling the library lands on designed combinations instead of leftovers.
@@ -975,9 +1213,10 @@ export default function App() {
       audioSource,
       noteMeshes,
       noteFxAmount,
-      noteFxMode
+      noteFxMode,
+      noteSpread
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -1092,6 +1331,12 @@ export default function App() {
   const startDemo = () => {
     setShowWelcome(false);
     markWelcomed();
+    setPageMode('audio');
+    try {
+      localStorage.setItem(MODE_KEY, 'audio');
+    } catch {
+      // Non-fatal.
+    }
     const opener = COMBOS.find((combo) => combo.id === 'combo-smoked-glass');
     if (opener) applyCombo(opener);
     setRendererMode('webgl'); // audio-reactive rendering lives on this path
@@ -1112,7 +1357,7 @@ export default function App() {
   const skipDemo = () => {
     setShowWelcome(false);
     markWelcomed();
-    setAudioSync(false);
+    selectMode('silent');
   };
   const [copiedLink, setCopiedLink] = useState(false);
   const copyShareLink = async () => {
@@ -1146,6 +1391,20 @@ export default function App() {
             <div className="w-4 h-4 border-2 border-white rounded-sm rotate-45"></div>
           </div>
           <h1 className="text-xl font-medium tracking-tight">Harmonic.OS <span className="text-indigo-300/80 font-mono text-xs ml-2 uppercase tracking-widest">{APP_VERSION}</span></h1>
+          <div className="ml-3 flex rounded-full border border-white/10 bg-white/5 p-0.5">
+            {(['audio', 'silent'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => selectMode(mode)}
+                aria-pressed={pageMode === mode}
+                className={`rounded-full px-3 py-1 text-[9px] font-mono uppercase tracking-widest transition-colors ${
+                  pageMode === mode ? 'bg-fuchsia-600/40 text-fuchsia-100' : 'text-white/40 hover:text-white/80'
+                }`}
+              >
+                {mode === 'audio' ? '♪ Audio' : '✦ Silent'}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex gap-4 items-center">
           <button
@@ -1192,23 +1451,46 @@ export default function App() {
       </header>
 
       {/* Main Workspace */}
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px] gap-5 overflow-y-auto xl:overflow-hidden custom-scrollbar">
-        
+      <main className={`flex-1 grid grid-cols-1 gap-5 overflow-y-auto xl:overflow-hidden custom-scrollbar ${
+        sidebarCollapsed
+          ? 'lg:grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_320px]'
+          : 'lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px]'
+      }`}>
+
         {/* Left: Formula Library */}
-        <Sidebar
-          selectedFormula={selectedFormula}
-          onApplyCombo={applyCombo}
-          onPlayDemo={startDemo}
-          audioSync={audioSync}
-          onSelect={handleSelectPreset}
-          selectedShader={selectedShader}
-          onSelectShader={handleSelectShader}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-        />
+        {!sidebarCollapsed && (
+          <Sidebar
+            selectedFormula={selectedFormula}
+            onApplyCombo={applyCombo}
+            onPlayDemo={startDemo}
+            audioSync={audioSync}
+            onSelect={handleSelectPreset}
+            selectedShader={selectedShader}
+            onSelectShader={handleSelectShader}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            myCombos={myCombos}
+            onApplyMyCombo={(id) => {
+              const combo = myCombos.find((c) => c.id === id);
+              if (combo) applyMyCombo(combo);
+            }}
+            onDeleteMyCombo={deleteMyCombo}
+            onSaveMyCombo={pageMode === 'silent' ? saveCurrentCombo : undefined}
+          />
+        )}
 
         {/* Center: Graph View */}
         <section className="min-h-[520px] xl:min-h-0 bg-white/5 border border-white/10 rounded-lg relative overflow-hidden flex flex-col group">
+          {/* Sidebar collapse handle (audio page): full-height sliver on the left edge */}
+          {pageMode === 'audio' && (
+            <button
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              title={sidebarCollapsed ? 'Show the formula library' : 'Hide the formula library'}
+              className="absolute left-0 top-1/2 z-20 -translate-y-1/2 rounded-r-md border border-l-0 border-white/15 bg-black/50 px-1 py-6 text-[10px] text-white/50 backdrop-blur transition-colors hover:bg-black/80 hover:text-white"
+            >
+              {sidebarCollapsed ? '⟩' : '⟨'}
+            </button>
+          )}
           <div className="flex-1 relative">
             <ErrorBoundary>
             {rendererMode === 'webgpu' ? (
@@ -1279,6 +1561,7 @@ export default function App() {
                 setFormulaCycleSpeed={setFormulaCycleSpeed}
                 shaderCycleSpeed={shaderCycleSpeed}
                 setShaderCycleSpeed={setShaderCycleSpeed}
+                showHudInfo={pageMode !== 'audio'}
               />
             )}
             </ErrorBoundary>
@@ -1299,6 +1582,11 @@ export default function App() {
               </button>
               <TimeScrubber onScrub={() => setIsPlaying(false)} />
             </div>
+            {midiTransportLive && (
+              <div className="mt-3 px-2">
+                <MusicTransport audioRef={midiAudioRef} onToggle={toggleTransport} playing={audioPlaying} />
+              </div>
+            )}
           </div>
         </section>
 
@@ -1365,6 +1653,12 @@ export default function App() {
           setNoteFxAmount={setNoteFxAmount}
           noteFxMode={noteFxMode}
           setNoteFxMode={setNoteFxMode}
+          noteSpread={noteSpread}
+          setNoteSpread={setNoteSpreadState}
+          pageMode={pageMode}
+          midiLibrary={MIDI_LIBRARY.map(({ id, name }) => ({ id, name }))}
+          onSelectLibrary={loadLibraryEntry}
+          audioFileError={audioFileError}
           onLoadMidiFile={(files) => { void loadMidiFiles(files); }}
           onLoadAudioFile={(file) => {
             if (midiAudioRef.current) midiAudioRef.current.src = URL.createObjectURL(file);
@@ -1416,23 +1710,23 @@ export default function App() {
               HARMONIC.OS <span className="ml-1 font-mono text-[11px] font-normal tracking-widest text-indigo-300">{APP_VERSION}</span>
             </h1>
             <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-white/60">
-              A living mathematical instrument. This demo performs{' '}
-              <span className="text-fuchsia-300">Martina&apos;s Sonata</span> while the score itself drives the
-              visuals — every note takes the stage as its own floating form, low notes left and high notes
-              right, swelling and fading exactly as the score sounds them.
+              A living mathematical instrument. Choose your room: in the{' '}
+              <span className="text-fuchsia-300">music visualizer</span>, real scores take the stage — every
+              note becomes its own floating form. The <span className="text-indigo-300">silent studio</span>{' '}
+              is for sculpting formulas, shaders and materials at your own pace.
             </p>
             <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
               <button
-                onClick={startDemo}
+                onClick={startAudioMode}
                 className="rounded-xl border border-fuchsia-400/40 bg-gradient-to-r from-fuchsia-600/80 to-indigo-600/80 px-6 py-3 text-[12px] font-bold uppercase tracking-[0.18em] text-white transition-all hover:from-fuchsia-500/90 hover:to-indigo-500/90 active:scale-[0.98]"
               >
-                ▶ Play the sonata
+                ♪ Music visualizer
               </button>
               <button
                 onClick={skipDemo}
                 className="rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-[12px] font-bold uppercase tracking-[0.18em] text-white/55 transition-colors hover:bg-white/10 hover:text-white/80"
               >
-                Explore silently
+                ✦ Silent studio
               </button>
             </div>
             <p className="mt-4 text-[10px] font-mono text-white/30">

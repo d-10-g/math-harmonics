@@ -38,6 +38,7 @@ export type SharedState = {
   noteMeshes?: boolean;
   noteFxAmount?: number;
   noteFxMode?: 'both' | 'morph' | 'pulse' | 'off';
+  noteSpread?: number;
 };
 
 const GEOMETRY_VALUES: WebGPUGeometryProfile[] = ['auto', 'tube', 'ribbon', 'extrude', 'lathe', 'crystal', 'surface', 'helix', 'shell', 'terrain', 'constellation', 'knot', 'mandala', 'lattice', 'ripple', 'prism', 'vortex'];
@@ -77,6 +78,8 @@ function parseParams(params: URLSearchParams): SharedState {
   const noteFx = read('nfa');
   if (noteFx !== undefined && Number.isFinite(parseFloat(noteFx))) state.noteFxAmount = Math.min(2, Math.max(0, parseFloat(noteFx)));
   state.noteFxMode = oneOf(read('nfm'), ['both', 'morph', 'pulse', 'off'] as const);
+  const spread = read('nsp');
+  if (spread !== undefined && Number.isFinite(parseFloat(spread))) state.noteSpread = Math.min(2, Math.max(0.5, parseFloat(spread)));
   const bloom = read('bl');
   if (bloom !== undefined && Number.isFinite(parseFloat(bloom))) state.bloomIntensity = Math.min(3, Math.max(0, parseFloat(bloom)));
   const lineWidth = read('lw');
@@ -127,6 +130,7 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('nm', state.noteMeshes ? '1' : '0');
   params.set('nfa', state.noteFxAmount.toFixed(2));
   params.set('nfm', state.noteFxMode);
+  params.set('nsp', state.noteSpread.toFixed(2));
 
   try {
     history.replaceState(null, '', `#${params.toString()}`);

@@ -970,6 +970,9 @@ interface GraphViewProps {
   // True while note-constellation mode should replace the single center mesh
   // (toggle on + live MIDI session); App owns the gating.
   noteMeshes?: boolean;
+  // The audio page hides the formula/render text overlays — they churn too
+  // fast during playback to read.
+  showHudInfo?: boolean;
 }
 
 function FormulaLine({
@@ -1469,10 +1472,11 @@ function NoteConstellation({
 
         const { pitch01, velocity01, env, id } = note;
         const eased = 1 - Math.pow(1 - env, 3);
+        const spread = clock.noteSpread;
         mesh.visible = eased > 0.01;
         mesh.position.set(
-          (pitch01 - 0.5) * 17,
-          (pitch01 - 0.5) * 3.5 + lift + Math.sin(time * 1.6 + slot * 1.3 + g * 2.1) * 0.5,
+          (pitch01 - 0.5) * 17 * spread,
+          ((pitch01 - 0.5) * 3.5 + lift) * spread + Math.sin(time * 1.6 + slot * 1.3 + g * 2.1) * 0.5,
           -Math.abs(pitch01 - 0.5) * 6 + depth
         );
         mesh.rotation.set(
@@ -1681,6 +1685,23 @@ function XREnvironment({ preset, desktopVisible }: { preset: WebGPULightingPrese
   const isPassthrough = blend === 'alpha-blend' || blend === 'additive';
   const rig = lightingRigSettings(preset);
 
+  // Round sprite for the stars — default point sprites are untextured
+  // SQUARES, which read as scattered grey boxes when they catch the eye.
+  const starSprite = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(255,255,255,1)');
+    gradient.addColorStop(0.35, 'rgba(255,255,255,0.75)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(canvas);
+  }, []);
+
+  useEffect(() => () => starSprite.dispose(), [starSprite]);
+
   const stars = useMemo(() => {
     const count = 1200;
     const positions = new Float32Array(count * 3);
@@ -1728,7 +1749,7 @@ function XREnvironment({ preset, desktopVisible }: { preset: WebGPULightingPrese
         <meshBasicMaterial color={rig.background} side={THREE.BackSide} depthWrite={false} />
       </mesh>
       <points geometry={stars}>
-        <pointsMaterial size={0.14} sizeAttenuation color="#cdd8ff" transparent opacity={0.8} depthWrite={false} />
+        <pointsMaterial map={starSprite} alphaTest={0.05} size={0.14} sizeAttenuation color="#cdd8ff" transparent opacity={0.8} depthWrite={false} />
       </points>
       {/* Ground reference only makes sense with a floor-level origin (XR). */}
       {isPresenting && (
@@ -2408,7 +2429,8 @@ export default function GraphView({
   setFormulaCycleSpeed,
   shaderCycleSpeed,
   setShaderCycleSpeed,
-  noteMeshes = false
+  noteMeshes = false,
+  showHudInfo = true
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
@@ -2575,22 +2597,26 @@ export default function GraphView({
         />
       )}
 
-      {/* HUD Info */}
-      <div className="absolute top-4 left-4 flex flex-col gap-1 pointer-events-none">
-        <div className="bg-black/60 border border-white/10 backdrop-blur px-3 py-1.5 rounded-lg">
-          <div className="text-[10px] font-mono text-indigo-400 uppercase tracking-widest">{formula.name}</div>
-        </div>
-        <div className="bg-black/40 border border-white/5 backdrop-blur px-2 py-1 rounded text-[8px] font-mono text-white/30 truncate max-w-[200px]">
-          {formula.description}
-        </div>
-      </div>
-      
-      {/* 3D Indicator */}
-      <div className="absolute top-4 right-4 bg-black/40 border border-white/10 backdrop-blur p-3 rounded-lg text-[9px] font-mono text-white/50 space-y-1">
-        <div className="flex justify-between gap-4"><span>RENDER_MODE:</span> <span className="text-indigo-400">{show3D ? (formula.parametric ? 'SURFACE(P,Q)' : geometryMode.toUpperCase()) : 'LINEAR'}</span></div>
-        <div className="flex justify-between gap-4"><span>COORDS:</span> <span className="text-indigo-400">CARTESIAN_3D</span></div>
-        <div className="flex justify-between gap-4"><span>SAMPLING:</span> <span className="text-indigo-400">HIGH_RES</span></div>
-      </div>
+      {showHudInfo && (
+        <>
+          {/* HUD Info */}
+          <div className="absolute top-4 left-4 flex flex-col gap-1 pointer-events-none">
+            <div className="bg-black/60 border border-white/10 backdrop-blur px-3 py-1.5 rounded-lg">
+              <div className="text-[10px] font-mono text-indigo-400 uppercase tracking-widest">{formula.name}</div>
+            </div>
+            <div className="bg-black/40 border border-white/5 backdrop-blur px-2 py-1 rounded text-[8px] font-mono text-white/30 truncate max-w-[200px]">
+              {formula.description}
+            </div>
+          </div>
+
+          {/* 3D Indicator */}
+          <div className="absolute top-4 right-4 bg-black/40 border border-white/10 backdrop-blur p-3 rounded-lg text-[9px] font-mono text-white/50 space-y-1">
+            <div className="flex justify-between gap-4"><span>RENDER_MODE:</span> <span className="text-indigo-400">{show3D ? (formula.parametric ? 'SURFACE(P,Q)' : geometryMode.toUpperCase()) : 'LINEAR'}</span></div>
+            <div className="flex justify-between gap-4"><span>COORDS:</span> <span className="text-indigo-400">CARTESIAN_3D</span></div>
+            <div className="flex justify-between gap-4"><span>SAMPLING:</span> <span className="text-indigo-400">HIGH_RES</span></div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

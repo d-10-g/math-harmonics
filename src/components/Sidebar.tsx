@@ -16,6 +16,12 @@ interface SidebarProps {
   onSelectShader: (shader: ShaderPreset) => void;
   activeTab: 'formulas' | 'shaders';
   setActiveTab: (tab: 'formulas' | 'shaders') => void;
+  myCombos: Array<{ id: string; name: string }>;
+  onApplyMyCombo: (id: string) => void;
+  onDeleteMyCombo: (id: string) => void;
+  // Present only in the silent studio — saves the current formula + shader
+  // + look as a personal combo chip.
+  onSaveMyCombo?: () => void;
 }
 
 type LibraryItem = {
@@ -127,7 +133,11 @@ export default function Sidebar({
   selectedShader,
   onSelectShader,
   activeTab,
-  setActiveTab
+  setActiveTab,
+  myCombos,
+  onApplyMyCombo,
+  onDeleteMyCombo,
+  onSaveMyCombo
 }: SidebarProps) {
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -342,6 +352,49 @@ export default function Sidebar({
             ))}
           </div>
         </div>
+
+        {(onSaveMyCombo || myCombos.length > 0) && (
+          <div className="mt-3">
+            <div className="mb-1.5 flex items-center justify-between text-[9px] font-mono uppercase tracking-[0.18em] text-amber-300">
+              <span>★ My Combos</span>
+              {onSaveMyCombo && (
+                <button
+                  onClick={onSaveMyCombo}
+                  type="button"
+                  title="Save the current formula + shader + material + lighting as a combo"
+                  className="rounded border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[9px] font-mono uppercase text-amber-200 transition-colors hover:bg-amber-500/30"
+                >
+                  ＋ Save current
+                </button>
+              )}
+            </div>
+            {myCombos.length > 0 && (
+              <div className="flex gap-1.5 overflow-x-auto custom-scrollbar pb-1.5">
+                {myCombos.map((combo) => (
+                  <div key={combo.id} className="group/chip flex shrink-0 items-stretch">
+                    <button
+                      onClick={() => onApplyMyCombo(combo.id)}
+                      type="button"
+                      title={combo.name}
+                      className="max-w-[180px] truncate rounded-l-md border border-r-0 border-amber-400/25 bg-amber-500/10 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-[0.08em] text-amber-200/90 transition-colors hover:bg-amber-500/25"
+                    >
+                      {combo.name}
+                    </button>
+                    <button
+                      onClick={() => onDeleteMyCombo(combo.id)}
+                      type="button"
+                      title="Delete this combo"
+                      aria-label={`Delete combo ${combo.name}`}
+                      className="rounded-r-md border border-amber-400/25 bg-amber-500/5 px-1.5 text-[9px] text-amber-200/50 transition-colors hover:bg-red-500/30 hover:text-red-200"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-3 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 px-3 py-2 focus-within:border-indigo-400/50">
           <Search size={14} className="text-white/30 shrink-0" />
