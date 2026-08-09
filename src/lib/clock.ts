@@ -136,6 +136,10 @@ export function startClock() {
     const now = performance.now();
     const deltaSeconds = Math.min(0.1, (now - last) / 1000);
     last = now;
+    advance(now, deltaSeconds);
+  };
+
+  const advance = (now: number, deltaSeconds: number) => {
 
     if (deltaSeconds > 0) {
       const instant = 1 / deltaSeconds;
@@ -166,11 +170,26 @@ export function startClock() {
     }
 
     clockStore.setState({ time: nextTime, fps: fpsEma, frameMs: deltaSeconds * 1000 });
-    raf = requestAnimationFrame(tick);
   };
 
-  raf = requestAnimationFrame(tick);
-  return () => cancelAnimationFrame(raf);
+  const loop = () => {
+    tick();
+    raf = requestAnimationFrame(loop);
+  };
+  raf = requestAnimationFrame(loop);
+
+  // Watchdog: window.requestAnimationFrame SUSPENDS during immersive WebXR
+  // sessions (the headset drives its own frame loop) and in hidden tabs.
+  // Timers keep firing, so this keeps the musical clock alive whenever rAF
+  // stalls — without it, entering VR froze every time-driven visual.
+  const watchdog = window.setInterval(() => {
+    if (performance.now() - last > 80) tick();
+  }, 33);
+
+  return () => {
+    cancelAnimationFrame(raf);
+    window.clearInterval(watchdog);
+  };
 }
 
 export function useClockSnapshot(hz = 10): ClockState {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Container, Root, Text } from '@react-three/uikit';
 import { useXR, useXRInputSourceState } from '@react-three/xr';
@@ -120,7 +120,7 @@ function Stepper({
   );
 }
 
-type ConsoleTab = 'control' | 'settings' | 'view' | 'pilot' | 'formulas' | 'shaders';
+type ConsoleTab = 'music' | 'control' | 'settings' | 'view' | 'pilot' | 'formulas' | 'shaders';
 
 export interface SpatialConsoleProps {
   onNextFormula?: () => void;
@@ -162,6 +162,23 @@ export interface SpatialConsoleProps {
   shaderCycleSpeed: number;
   setShaderCycleSpeed?: (s: number) => void;
   preview?: boolean;
+  // Music tab (the XR default while a MIDI session is live).
+  midiActive?: boolean;
+  midiName?: string | null;
+  musicPlaying?: boolean;
+  onToggleMusic?: () => void;
+  onSeekMusic?: (deltaSeconds: number) => void;
+  getMusicTime?: () => { time: number; duration: number };
+  onCycleLibrary?: (offset: number) => void;
+  libraryName?: string | null;
+  noteFxAmount?: number;
+  setNoteFxAmount?: (amount: number) => void;
+  noteFxMode?: 'both' | 'morph' | 'pulse' | 'off';
+  setNoteFxMode?: (mode: 'both' | 'morph' | 'pulse' | 'off') => void;
+  noteSpread?: number;
+  setNoteSpread?: (spread: number) => void;
+  noteMeshes?: boolean;
+  setNoteMeshes?: (on: boolean) => void;
 }
 
 const PAGE_SIZE = 6;
@@ -173,9 +190,21 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
   const hasControllers = Boolean(leftController || rightController);
   const hudScale = hasControllers ? 1 : 1.3;
 
-  const [activeTab, setActiveTab] = useState<ConsoleTab>('control');
+  const [activeTab, setActiveTab] = useState<ConsoleTab>(props.midiActive ? 'music' : 'control');
   const [formulaPage, setFormulaPage] = useState(0);
   const [shaderPage, setShaderPage] = useState(0);
+  const [musicTimeLabel, setMusicTimeLabel] = useState('0:00 / 0:00');
+
+  // Low-rate clock readout for the music tab (uikit re-renders on state).
+  useEffect(() => {
+    if (!props.midiActive || !props.getMusicTime || activeTab !== 'music') return;
+    const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    const id = window.setInterval(() => {
+      const t = props.getMusicTime!();
+      setMusicTimeLabel(`${fmt(t.time)} / ${fmt(Number.isFinite(t.duration) ? t.duration : 0)}`);
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [props.midiActive, props.getMusicTime, activeTab]);
   const [hudPosition, setHudPosition] = useState<[number, number, number]>([-1.12, 1.24, -1.18]);
   const [isDragging, setIsDragging] = useState(false);
   const groupRef = useRef<THREE.Group>(null);
@@ -225,11 +254,14 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
   const formulaPages = Math.max(1, Math.ceil(PRESET_FORMULAS.length / PAGE_SIZE));
   const shaderPages = Math.max(1, Math.ceil(PRESET_SHADERS.length / PAGE_SIZE));
 
+  // Audio-first ordering: the music flow leads; the silent-studio pickers
+  // (formulas/shaders) close the row.
   const tabs: Array<{ key: ConsoleTab; label: string }> = [
+    { key: 'music', label: 'MUSIC' },
     { key: 'control', label: 'CONTROL' },
-    { key: 'settings', label: 'SETUP' },
-    { key: 'view', label: 'VIEW' },
     { key: 'pilot', label: 'PILOT' },
+    { key: 'view', label: 'VIEW' },
+    { key: 'settings', label: 'SETUP' },
     { key: 'formulas', label: 'FORMULAS' },
     { key: 'shaders', label: 'SHADERS' }
   ];
@@ -299,6 +331,64 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
             </Container>
           ))}
         </Container>
+
+        {/* MUSIC — transport, pieces, and the note dials */}
+        {activeTab === 'music' && (
+          <Container flexDirection="column" gap={8}>
+            <Container flexDirection="column" gap={2} backgroundColor="#080b14" borderRadius={10} padding={10}>
+              <Text fontSize={10.5} color={TEXT_DIM}>NOW PLAYING</Text>
+              <Text fontSize={13.5} fontWeight="bold" color="#ffffff">
+                {(props.libraryName ?? props.midiName ?? 'No score loaded — pick a piece').slice(0, 46)}
+              </Text>
+              <Text fontSize={11} color={ACCENT}>{props.midiActive ? musicTimeLabel : 'Load from the piece buttons below'}</Text>
+            </Container>
+            <Container flexDirection="row" gap={8}>
+              <ConsoleButton grow label="⏴ 10s" onTap={() => props.onSeekMusic?.(-10)} />
+              <ConsoleButton
+                grow
+                tone={props.musicPlaying ? 'warn' : 'ok'}
+                label={props.musicPlaying ? '❚❚ PAUSE' : '▶ PLAY'}
+                onTap={props.onToggleMusic}
+              />
+              <ConsoleButton grow label="10s ⏵" onTap={() => props.onSeekMusic?.(10)} />
+            </Container>
+            <Container flexDirection="row" gap={8}>
+              <ConsoleButton grow tone="accent" label="◀ PIECE" onTap={() => props.onCycleLibrary?.(-1)} />
+              <ConsoleButton grow tone="accent" label="PIECE ▶" onTap={() => props.onCycleLibrary?.(1)} />
+            </Container>
+            <Stepper
+              label="NOTE FX"
+              value={`${Math.round((props.noteFxAmount ?? 2) * 100)}%`}
+              onDec={() => props.setNoteFxAmount?.(Math.max(0, (props.noteFxAmount ?? 2) - 0.25))}
+              onInc={() => props.setNoteFxAmount?.(Math.min(8, (props.noteFxAmount ?? 2) + 0.25))}
+            />
+            <Container flexDirection="row" gap={6}>
+              {(['both', 'morph', 'pulse', 'off'] as const).map((mode) => (
+                <ConsoleButton
+                  key={mode}
+                  grow
+                  fontSize={10.5}
+                  tone={props.noteFxMode === mode ? 'accent' : 'default'}
+                  label={mode.toUpperCase()}
+                  onTap={() => props.setNoteFxMode?.(mode)}
+                />
+              ))}
+            </Container>
+            <Stepper
+              label="NOTE SPREAD"
+              value={`${(props.noteSpread ?? 5).toFixed(1)}x`}
+              onDec={() => props.setNoteSpread?.(Math.max(0.5, (props.noteSpread ?? 5) - 0.5))}
+              onInc={() => props.setNoteSpread?.(Math.min(10, (props.noteSpread ?? 5) + 0.5))}
+            />
+            <Container flexDirection="row" gap={8}>
+              <ConsoleToggle
+                label="NOTE CONSTELLATION"
+                value={!!props.noteMeshes}
+                onTap={() => props.setNoteMeshes?.(!props.noteMeshes)}
+              />
+            </Container>
+          </Container>
+        )}
 
         {/* CONTROL */}
         {activeTab === 'control' && (

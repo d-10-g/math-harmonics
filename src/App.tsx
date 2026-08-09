@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { compile } from 'mathjs';
 import Sidebar from './components/Sidebar';
 import GraphView from './components/GraphView';
@@ -503,6 +503,26 @@ export default function App() {
     };
   }, []);
 
+  // Entering an immersive session can pause page media on some headsets.
+  // If a MIDI session was mid-piece, resume it — the Enter XR tap counts as
+  // the activation gesture.
+  useEffect(() => {
+    let hadSession = false;
+    const unsubscribe = xrStore.subscribe((state: any) => {
+      const hasSession = !!state?.session;
+      if (hasSession && !hadSession && audioSyncRef.current && audioSourceRef.current === 'midi') {
+        const audio = midiAudioRef.current;
+        if (audio && audio.src && audio.paused && audio.currentTime > 0 && !audio.ended) {
+          void audio.play().catch(() => {
+            // Blocked — the in-console music transport can start it.
+          });
+        }
+      }
+      hadSession = hasSession;
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Quantization (-10 to +10)
   const [speedQuant, setSpeedQuant] = useState(-6); // 1/7x — calm phase drift under audio sync
   const [formulaQuant, setFormulaQuant] = useState(0);
@@ -624,6 +644,7 @@ export default function App() {
   const loadMidiFiles = async (files: File[]) => {
     const mid = files.find((f) => /\.midi?$/i.test(f.name));
     if (!mid) return;
+    setCurrentLibraryId(null);
     const audio = files.find(
       (f) => f !== mid && (/\.(mp3|wav|aif|aiff|m4a|ogg|flac)$/i.test(f.name) || (f.type.startsWith('audio/') && !f.type.includes('midi')))
     );
@@ -792,12 +813,26 @@ export default function App() {
         }
       }
 
-      raf = requestAnimationFrame(step);
+      lastStepWallTime = performance.now();
     };
 
-    raf = requestAnimationFrame(step);
+    let lastStepWallTime = performance.now();
+    const loop = () => {
+      step();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+
+    // Watchdog: window rAF suspends inside immersive WebXR sessions (and
+    // hidden tabs) while the audio keeps playing — without this the engine
+    // froze mid-pose the moment a headset entered VR.
+    const watchdog = window.setInterval(() => {
+      if (performance.now() - lastStepWallTime > 80) step();
+    }, 33);
+
     return () => {
       cancelAnimationFrame(raf);
+      window.clearInterval(watchdog);
       clearAudioBands();
       setNoteGroupCount(1);
     };
@@ -1104,6 +1139,7 @@ export default function App() {
     setShowEnvironment(false);
     if ((options?.loadDefault ?? true) && !midiInfo) {
       const lib = MIDI_LIBRARY[0];
+      setCurrentLibraryId(lib.id);
       const audio = midiAudioRef.current;
       if (audio) audio.src = lib.audio;
       void loadMidiSource(lib.mid);
@@ -1117,6 +1153,7 @@ export default function App() {
     markWelcomed();
     selectMode('audio', { loadDefault: false });
     const lib = MIDI_LIBRARY[0];
+    setCurrentLibraryId(lib.id);
     const audio = midiAudioRef.current;
     if (audio) {
       audio.src = lib.audio;
@@ -1128,6 +1165,7 @@ export default function App() {
   const loadLibraryEntry = (id: string) => {
     const entry = MIDI_LIBRARY.find((l) => l.id === id);
     if (!entry) return;
+    setCurrentLibraryId(id);
     const audio = midiAudioRef.current;
     if (audio) {
       audio.src = entry.audio;
@@ -1137,6 +1175,24 @@ export default function App() {
       });
     }
     void loadMidiSource(entry.mid);
+  };
+
+  // In-XR music helpers: seek, wall-clock readout, and library cycling.
+  const [currentLibraryId, setCurrentLibraryId] = useState<string | null>(null);
+  const currentLibraryIdRef = useRef(currentLibraryId);
+  useEffect(() => { currentLibraryIdRef.current = currentLibraryId; }, [currentLibraryId]);
+  const getMusicTime = useCallback(() => {
+    const audio = midiAudioRef.current;
+    return { time: audio?.currentTime ?? 0, duration: audio?.duration ?? 0 };
+  }, []);
+  const seekMusicBy = (deltaSeconds: number) => {
+    const audio = midiAudioRef.current;
+    if (audio && audio.src) audio.currentTime = Math.max(0, audio.currentTime + deltaSeconds);
+  };
+  const cycleLibrary = (offset: number) => {
+    const index = MIDI_LIBRARY.findIndex((l) => l.id === currentLibraryIdRef.current);
+    const next = MIDI_LIBRARY[((index < 0 ? (offset > 0 ? -1 : 0) : index) + offset + MIDI_LIBRARY.length) % MIDI_LIBRARY.length];
+    loadLibraryEntry(next.id);
   };
 
   // Silent-studio combo saving: capture the current formula + shader + look.
@@ -1545,6 +1601,22 @@ export default function App() {
                 formula={selectedFormula}
                 shader={selectedShader}
                 noteMeshes={noteMeshes && audioSync && audioSource === 'midi' && !!midiInfo}
+                midiActive={audioSync && audioSource === 'midi' && !!midiInfo}
+                midiName={midiInfo?.name ?? null}
+                musicPlaying={audioPlaying}
+                onToggleMusic={toggleTransport}
+                onSeekMusic={seekMusicBy}
+                getMusicTime={getMusicTime}
+                onCycleLibrary={cycleLibrary}
+                libraryName={MIDI_LIBRARY.find((l) => l.id === currentLibraryId)?.name ?? null}
+                noteFxAmount={noteFxAmount}
+                setNoteFxAmount={setNoteFxAmount}
+                noteFxMode={noteFxMode}
+                setNoteFxMode={setNoteFxMode}
+                noteSpread={noteSpread}
+                setNoteSpread={setNoteSpreadState}
+                noteMeshesEnabled={noteMeshes}
+                setNoteMeshesEnabled={setNoteMeshes}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}

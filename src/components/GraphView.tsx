@@ -973,6 +973,23 @@ interface GraphViewProps {
   // The audio page hides the formula/render text overlays — they churn too
   // fast during playback to read.
   showHudInfo?: boolean;
+  // Music tab plumbing for the spatial console.
+  midiActive?: boolean;
+  midiName?: string | null;
+  musicPlaying?: boolean;
+  onToggleMusic?: () => void;
+  onSeekMusic?: (deltaSeconds: number) => void;
+  getMusicTime?: () => { time: number; duration: number };
+  onCycleLibrary?: (offset: number) => void;
+  libraryName?: string | null;
+  noteFxAmount?: number;
+  setNoteFxAmount?: (amount: number) => void;
+  noteFxMode?: 'both' | 'morph' | 'pulse' | 'off';
+  setNoteFxMode?: (mode: 'both' | 'morph' | 'pulse' | 'off') => void;
+  noteSpread?: number;
+  setNoteSpread?: (spread: number) => void;
+  noteMeshesEnabled?: boolean;
+  setNoteMeshesEnabled?: (on: boolean) => void;
 }
 
 function FormulaLine({
@@ -2440,7 +2457,23 @@ export default function GraphView({
   shaderCycleSpeed,
   setShaderCycleSpeed,
   noteMeshes = false,
-  showHudInfo = true
+  showHudInfo = true,
+  midiActive,
+  midiName,
+  musicPlaying,
+  onToggleMusic,
+  onSeekMusic,
+  getMusicTime,
+  onCycleLibrary,
+  libraryName,
+  noteFxAmount,
+  setNoteFxAmount,
+  noteFxMode,
+  setNoteFxMode,
+  noteSpread,
+  setNoteSpread,
+  noteMeshesEnabled,
+  setNoteMeshesEnabled
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
@@ -2552,6 +2585,22 @@ export default function GraphView({
             onNextShader={onNextShader}
             isPlaying={isPlaying}
             onTogglePlay={onTogglePlay}
+            midiActive={midiActive}
+            midiName={midiName}
+            musicPlaying={musicPlaying}
+            onToggleMusic={onToggleMusic}
+            onSeekMusic={onSeekMusic}
+            getMusicTime={getMusicTime}
+            onCycleLibrary={onCycleLibrary}
+            libraryName={libraryName}
+            noteFxAmount={noteFxAmount}
+            setNoteFxAmount={setNoteFxAmount}
+            noteFxMode={noteFxMode}
+            setNoteFxMode={setNoteFxMode}
+            noteSpread={noteSpread}
+            setNoteSpread={setNoteSpread}
+            noteMeshes={noteMeshesEnabled}
+            setNoteMeshes={setNoteMeshesEnabled}
             formula={formula}
             shader={shader}
             currentGeometryMode={geometryMode}
