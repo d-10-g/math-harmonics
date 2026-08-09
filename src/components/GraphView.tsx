@@ -1345,6 +1345,13 @@ function NoteConstellation({
   materialProfile?: WebGPUMaterialProfile;
   geometryMode?: FormulaGeometryMode;
 }) {
+  // Headset headroom: dense scores (Firebird) work the Q2 hard, so
+  // in-session the constellation rebuilds less often and samples curves
+  // more coarsely.
+  const xrSession = useXR((state) => state.session);
+  const rebuildMs = xrSession ? 360 : NOTE_GROUP_REBUILD_MS;
+  const curveResolution = xrSession ? 220 : 320;
+
   // Group 0 plays the selected formula; further instrument groups take
   // distinct formulas from the curated combos so each instrument keeps a
   // recognizable silhouette.
@@ -1416,7 +1423,7 @@ function NoteConstellation({
       : resolveFormulaGeometryMode(entry.formula);
     const built = entry.formula.parametric
       ? buildParametricGeometry(entry.formula, entry, t, entry.scalarTarget.baseScalar, SURFACE_SEGMENTS_XR)
-      : buildFormulaGeometry(sampleFormulaPoints(entry, t, entry.scalarTarget.baseScalar, 320), geometryMode, entry.formula.name, t);
+      : buildFormulaGeometry(sampleFormulaPoints(entry, t, entry.scalarTarget.baseScalar, curveResolution), geometryMode, entry.formula.name, t);
     geometriesRef.current[g]?.dispose();
     geometriesRef.current[g] = built;
     setGeometryVersion((v) => v + 1);
@@ -1442,7 +1449,7 @@ function NoteConstellation({
     const fxAmount = clock.noteFxAmount;
 
     const now = performance.now();
-    if (now - lastRebuildRef.current >= NOTE_GROUP_REBUILD_MS) {
+    if (now - lastRebuildRef.current >= rebuildMs) {
       lastRebuildRef.current = now;
       const g = rebuildCursorRef.current % usedGroups;
       rebuildCursorRef.current = (rebuildCursorRef.current + 1) % usedGroups;
@@ -1554,6 +1561,7 @@ function NoteConstellation({
 // every reflection and refraction in the scene.
 function RigEnvironment({ preset, intensity }: { preset: WebGPULightingPreset; intensity: number }) {
   const { gl, scene } = useThree();
+  const session = useXR((state) => state.session);
 
   useEffect(() => {
     const pmrem = new THREE.PMREMGenerator(gl);
@@ -1569,11 +1577,13 @@ function RigEnvironment({ preset, intensity }: { preset: WebGPULightingPreset; i
   }, [gl, scene, preset]);
 
   useEffect(() => {
-    scene.environmentIntensity = 0.45 + THREE.MathUtils.clamp(intensity, 0.45, 3.5) * 0.45;
+    // Environment reflections are a big term on pale materials; run them
+    // cooler in-session alongside the XR light taming.
+    scene.environmentIntensity = (0.45 + THREE.MathUtils.clamp(intensity, 0.45, 3.5) * 0.45) * (session ? 0.78 : 1);
     return () => {
       scene.environmentIntensity = 1;
     };
-  }, [scene, intensity]);
+  }, [scene, intensity, session]);
 
   return null;
 }
@@ -1648,11 +1658,12 @@ function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; inte
   // (which was tuned for the WebGPU path without an environment).
   // Headsets run hotter still: no vignette softens the frame and the panels
   // sit close to the eye, so pale materials washed out — tame further in XR.
-  const xrTone = session ? 0.82 : 1;
+  const xrTone = session ? 0.7 : 1;
   const exposure = (0.53 + light * 0.35) * xrTone;
-  const keyTame = 0.8 * (session ? 0.9 : 1);
-  const rimTame = 0.55 * (session ? 0.9 : 1);
-  const fillTame = 0.6 * (session ? 0.9 : 1);
+  const keyTame = 0.8 * (session ? 0.8 : 1);
+  const rimTame = 0.55 * (session ? 0.8 : 1);
+  const fillTame = 0.6 * (session ? 0.8 : 1);
+  const xrFillTone = session ? 0.78 : 1;
   const keyRef = useRef<THREE.DirectionalLight>(null);
   const rimRef = useRef<THREE.PointLight>(null);
   const fillRef = useRef<THREE.PointLight>(null);
@@ -1678,8 +1689,8 @@ function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; inte
       {/* Ambient/hemi are the flatteners: past ~1x light they erase shading
           contrast and pale materials read as blank white. Grow them slower
           than the key/rim/fill so raising the light level adds punch, not fog. */}
-      <ambientLight color={rig.ambient} intensity={0.25 + light * rig.ambientScale * 0.5} />
-      <hemisphereLight color={rig.ambient} groundColor={rig.ground} intensity={0.4 + light * rig.hemiScale * 0.55} />
+      <ambientLight color={rig.ambient} intensity={(0.25 + light * rig.ambientScale * 0.5) * xrFillTone} />
+      <hemisphereLight color={rig.ambient} groundColor={rig.ground} intensity={(0.4 + light * rig.hemiScale * 0.55) * xrFillTone} />
       <directionalLight ref={keyRef} color={rig.key} position={rig.keyPosition} intensity={rig.keyScale * light * keyTame} />
       <pointLight ref={rimRef} color={rig.rim} position={rig.rimPosition} intensity={rig.rimScale * light * rimTame} distance={36} />
       <pointLight ref={fillRef} color={rig.fill} position={rig.fillPosition} intensity={rig.fillScale * light * fillTame} distance={32} />
