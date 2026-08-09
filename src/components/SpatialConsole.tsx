@@ -179,6 +179,8 @@ export interface SpatialConsoleProps {
   setNoteSpread?: (spread: number) => void;
   noteMeshes?: boolean;
   setNoteMeshes?: (on: boolean) => void;
+  xrHaptics?: boolean;
+  setXrHaptics?: (on: boolean) => void;
 }
 
 const PAGE_SIZE = 6;
@@ -382,10 +384,18 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
             />
             <Container flexDirection="row" gap={8}>
               <ConsoleToggle
-                label="NOTE CONSTELLATION"
+                label="CONSTELLATION"
                 value={!!props.noteMeshes}
                 onTap={() => props.setNoteMeshes?.(!props.noteMeshes)}
               />
+              <ConsoleToggle
+                label="BEAT HAPTICS"
+                value={!!props.xrHaptics}
+                onTap={() => props.setXrHaptics?.(!props.xrHaptics)}
+              />
+            </Container>
+            <Container height={18} justifyContent="center" alignItems="center">
+              <Text fontSize={9.5} color={TEXT_DIM}>A = PLAY / PAUSE · X / Y = PREVIOUS / NEXT PIECE</Text>
             </Container>
           </Container>
         )}

@@ -990,6 +990,8 @@ interface GraphViewProps {
   setNoteSpread?: (spread: number) => void;
   noteMeshesEnabled?: boolean;
   setNoteMeshesEnabled?: (on: boolean) => void;
+  xrHaptics?: boolean;
+  setXrHaptics?: (on: boolean) => void;
 }
 
 function FormulaLine({
@@ -1638,15 +1640,19 @@ function PostEffects({ enabled, bloom }: { enabled: boolean; bloom: number }) {
 // frame loop: bass drives the key, mids the fill, treble the rim.
 function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; intensity: number }) {
   const { gl } = useThree();
+  const session = useXR((state) => state.session);
   const rig = lightingRigSettings(preset);
   const light = THREE.MathUtils.clamp(intensity, 0.45, 3.5);
   // The WebGL path stacks rig lights + PMREM environment + bloom, so both
   // exposure and the rig's point-light scales run tamer than the raw table
   // (which was tuned for the WebGPU path without an environment).
-  const exposure = 0.53 + light * 0.35;
-  const keyTame = 0.8;
-  const rimTame = 0.55;
-  const fillTame = 0.6;
+  // Headsets run hotter still: no vignette softens the frame and the panels
+  // sit close to the eye, so pale materials washed out — tame further in XR.
+  const xrTone = session ? 0.82 : 1;
+  const exposure = (0.53 + light * 0.35) * xrTone;
+  const keyTame = 0.8 * (session ? 0.9 : 1);
+  const rimTame = 0.55 * (session ? 0.9 : 1);
+  const fillTame = 0.6 * (session ? 0.9 : 1);
   const keyRef = useRef<THREE.DirectionalLight>(null);
   const rimRef = useRef<THREE.PointLight>(null);
   const fillRef = useRef<THREE.PointLight>(null);
@@ -1684,19 +1690,58 @@ function LightingRig({ preset, intensity }: { preset: WebGPULightingPreset; inte
 // Beat-synced haptic pulse on whichever controllers are connected (Quest);
 // transient-pointer input (Vision Pro hands) has no actuators, so this is a
 // silent no-op there.
-function XRBeatHaptics() {
+function XRBeatHaptics({ enabled }: { enabled: boolean }) {
   const leftController = useXRInputSourceState('controller', 'left');
   const rightController = useXRInputSourceState('controller', 'right');
   const lastBeatRef = useRef(0);
 
   useFrame(() => {
+    // Off by default: a pulse per quarter note reads as a continuous buzz
+    // during music. The MUSIC tab toggle re-enables it for those who like it.
+    if (!enabled) return;
     const state = clockStore.getState();
     if (!state.audioSync || state.lastBeatAt === lastBeatRef.current) return;
     lastBeatRef.current = state.lastBeatAt;
     [leftController, rightController].forEach((controller) => {
       const actuator = (controller?.inputSource?.gamepad as any)?.hapticActuators?.[0];
-      actuator?.pulse?.(0.55, 70);
+      actuator?.pulse?.(0.3, 40);
     });
+  });
+
+  return null;
+}
+
+// Quest controller face buttons as music transport: A (right) toggles
+// play/pause, X/Y (left) step through the library. Standard xr-standard
+// button layout: index 4 = A/X, index 5 = B/Y.
+function XRMusicButtons({
+  midiActive,
+  onToggleMusic,
+  onCycleLibrary
+}: {
+  midiActive?: boolean;
+  onToggleMusic?: () => void;
+  onCycleLibrary?: (offset: number) => void;
+}) {
+  const session = useXR((state) => state.session);
+  const leftController = useXRInputSourceState('controller', 'left');
+  const rightController = useXRInputSourceState('controller', 'right');
+  const prevPressedRef = useRef({ a: false, x: false, y: false });
+
+  useFrame(() => {
+    if (!session || !midiActive) return;
+    const rightButtons = rightController?.inputSource?.gamepad?.buttons;
+    const leftButtons = leftController?.inputSource?.gamepad?.buttons;
+    const pressed = {
+      a: !!rightButtons?.[4]?.pressed,
+      x: !!leftButtons?.[4]?.pressed,
+      y: !!leftButtons?.[5]?.pressed
+    };
+    const prev = prevPressedRef.current;
+    if (pressed.a && !prev.a) onToggleMusic?.();
+    if (pressed.x && !prev.x) onCycleLibrary?.(-1);
+    if (pressed.y && !prev.y) onCycleLibrary?.(1);
+    prevPressedRef.current = pressed;
   });
 
   return null;
@@ -2473,7 +2518,9 @@ export default function GraphView({
   noteSpread,
   setNoteSpread,
   noteMeshesEnabled,
-  setNoteMeshesEnabled
+  setNoteMeshesEnabled,
+  xrHaptics,
+  setXrHaptics
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
@@ -2539,7 +2586,8 @@ export default function GraphView({
           <XRPlayerOrigin originRef={xrOriginRef} />
           <XRJoystickLocomotion originRef={xrOriginRef} />
           <XRVisualThumbstickControls setXrVisualTransform={setXrVisualTransform} />
-          <XRBeatHaptics />
+          <XRBeatHaptics enabled={xrHaptics ?? false} />
+          <XRMusicButtons midiActive={midiActive} onToggleMusic={onToggleMusic} onCycleLibrary={onCycleLibrary} />
           <XRAlphaController />
           <XREnvironment preset={webgpuLightingPreset} desktopVisible={showEnvironment && show3D} />
           <RigEnvironment preset={webgpuLightingPreset} intensity={webgpuLighting} />
@@ -2601,6 +2649,8 @@ export default function GraphView({
             setNoteSpread={setNoteSpread}
             noteMeshes={noteMeshesEnabled}
             setNoteMeshes={setNoteMeshesEnabled}
+            xrHaptics={xrHaptics}
+            setXrHaptics={setXrHaptics}
             formula={formula}
             shader={shader}
             currentGeometryMode={geometryMode}

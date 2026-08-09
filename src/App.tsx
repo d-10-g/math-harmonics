@@ -424,6 +424,9 @@ export default function App() {
   const [pageMode, setPageMode] = useState<PageMode>(INITIAL_MODE ?? 'audio');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
+  // Beat haptics buzz once per quarter note — annoying during music, so
+  // off unless the MUSIC tab toggle turns them on.
+  const [xrHaptics, setXrHaptics] = useState(false);
   const [audioFileError, setAudioFileError] = useState<string | null>(null);
   const [myCombos, setMyCombos] = useState<MyCombo[]>(() => {
     try {
@@ -1617,6 +1620,8 @@ export default function App() {
                 setNoteSpread={setNoteSpreadState}
                 noteMeshesEnabled={noteMeshes}
                 setNoteMeshesEnabled={setNoteMeshes}
+                xrHaptics={xrHaptics}
+                setXrHaptics={setXrHaptics}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
