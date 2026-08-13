@@ -9,12 +9,22 @@ export const PHASE_RANGE = Math.PI * 4;
 
 export type ActiveNote = {
   id: number; // index into the parsed score's note list — stable identity
+  pitch: number; // raw MIDI pitch, for exact lattice matching
   pitch01: number; // normalized to the file's own pitch range
   velocity01: number;
   env: number; // attack -> sustain -> release envelope, 0..1
   // Instrument group (distinct track:channel pairs, largest first, capped) —
   // the constellation gives each group its own formula and material.
   group: number;
+};
+
+// One entry per distinct (group, pitch) the score will ever play — the
+// "always show" display mode renders this as a persistent lattice that
+// note-ons light up.
+export type LatticeNote = {
+  group: number;
+  pitch: number;
+  pitch01: number;
 };
 
 export type NoteFxMode = 'both' | 'morph' | 'pulse' | 'off';
@@ -46,6 +56,7 @@ export type ClockState = {
   // one-mesh-per-note constellation renderer. Published by the MIDI engine
   // each frame while the music plays; frozen on pause; empty otherwise.
   activeNotes: ActiveNote[];
+  noteLattice: LatticeNote[];
   noteGroupCount: number;
   // User dials for the note-driven accents (morph depth, velocity pops).
   noteFxAmount: number; // 0..8, 2 = the tuned default
@@ -75,6 +86,7 @@ export const clockStore = createStore<ClockState>(() => ({
   notePulse: 0,
   midiLive: false,
   activeNotes: [],
+  noteLattice: [],
   noteGroupCount: 1,
   noteFxAmount: 2,
   noteFxMode: 'both',
@@ -111,6 +123,8 @@ export const setNoteSignals = (melody: number, notePulse: number) =>
 export const setActiveNotes = (activeNotes: ActiveNote[]) => clockStore.setState({ activeNotes });
 
 export const setNoteGroupCount = (noteGroupCount: number) => clockStore.setState({ noteGroupCount });
+
+export const setNoteLattice = (noteLattice: LatticeNote[]) => clockStore.setState({ noteLattice });
 
 export const setNoteFx = (noteFxAmount: number, noteFxMode: NoteFxMode) =>
   clockStore.setState({ noteFxAmount, noteFxMode });

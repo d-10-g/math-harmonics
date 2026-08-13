@@ -23,11 +23,12 @@ import {
 } from './constants';
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
-import { ActiveNote, NoteFxMode, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteFx, setNoteGroupCount, setNoteSignals, setNoteSpread, startClock, useClockSnapshot } from './lib/clock';
+import { ActiveNote, LatticeNote, NoteFxMode, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteFx, setNoteGroupCount, setNoteLattice, setNoteSignals, setNoteSpread, startClock, useClockSnapshot } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 import { COMBOS, Combo } from './lib/combos';
 import { gmInstrumentName, parseMidi, ParsedMidi } from './lib/midi';
+import { DEFAULT_CHANNEL_MESHES, MESH_LIBRARY } from './lib/meshLibrary';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 
@@ -427,6 +428,32 @@ export default function App() {
   // Beat haptics buzz once per quarter note — annoying during music, so
   // off unless the MUSIC tab toggle turns them on.
   const [xrHaptics, setXrHaptics] = useState(false);
+  // Note visuals: formula geometry or the OBJ sculpture library; MTL colors
+  // vs app materials; random vs per-channel assignment; sounding-only vs a
+  // persistent all-notes lattice that note-ons light up.
+  const [noteSource, setNoteSource] = useState<'formula' | 'mesh'>(initialShared.noteSource ?? 'formula');
+  const [meshUseMtl, setMeshUseMtl] = useState(initialShared.meshUseMtl ?? false);
+  const [meshAssign, setMeshAssign] = useState<'random' | 'channel'>(initialShared.meshAssign ?? 'random');
+  const [noteDisplay, setNoteDisplay] = useState<'sounding' | 'all'>(initialShared.noteDisplay ?? 'sounding');
+  const [meshChannelMap, setMeshChannelMap] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('harmonics.meshmap.v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length === 4 && parsed.every((n) => typeof n === 'string')) return parsed;
+      }
+    } catch {
+      // Fall through to defaults.
+    }
+    return [...DEFAULT_CHANNEL_MESHES];
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('harmonics.meshmap.v1', JSON.stringify(meshChannelMap));
+    } catch {
+      // Non-fatal.
+    }
+  }, [meshChannelMap]);
   const [audioFileError, setAudioFileError] = useState<string | null>(null);
   const [myCombos, setMyCombos] = useState<MyCombo[]>(() => {
     try {
@@ -720,6 +747,27 @@ export default function App() {
       .forEach(([key], rank) => groupByPair.set(key, rank % GROUP_CAP));
     setNoteGroupCount(Math.min(GROUP_CAP, groupByPair.size));
 
+    // Lattice for the "always show" display: every distinct (group, pitch)
+    // the score will play, capped per group by how often the pitch occurs.
+    const LATTICE_CAP = 48;
+    const pitchCounts = new Map<string, { group: number; pitch: number; count: number }>();
+    for (const note of midiInfo.notes) {
+      const group = groupByPair.get(`${note.track}:${note.channel}`) ?? 0;
+      const key = `${group}:${note.pitch}`;
+      const entry = pitchCounts.get(key);
+      if (entry) entry.count++;
+      else pitchCounts.set(key, { group, pitch: note.pitch, count: 1 });
+    }
+    const lattice: LatticeNote[] = [];
+    for (let g = 0; g < GROUP_CAP; g++) {
+      [...pitchCounts.values()]
+        .filter((e) => e.group === g)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, LATTICE_CAP)
+        .forEach((e) => lattice.push({ group: g, pitch: e.pitch, pitch01: (e.pitch - minPitch) / pitchSpan }));
+    }
+    setNoteLattice(lattice);
+
     const step = () => {
       const t = audio.currentTime;
       if (t < lastTime) {
@@ -764,6 +812,7 @@ export default function App() {
         setNoteSignals(melody, notePulse);
         setActiveNotes(sounding.map((n): ActiveNote => ({
           id: n.id,
+          pitch: n.pitch,
           pitch01: (n.pitch - minPitch) / pitchSpan,
           velocity01: Math.min(1, n.velocity / 96),
           env: Math.min(1, (t - n.time) / ATTACK) * (t > n.end ? Math.max(0, 1 - (t - n.end) / RELEASE) : 1),
@@ -838,6 +887,7 @@ export default function App() {
       window.clearInterval(watchdog);
       clearAudioBands();
       setNoteGroupCount(1);
+      setNoteLattice([]);
     };
   }, [audioSync, audioSource, midiInfo]);
 
@@ -1284,9 +1334,13 @@ export default function App() {
       noteMeshes,
       noteFxAmount,
       noteFxMode,
-      noteSpread
+      noteSpread,
+      noteSource,
+      meshUseMtl,
+      meshAssign,
+      noteDisplay
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteSource, meshUseMtl, meshAssign, noteDisplay]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -1622,6 +1676,11 @@ export default function App() {
                 setNoteMeshesEnabled={setNoteMeshes}
                 xrHaptics={xrHaptics}
                 setXrHaptics={setXrHaptics}
+                noteSource={noteSource}
+                meshUseMtl={meshUseMtl}
+                meshAssign={meshAssign}
+                meshChannelMap={meshChannelMap}
+                noteDisplay={noteDisplay}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
@@ -1760,6 +1819,17 @@ export default function App() {
           setNoteFxMode={setNoteFxMode}
           noteSpread={noteSpread}
           setNoteSpread={setNoteSpreadState}
+          noteSource={noteSource}
+          setNoteSource={setNoteSource}
+          meshUseMtl={meshUseMtl}
+          setMeshUseMtl={setMeshUseMtl}
+          meshAssign={meshAssign}
+          setMeshAssign={setMeshAssign}
+          meshChannelMap={meshChannelMap}
+          setMeshChannelMap={setMeshChannelMap}
+          noteDisplay={noteDisplay}
+          setNoteDisplay={setNoteDisplay}
+          meshLibrary={MESH_LIBRARY}
           collapsed={controlsCollapsed}
           onCollapse={() => setControlsCollapsed(true)}
           pageMode={pageMode}

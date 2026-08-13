@@ -83,6 +83,17 @@ interface ControlsProps {
   setNoteFxMode: (mode: 'both' | 'morph' | 'pulse' | 'off') => void;
   noteSpread: number;
   setNoteSpread: (spread: number) => void;
+  noteSource: 'formula' | 'mesh';
+  setNoteSource: (source: 'formula' | 'mesh') => void;
+  meshUseMtl: boolean;
+  setMeshUseMtl: (on: boolean) => void;
+  meshAssign: 'random' | 'channel';
+  setMeshAssign: (mode: 'random' | 'channel') => void;
+  meshChannelMap: string[];
+  setMeshChannelMap: (map: string[]) => void;
+  noteDisplay: 'sounding' | 'all';
+  setNoteDisplay: (mode: 'sounding' | 'all') => void;
+  meshLibrary: string[];
   pageMode: 'audio' | 'silent';
   midiLibrary: Array<{ id: string; name: string }>;
   onSelectLibrary: (id: string) => void;
@@ -366,6 +377,17 @@ export default function Controls({
   setNoteFxMode,
   noteSpread,
   setNoteSpread,
+  noteSource,
+  setNoteSource,
+  meshUseMtl,
+  setMeshUseMtl,
+  meshAssign,
+  setMeshAssign,
+  meshChannelMap,
+  setMeshChannelMap,
+  noteDisplay,
+  setNoteDisplay,
+  meshLibrary,
   pageMode,
   midiLibrary,
   onSelectLibrary,
@@ -1289,6 +1311,109 @@ export default function Controls({
                           aria-label="Note spread"
                           className="mt-1.5 w-full accent-fuchsia-500"
                         />
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-white/80">Note Visuals</div>
+                        <div className="text-[9px] text-white/30 font-mono">What Each Note Renders As</div>
+                        <div className="mt-1.5 grid grid-cols-2 gap-1">
+                          {(['formula', 'mesh'] as const).map((source) => (
+                            <button
+                              key={source}
+                              onClick={() => setNoteSource(source)}
+                              aria-pressed={noteSource === source}
+                              className={cn(
+                                "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
+                                noteSource === source
+                                  ? "bg-fuchsia-500/25 text-fuchsia-100"
+                                  : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
+                              )}
+                            >
+                              {source === 'formula' ? 'Formulas' : '3D Meshes'}
+                            </button>
+                          ))}
+                        </div>
+                        {noteSource === 'mesh' && (
+                          <>
+                            <div className="mt-1.5 grid grid-cols-2 gap-1">
+                              <button
+                                onClick={() => setMeshUseMtl(false)}
+                                aria-pressed={!meshUseMtl}
+                                className={cn(
+                                  "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
+                                  !meshUseMtl ? "bg-fuchsia-500/25 text-fuchsia-100" : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
+                                )}
+                              >
+                                App Materials
+                              </button>
+                              <button
+                                onClick={() => setMeshUseMtl(true)}
+                                aria-pressed={meshUseMtl}
+                                className={cn(
+                                  "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
+                                  meshUseMtl ? "bg-fuchsia-500/25 text-fuchsia-100" : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
+                                )}
+                              >
+                                MTL Colors
+                              </button>
+                            </div>
+                            <div className="mt-1.5 grid grid-cols-2 gap-1">
+                              {(['random', 'channel'] as const).map((mode) => (
+                                <button
+                                  key={mode}
+                                  onClick={() => setMeshAssign(mode)}
+                                  aria-pressed={meshAssign === mode}
+                                  className={cn(
+                                    "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
+                                    meshAssign === mode
+                                      ? "bg-fuchsia-500/25 text-fuchsia-100"
+                                      : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
+                                  )}
+                                >
+                                  {mode === 'random' ? 'Random' : 'Per Channel'}
+                                </button>
+                              ))}
+                            </div>
+                            {meshAssign === 'channel' && (
+                              <div className="mt-1.5 grid grid-cols-2 gap-1">
+                                {meshChannelMap.map((meshName, channel) => (
+                                  <select
+                                    key={channel}
+                                    value={meshName}
+                                    onChange={(e) => {
+                                      const next = [...meshChannelMap];
+                                      next[channel] = e.target.value;
+                                      setMeshChannelMap(next);
+                                    }}
+                                    aria-label={`Channel ${channel + 1} mesh`}
+                                    className="w-full rounded-md border border-white/10 bg-[#141420] py-1 px-1.5 text-[9px] font-mono text-white/70 cursor-pointer hover:bg-[#1b1b2c] transition-colors"
+                                  >
+                                    {meshLibrary.map((name) => (
+                                      <option key={name} value={name}>{`Ch${channel + 1}: ${name}`}</option>
+                                    ))}
+                                  </select>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                        <div className="mt-1.5 grid grid-cols-2 gap-1">
+                          {(['sounding', 'all'] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              onClick={() => setNoteDisplay(mode)}
+                              aria-pressed={noteDisplay === mode}
+                              title={mode === 'sounding' ? 'Visuals exist only while their note sounds' : 'Every note the channel will play stays on stage; note-ons light them up'}
+                              className={cn(
+                                "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
+                                noteDisplay === mode
+                                  ? "bg-amber-500/25 text-amber-100"
+                                  : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
+                              )}
+                            >
+                              {mode === 'sounding' ? 'Sounding Only' : 'All Notes'}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}

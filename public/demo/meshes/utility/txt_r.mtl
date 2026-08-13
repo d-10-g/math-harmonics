@@ -1,0 +1,12 @@
+# Blender MTL File: 'convert_meshes_orientation.blend'
+# Material Count: 1
+
+newmtl txt_r
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.000000 0.001403
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 0.000000
+d 1.000000
+illum 1

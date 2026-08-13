@@ -16,7 +16,8 @@ import {
 } from '../constants';
 import { DEFAULT_VERTEX_SHADER, PRESET_SHADERS } from '../shaders';
 import { XR, XROrigin, useXR, useXRInputSourceState } from '@react-three/xr';
-import { clockStore, getClockTime, reportVerts } from '../lib/clock';
+import { clockStore, getClockTime, reportVerts, LatticeNote } from '../lib/clock';
+import { DEFAULT_CHANNEL_MESHES, RANDOM_MESH_POOL, loadMeshGeometry, loadMeshGroup } from '../lib/meshLibrary';
 import { lightingRigSettings } from '../lib/lighting';
 import { COMBOS } from '../lib/combos';
 import { createPhysicalMaterial } from '../lib/materials';
@@ -992,6 +993,12 @@ interface GraphViewProps {
   setNoteMeshesEnabled?: (on: boolean) => void;
   xrHaptics?: boolean;
   setXrHaptics?: (on: boolean) => void;
+  // Note visuals: OBJ sculpture library options + display mode.
+  noteSource?: 'formula' | 'mesh';
+  meshUseMtl?: boolean;
+  meshAssign?: 'random' | 'channel';
+  meshChannelMap?: string[];
+  noteDisplay?: 'sounding' | 'all';
 }
 
 function FormulaLine({
@@ -1334,16 +1341,30 @@ const NOTE_GROUP_REBUILD_MS = 240;
 // user's selected material.
 const NOTE_GROUP_PROFILES: Exclude<WebGPUMaterialProfile, 'auto'>[] = ['glass', 'ruby', 'copper', 'ice', 'jade'];
 
+// Shared empty geometry: pool and lattice meshes mount with it and get
+// their real geometry assigned in the frame loop.
+const EMPTY_GEOMETRY = new THREE.BufferGeometry();
+
 function NoteConstellation({
   formula,
   showWireframe,
   materialProfile = 'auto',
-  geometryMode: geometryModeOverride
+  geometryMode: geometryModeOverride,
+  noteSource = 'formula',
+  meshUseMtl = false,
+  meshAssign = 'random',
+  meshChannelMap = DEFAULT_CHANNEL_MESHES,
+  noteDisplay = 'sounding'
 }: {
   formula: Formula;
   showWireframe: boolean;
   materialProfile?: WebGPUMaterialProfile;
   geometryMode?: FormulaGeometryMode;
+  noteSource?: 'formula' | 'mesh';
+  meshUseMtl?: boolean;
+  meshAssign?: 'random' | 'channel';
+  meshChannelMap?: string[];
+  noteDisplay?: 'sounding' | 'all';
 }) {
   // Headset headroom: dense scores (Firebird) work the Q2 hard, so
   // in-session the constellation rebuilds less often and samples curves
@@ -1351,6 +1372,57 @@ function NoteConstellation({
   const xrSession = useXR((state) => state.session);
   const rebuildMs = xrSession ? 360 : NOTE_GROUP_REBUILD_MS;
   const curveResolution = xrSession ? 220 : 320;
+
+  // OBJ assets load lazily and live in the module-level cache (never
+  // disposed here — the cache is shared across mounts).
+  const meshGeosRef = useRef(new Map<string, THREE.BufferGeometry | null>());
+  const meshTemplatesRef = useRef(new Map<string, THREE.Group | null>());
+  const [, bumpAssetVersion] = useState(0);
+
+  useEffect(() => {
+    if (noteSource !== 'mesh') return;
+    let alive = true;
+    const names = meshAssign === 'channel' ? [...new Set(meshChannelMap)] : RANDOM_MESH_POOL;
+    for (const name of names) {
+      if (!meshGeosRef.current.has(name)) {
+        meshGeosRef.current.set(name, null);
+        void loadMeshGeometry(name).then((geo) => {
+          if (alive && geo) {
+            meshGeosRef.current.set(name, geo);
+            bumpAssetVersion((v) => v + 1);
+          }
+        });
+      }
+      if (meshUseMtl && !meshTemplatesRef.current.has(name)) {
+        meshTemplatesRef.current.set(name, null);
+        void loadMeshGroup(name).then((template) => {
+          if (alive && template) {
+            meshTemplatesRef.current.set(name, template);
+            bumpAssetVersion((v) => v + 1);
+          }
+        });
+      }
+    }
+    return () => {
+      alive = false;
+    };
+  }, [noteSource, meshAssign, meshChannelMap, meshUseMtl]);
+
+  // Random assignment keys off PITCH (not note id): the same pitch always
+  // wears the same sculpture, which reads musically and keeps the lattice
+  // and the sounding pop-ups consistent in "all notes" mode.
+  const resolveMeshName = (g: number, pitch: number) =>
+    meshAssign === 'channel'
+      ? (meshChannelMap[g] ?? DEFAULT_CHANNEL_MESHES[g % DEFAULT_CHANNEL_MESHES.length])
+      : RANDOM_MESH_POOL[(pitch * 7 + g * 3) % RANDOM_MESH_POOL.length];
+
+  const resolveNoteGeometry = (g: number, pitch: number): THREE.BufferGeometry | null => {
+    if (noteSource === 'mesh') {
+      const geo = meshGeosRef.current.get(resolveMeshName(g, pitch));
+      if (geo) return geo;
+    }
+    return geometriesRef.current[g];
+  };
 
   // Group 0 plays the selected formula; further instrument groups take
   // distinct formulas from the curated combos so each instrument keeps a
@@ -1386,10 +1458,21 @@ function NoteConstellation({
   }), [groupFormulas]);
 
   const groupRef = useRef<THREE.Group>(null);
-  const meshRefs = useRef<Array<THREE.Mesh | null>>([]);
+  // Slots are now wrapper groups (transforms live here) with an inner mesh
+  // for the app-material path; MTL clones attach as extra children.
+  const slotRefs = useRef<Array<THREE.Group | null>>([]);
+  const innerRefs = useRef<Array<THREE.Mesh | null>>([]);
+  const slotContentRef = useRef<Array<{ name: string; obj: THREE.Object3D } | null>>([]);
   // Per-group note id -> slot maps, so a sustained note keeps its mesh
   // while neighbours come and go.
   const slotMapsRef = useRef(Array.from({ length: NOTE_GROUP_CAP }, () => new Map<number, number>()));
+
+  // "All notes" lattice: one persistent object per (group, pitch) the score
+  // will play; note-ons hide the idle object and the active pool mesh pops
+  // at the same spot.
+  const [latticeSnapshot, setLatticeSnapshot] = useState<LatticeNote[]>([]);
+  const latticeSourceRef = useRef<LatticeNote[] | null>(null);
+  const latticeRefs = useRef<Array<THREE.Mesh | null>>([]);
 
   const materials = useMemo(() => {
     const first = materialProfile !== 'auto' ? materialProfile : 'pearl';
@@ -1407,6 +1490,26 @@ function NoteConstellation({
   }, [materialProfile, showWireframe]);
 
   useEffect(() => () => materials.flat().forEach((m) => m.dispose()), [materials]);
+
+  // Dim, translucent versions of the group materials for the idle lattice.
+  const idleMaterials = useMemo(() => {
+    const first = materialProfile !== 'auto' ? materialProfile : 'pearl';
+    const profiles: Exclude<WebGPUMaterialProfile, 'auto'>[] = [first];
+    for (const profile of NOTE_GROUP_PROFILES) {
+      if (profiles.length >= NOTE_GROUP_CAP) break;
+      if (!profiles.includes(profile)) profiles.push(profile);
+    }
+    return profiles.map((profile) => {
+      const material = createPhysicalMaterial(profile, showWireframe);
+      material.transparent = true;
+      material.opacity = 0.3;
+      material.emissiveIntensity *= 0.35;
+      material.depthWrite = false;
+      return material;
+    });
+  }, [materialProfile, showWireframe]);
+
+  useEffect(() => () => idleMaterials.forEach((m) => m.dispose()), [idleMaterials]);
 
   // Group geometries live in a ref and are swapped from the frame loop; the
   // version bump re-renders so the mesh JSX picks up new objects.
@@ -1466,6 +1569,19 @@ function NoteConstellation({
       groupRef.current.position.y = Math.sin(time * 1.4) * 0.35;
     }
 
+    // Sync the lattice snapshot (set once per piece by the engine).
+    if (clock.noteLattice !== latticeSourceRef.current) {
+      latticeSourceRef.current = clock.noteLattice;
+      setLatticeSnapshot(clock.noteLattice);
+    }
+
+    const spread = clock.noteSpread;
+    const mtlActive = noteSource === 'mesh' && meshUseMtl;
+    const allMode = noteDisplay === 'all';
+    const activeKeys = allMode
+      ? new Set(active.filter((n) => n.env > 0.01).map((n) => `${n.group}:${n.pitch}`))
+      : null;
+
     for (let g = 0; g < NOTE_GROUP_CAP; g++) {
       const slots = slotMapsRef.current[g];
       const groupNotes = active.filter((n) => n.group === g);
@@ -1491,35 +1607,64 @@ function NoteConstellation({
       const lift = (g - (usedGroups - 1) / 2) * 1.15;
 
       for (let slot = 0; slot < NOTE_GROUP_POOL; slot++) {
-        const mesh = meshRefs.current[g * NOTE_GROUP_POOL + slot];
-        if (!mesh) continue;
+        const index = g * NOTE_GROUP_POOL + slot;
+        const slotGroup = slotRefs.current[index];
+        if (!slotGroup) continue;
         const note = groupNotes.find((n) => slots.get(n.id) === slot);
         const material = materials[g]?.[slot];
+        const innerMesh = innerRefs.current[index];
 
         if (!note || !material) {
-          // Silence means an empty stage: the constellation exists only
-          // while notes sound, so rests read as rests.
-          mesh.visible = false;
+          // Silence means an empty stage (or, in all-notes mode, the idle
+          // lattice carries the scene between note-ons).
+          slotGroup.visible = false;
           continue;
         }
 
-        const { pitch01, velocity01, env, id } = note;
+        const { pitch, pitch01, velocity01, env, id } = note;
         const eased = 1 - Math.pow(1 - env, 3);
-        const spread = clock.noteSpread;
-        mesh.visible = eased > 0.01;
-        mesh.position.set(
+        slotGroup.visible = eased > 0.01;
+        // In all-notes mode the pop-up sits exactly on its lattice object
+        // (static, no bob) so the note-on reads as "that one lit up".
+        const bob = allMode ? 0 : Math.sin(time * 1.6 + slot * 1.3 + g * 2.1) * 0.5;
+        slotGroup.position.set(
           (pitch01 - 0.5) * 17 * spread,
-          ((pitch01 - 0.5) * 3.5 + lift) * spread + Math.sin(time * 1.6 + slot * 1.3 + g * 2.1) * 0.5,
+          ((pitch01 - 0.5) * 3.5 + lift) * spread + bob,
           -Math.abs(pitch01 - 0.5) * 6 + depth
         );
-        mesh.rotation.set(
+        slotGroup.rotation.set(
           Math.sin(time * 0.7 + id) * 0.18,
           time * (0.35 + pitch01 * 0.45) + id * 0.9,
           0
         );
         // The FX amount dial scales the velocity accent, not the note's
         // core lifecycle — at 0 every note is still born and released.
-        mesh.scale.setScalar((0.17 + velocity01 * 0.12 * fxAmount) * eased);
+        slotGroup.scale.setScalar((0.17 + velocity01 * 0.12 * fxAmount) * eased);
+
+        // Content: MTL clone when active and loaded, else the app-material
+        // mesh with the resolved geometry (formula or OBJ).
+        const contentState = slotContentRef.current[index];
+        if (mtlActive) {
+          const name = resolveMeshName(g, pitch);
+          const template = meshTemplatesRef.current.get(name);
+          if (template) {
+            if (innerMesh) innerMesh.visible = false;
+            if (!contentState || contentState.name !== name) {
+              if (contentState) slotGroup.remove(contentState.obj);
+              const cloneObj = template.clone();
+              slotGroup.add(cloneObj);
+              slotContentRef.current[index] = { name, obj: cloneObj };
+            }
+            continue; // MTL colors are the OBJ's own — no emissive modulation
+          }
+        }
+        if (contentState) {
+          slotGroup.remove(contentState.obj);
+          slotContentRef.current[index] = null;
+        }
+        if (!innerMesh) continue;
+        innerMesh.visible = true;
+        innerMesh.geometry = resolveNoteGeometry(g, pitch) ?? EMPTY_GEOMETRY;
 
         // Pitch tints the emissive: low notes warm, high notes cool.
         const base = material.userData.baseEmissive as THREE.Color;
@@ -1530,28 +1675,61 @@ function NoteConstellation({
         material.emissiveIntensity = (material.userData.baseEmissiveIntensity as number) * (0.6 + env * 1.5 * Math.min(4, Math.max(0.35, fxAmount)));
       }
     }
+
+    // Idle lattice layer (all-notes mode): static objects at every pitch
+    // the score will play; hidden while their note actively sounds.
+    if (allMode) {
+      latticeSnapshot.forEach((entry, i) => {
+        const mesh = latticeRefs.current[i];
+        if (!mesh) return;
+        const depth = -entry.group * 2.4;
+        const lift = (entry.group - (usedGroups - 1) / 2) * 1.15;
+        mesh.position.set(
+          (entry.pitch01 - 0.5) * 17 * spread,
+          ((entry.pitch01 - 0.5) * 3.5 + lift) * spread,
+          -Math.abs(entry.pitch01 - 0.5) * 6 + depth
+        );
+        mesh.scale.setScalar(0.085);
+        mesh.rotation.set(0, entry.pitch * 0.5, 0);
+        mesh.geometry = resolveNoteGeometry(entry.group, entry.pitch) ?? EMPTY_GEOMETRY;
+        mesh.visible = !activeKeys!.has(`${entry.group}:${entry.pitch}`);
+      });
+    }
   });
 
   return (
     <group ref={groupRef}>
-      {Array.from({ length: NOTE_GROUP_CAP }, (_, g) => {
-        const geometry = geometriesRef.current[g];
-        if (!geometry) return null;
-        return (
-          <group key={g}>
-            {Array.from({ length: NOTE_GROUP_POOL }, (_, slot) => (
-              <mesh
+      {Array.from({ length: NOTE_GROUP_CAP }, (_, g) => (
+        <group key={g}>
+          {Array.from({ length: NOTE_GROUP_POOL }, (_, slot) => {
+            const index = g * NOTE_GROUP_POOL + slot;
+            return (
+              <group
                 key={slot}
-                ref={(mesh) => { meshRefs.current[g * NOTE_GROUP_POOL + slot] = mesh; }}
-                geometry={geometry}
-                material={materials[g]?.[slot]}
-                frustumCulled={false}
+                ref={(node) => { slotRefs.current[index] = node; }}
                 visible={false}
-              />
-            ))}
-          </group>
-        );
-      })}
+              >
+                <mesh
+                  ref={(node) => { innerRefs.current[index] = node; }}
+                  geometry={EMPTY_GEOMETRY}
+                  material={materials[g]?.[slot]}
+                  frustumCulled={false}
+                />
+              </group>
+            );
+          })}
+        </group>
+      ))}
+      {noteDisplay === 'all' && latticeSnapshot.map((entry, i) => (
+        <mesh
+          key={`${entry.group}:${entry.pitch}`}
+          ref={(node) => { latticeRefs.current[i] = node; }}
+          geometry={EMPTY_GEOMETRY}
+          material={idleMaterials[entry.group] ?? idleMaterials[0]}
+          frustumCulled={false}
+          visible={false}
+        />
+      ))}
     </group>
   );
 }
@@ -2531,7 +2709,12 @@ export default function GraphView({
   noteMeshesEnabled,
   setNoteMeshesEnabled,
   xrHaptics,
-  setXrHaptics
+  setXrHaptics,
+  noteSource,
+  meshUseMtl,
+  meshAssign,
+  meshChannelMap,
+  noteDisplay
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
@@ -2633,7 +2816,17 @@ export default function GraphView({
 
             {showMirrors && <AngledMirrorSurfaces show3D={show3D} />}
             {noteMeshes && show3D ? (
-              <NoteConstellation formula={formula} showWireframe={showWireframe} materialProfile={webgpuMaterial} geometryMode={geometryMode} />
+              <NoteConstellation
+                formula={formula}
+                showWireframe={showWireframe}
+                materialProfile={webgpuMaterial}
+                geometryMode={geometryMode}
+                noteSource={noteSource}
+                meshUseMtl={meshUseMtl}
+                meshAssign={meshAssign}
+                meshChannelMap={meshChannelMap}
+                noteDisplay={noteDisplay}
+              />
             ) : (
               <FormulaLine formula={formula} shader={shader} show3D={show3D} showWireframe={showWireframe} materialProfile={webgpuMaterial} lineWidth={lineWidth} geometryMode={geometryMode} />
             )}
