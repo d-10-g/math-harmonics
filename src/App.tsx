@@ -190,11 +190,11 @@ const FIRST_VISIT = (() => {
 // gated by its own flag so users whose saved state predates the demo still
 // get the intro exactly once. `?demo` in the URL forces it any time.
 const WELCOMED_KEY = 'harmonics.welcomed.v2';
+// The app now lands directly in audio mode ready to play — the overlay
+// only appears for explicit ?demo links.
 const SHOW_WELCOME = (() => {
   try {
-    if (new URLSearchParams(location.search).has('demo')) return true;
-    if (location.hash) return false; // share links go straight to their scene
-    return !localStorage.getItem(WELCOMED_KEY);
+    return new URLSearchParams(location.search).has('demo');
   } catch {
     return false;
   }
@@ -423,7 +423,9 @@ export default function App() {
   const [noteSpread, setNoteSpreadState] = useState(initialShared.noteSpread ?? 5);
   useEffect(() => { setNoteSpread(noteSpread); }, [noteSpread]);
   const [pageMode, setPageMode] = useState<PageMode>(INITIAL_MODE ?? 'audio');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // The formula library leads the silent studio; the audio page keeps it
+  // tucked away (the edge chevron can still peek).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState((INITIAL_MODE ?? 'audio') !== 'silent');
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
   // Beat haptics buzz once per quarter note — annoying during music, so
   // off unless the MUSIC tab toggle turns them on.
@@ -531,6 +533,20 @@ export default function App() {
       audio.removeEventListener('error', onError);
       audio.removeEventListener('loadeddata', onLoaded);
     };
+  }, []);
+
+  // Landing in audio mode should be one press from magic: if no score is
+  // loaded yet, stage the default piece (no autoplay — the transport's play
+  // button is the user's first gesture).
+  useEffect(() => {
+    if (pageMode !== 'audio' || !audioSync || audioSource !== 'midi' || midiInfo) return;
+    const lib = MIDI_LIBRARY[0];
+    setCurrentLibraryId(lib.id);
+    const audio = midiAudioRef.current;
+    if (audio && !audio.src) audio.src = lib.audio;
+    void loadMidiSource(lib.mid);
+    // Mount-time staging only; later mode/source changes handle themselves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Entering an immersive session can pause page media on some headsets.
@@ -1176,8 +1192,10 @@ export default function App() {
     if (mode === 'silent') {
       setAudioSync(false);
       midiAudioRef.current?.pause(); // the silent studio is actually silent
+      setSidebarCollapsed(false); // the formula library is the studio's centerpiece
       return;
     }
+    setSidebarCollapsed(true);
     setAudioSync(true);
     setAudioSource('midi');
     setNoteMeshes(true);
