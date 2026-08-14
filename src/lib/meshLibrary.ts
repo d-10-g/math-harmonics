@@ -81,6 +81,38 @@ export function loadMeshGeometry(name: string): Promise<THREE.BufferGeometry | n
   return promise;
 }
 
+// Most of the library's MTLs share one Blender debug material (Kd 0.2/1/0.2
+// green; some default 0.8 gray). Those aren't authored colors — when we see
+// them, substitute a stable, distinct, tone-safe hue derived from the mesh
+// name. Genuinely authored MTL colors pass through untouched.
+function isPlaceholderColor(color: THREE.Color): boolean {
+  const near = (v: number, t: number) => Math.abs(v - t) < 0.02;
+  return (near(color.r, 0.2) && near(color.g, 1.0) && near(color.b, 0.2))
+    || (near(color.r, 0.8) && near(color.g, 0.8) && near(color.b, 0.8));
+}
+
+function paletteColor(name: string): THREE.Color {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  const hue = (hash % 360) / 360;
+  return new THREE.Color().setHSL(hue, 0.62, 0.52);
+}
+
+function applyPaletteToPlaceholders(group: THREE.Group, name: string): void {
+  group.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.forEach((material, index) => {
+      const colored = material as THREE.MeshPhongMaterial;
+      if (colored.color && isPlaceholderColor(colored.color)) {
+        // Multi-material meshes get slightly rotated hues so parts differ.
+        colored.color.copy(paletteColor(index === 0 ? name : `${name}:${index}`));
+      }
+    });
+  });
+}
+
 // Full load with the OBJ's own MTL colors. Returns a normalized TEMPLATE —
 // callers clone() it per slot (clones share geometry + materials, which is
 // exactly right: MTL mode does not modulate materials per note).
@@ -97,6 +129,7 @@ export function loadMeshGroup(name: string): Promise<THREE.Group | null> {
     .catch(() => new OBJLoader().loadAsync(`${MESH_BASE}${name}.obj`))
     .then((group) => {
       if (!group) return null;
+      applyPaletteToPlaceholders(group, name);
       const box = new THREE.Box3().setFromObject(group);
       const sphere = box.getBoundingSphere(new THREE.Sphere());
       const wrapper = new THREE.Group();

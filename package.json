@@ -2,7 +2,7 @@
   "name": "math-harmonics",
   "productName": "Harmonic.OS",
   "private": true,
-  "version": "2.5.0",
+  "version": "2.5.1",
   "type": "module",
   "main": "electron.js",
   "scripts": {
