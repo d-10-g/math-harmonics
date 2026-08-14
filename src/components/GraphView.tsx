@@ -993,12 +993,19 @@ interface GraphViewProps {
   setNoteMeshesEnabled?: (on: boolean) => void;
   xrHaptics?: boolean;
   setXrHaptics?: (on: boolean) => void;
-  // Note visuals: OBJ sculpture library options + display mode.
+  // Note visuals: OBJ sculpture library options + display mode. Setters and
+  // the library list feed the spatial console's NOTES tab.
   noteSource?: 'formula' | 'mesh';
+  setNoteSource?: (source: 'formula' | 'mesh') => void;
   meshUseMtl?: boolean;
+  setMeshUseMtl?: (on: boolean) => void;
   meshAssign?: 'random' | 'channel';
+  setMeshAssign?: (mode: 'random' | 'channel') => void;
   meshChannelMap?: string[];
+  setMeshChannelMap?: (map: string[]) => void;
   noteDisplay?: 'sounding' | 'all';
+  setNoteDisplay?: (mode: 'sounding' | 'all') => void;
+  meshLibrary?: string[];
 }
 
 function FormulaLine({
@@ -2711,10 +2718,16 @@ export default function GraphView({
   xrHaptics,
   setXrHaptics,
   noteSource,
+  setNoteSource,
   meshUseMtl,
+  setMeshUseMtl,
   meshAssign,
+  setMeshAssign,
   meshChannelMap,
-  noteDisplay
+  setMeshChannelMap,
+  noteDisplay,
+  setNoteDisplay,
+  meshLibrary
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
@@ -2855,6 +2868,17 @@ export default function GraphView({
             setNoteMeshes={setNoteMeshesEnabled}
             xrHaptics={xrHaptics}
             setXrHaptics={setXrHaptics}
+            noteSource={noteSource}
+            setNoteSource={setNoteSource}
+            meshUseMtl={meshUseMtl}
+            setMeshUseMtl={setMeshUseMtl}
+            meshAssign={meshAssign}
+            setMeshAssign={setMeshAssign}
+            meshChannelMap={meshChannelMap}
+            setMeshChannelMap={setMeshChannelMap}
+            noteDisplay={noteDisplay}
+            setNoteDisplay={setNoteDisplay}
+            meshLibrary={meshLibrary}
             formula={formula}
             shader={shader}
             currentGeometryMode={geometryMode}

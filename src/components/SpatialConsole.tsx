@@ -120,7 +120,7 @@ function Stepper({
   );
 }
 
-type ConsoleTab = 'music' | 'control' | 'settings' | 'view' | 'pilot' | 'formulas' | 'shaders';
+type ConsoleTab = 'music' | 'notes' | 'control' | 'settings' | 'view' | 'pilot' | 'formulas' | 'shaders';
 
 export interface SpatialConsoleProps {
   onNextFormula?: () => void;
@@ -181,6 +181,18 @@ export interface SpatialConsoleProps {
   setNoteMeshes?: (on: boolean) => void;
   xrHaptics?: boolean;
   setXrHaptics?: (on: boolean) => void;
+  // Note-visuals options (NOTES tab).
+  noteSource?: 'formula' | 'mesh';
+  setNoteSource?: (source: 'formula' | 'mesh') => void;
+  meshUseMtl?: boolean;
+  setMeshUseMtl?: (on: boolean) => void;
+  meshAssign?: 'random' | 'channel';
+  setMeshAssign?: (mode: 'random' | 'channel') => void;
+  meshChannelMap?: string[];
+  setMeshChannelMap?: (map: string[]) => void;
+  noteDisplay?: 'sounding' | 'all';
+  setNoteDisplay?: (mode: 'sounding' | 'all') => void;
+  meshLibrary?: string[];
 }
 
 const PAGE_SIZE = 6;
@@ -260,13 +272,23 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
   // (formulas/shaders) close the row.
   const tabs: Array<{ key: ConsoleTab; label: string }> = [
     { key: 'music', label: 'MUSIC' },
-    { key: 'control', label: 'CONTROL' },
+    { key: 'notes', label: 'NOTES' },
+    { key: 'control', label: 'CTRL' },
     { key: 'pilot', label: 'PILOT' },
     { key: 'view', label: 'VIEW' },
     { key: 'settings', label: 'SETUP' },
-    { key: 'formulas', label: 'FORMULAS' },
+    { key: 'formulas', label: 'FORMS' },
     { key: 'shaders', label: 'SHADERS' }
   ];
+
+  const cycleChannelMesh = (channel: number, offset: number) => {
+    const library = props.meshLibrary ?? [];
+    if (!library.length || !props.setMeshChannelMap || !props.meshChannelMap) return;
+    const index = Math.max(0, library.indexOf(props.meshChannelMap[channel]));
+    const map = [...props.meshChannelMap];
+    map[channel] = library[(index + offset + library.length) % library.length];
+    props.setMeshChannelMap(map);
+  };
 
   const groupPosition: [number, number, number] = session ? hudPosition : [0, 0, 12];
   const groupScale = session ? hudScale : 9;
@@ -358,6 +380,22 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
               <ConsoleButton grow tone="accent" label="◀ PIECE" onTap={() => props.onCycleLibrary?.(-1)} />
               <ConsoleButton grow tone="accent" label="PIECE ▶" onTap={() => props.onCycleLibrary?.(1)} />
             </Container>
+            <Container flexDirection="row" gap={8}>
+              <ConsoleToggle
+                label="BEAT HAPTICS"
+                value={!!props.xrHaptics}
+                onTap={() => props.setXrHaptics?.(!props.xrHaptics)}
+              />
+            </Container>
+            <Container height={18} justifyContent="center" alignItems="center">
+              <Text fontSize={9.5} color={TEXT_DIM}>A = PLAY / PAUSE · X / Y = PREVIOUS / NEXT PIECE</Text>
+            </Container>
+          </Container>
+        )}
+
+        {/* NOTES — how each note renders and moves */}
+        {activeTab === 'notes' && (
+          <Container flexDirection="column" gap={8}>
             <Stepper
               label="NOTE FX"
               value={`${Math.round((props.noteFxAmount ?? 2) * 100)}%`}
@@ -388,14 +426,83 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
                 value={!!props.noteMeshes}
                 onTap={() => props.setNoteMeshes?.(!props.noteMeshes)}
               />
-              <ConsoleToggle
-                label="BEAT HAPTICS"
-                value={!!props.xrHaptics}
-                onTap={() => props.setXrHaptics?.(!props.xrHaptics)}
+            </Container>
+            <Container flexDirection="row" gap={6}>
+              <ConsoleButton
+                grow
+                fontSize={10.5}
+                tone={props.noteSource !== 'mesh' ? 'accent' : 'default'}
+                label="FORMULAS"
+                onTap={() => props.setNoteSource?.('formula')}
+              />
+              <ConsoleButton
+                grow
+                fontSize={10.5}
+                tone={props.noteSource === 'mesh' ? 'accent' : 'default'}
+                label="3D MESHES"
+                onTap={() => props.setNoteSource?.('mesh')}
               />
             </Container>
-            <Container height={18} justifyContent="center" alignItems="center">
-              <Text fontSize={9.5} color={TEXT_DIM}>A = PLAY / PAUSE · X / Y = PREVIOUS / NEXT PIECE</Text>
+            {props.noteSource === 'mesh' && (
+              <>
+                <Container flexDirection="row" gap={6}>
+                  <ConsoleButton
+                    grow
+                    fontSize={10.5}
+                    tone={!props.meshUseMtl ? 'accent' : 'default'}
+                    label="APP MATERIALS"
+                    onTap={() => props.setMeshUseMtl?.(false)}
+                  />
+                  <ConsoleButton
+                    grow
+                    fontSize={10.5}
+                    tone={props.meshUseMtl ? 'accent' : 'default'}
+                    label="MTL COLORS"
+                    onTap={() => props.setMeshUseMtl?.(true)}
+                  />
+                </Container>
+                <Container flexDirection="row" gap={6}>
+                  <ConsoleButton
+                    grow
+                    fontSize={10.5}
+                    tone={props.meshAssign === 'random' ? 'accent' : 'default'}
+                    label="RANDOM"
+                    onTap={() => props.setMeshAssign?.('random')}
+                  />
+                  <ConsoleButton
+                    grow
+                    fontSize={10.5}
+                    tone={props.meshAssign === 'channel' ? 'accent' : 'default'}
+                    label="PER CHANNEL"
+                    onTap={() => props.setMeshAssign?.('channel')}
+                  />
+                </Container>
+                {props.meshAssign === 'channel' && (props.meshChannelMap ?? []).map((meshName, channel) => (
+                  <Stepper
+                    key={channel}
+                    label={`CH ${channel + 1} MESH`}
+                    value={meshName}
+                    onDec={() => cycleChannelMesh(channel, -1)}
+                    onInc={() => cycleChannelMesh(channel, 1)}
+                  />
+                ))}
+              </>
+            )}
+            <Container flexDirection="row" gap={6}>
+              <ConsoleButton
+                grow
+                fontSize={10.5}
+                tone={props.noteDisplay !== 'all' ? 'accent' : 'default'}
+                label="SOUNDING ONLY"
+                onTap={() => props.setNoteDisplay?.('sounding')}
+              />
+              <ConsoleButton
+                grow
+                fontSize={10.5}
+                tone={props.noteDisplay === 'all' ? 'accent' : 'default'}
+                label="ALL NOTES"
+                onTap={() => props.setNoteDisplay?.('all')}
+              />
             </Container>
           </Container>
         )}

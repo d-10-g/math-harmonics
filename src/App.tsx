@@ -1695,10 +1695,16 @@ export default function App() {
                 xrHaptics={xrHaptics}
                 setXrHaptics={setXrHaptics}
                 noteSource={noteSource}
+                setNoteSource={setNoteSource}
                 meshUseMtl={meshUseMtl}
+                setMeshUseMtl={setMeshUseMtl}
                 meshAssign={meshAssign}
+                setMeshAssign={setMeshAssign}
                 meshChannelMap={meshChannelMap}
+                setMeshChannelMap={setMeshChannelMap}
                 noteDisplay={noteDisplay}
+                setNoteDisplay={setNoteDisplay}
+                meshLibrary={MESH_LIBRARY}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
