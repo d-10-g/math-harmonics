@@ -3,9 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { compile } from 'mathjs';
 import Sidebar from './components/Sidebar';
+import ModelChannelControls from './components/ModelChannelControls';
+import { defaultModelSettings, type ModelSettings, type ModelKind, type BackgroundChoice } from './lib/modelChannels';
+import type { HdriFile } from './components/ModelBackdrop';
+import ErnieView from './components/ErnieView';
 import GraphView from './components/GraphView';
 import Controls from './components/Controls';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -433,7 +437,7 @@ export default function App() {
   // Note visuals: formula geometry or the OBJ sculpture library; MTL colors
   // vs app materials; random vs per-channel assignment; sounding-only vs a
   // persistent all-notes lattice that note-ons light up.
-  const [noteSource, setNoteSource] = useState<'formula' | 'mesh'>(initialShared.noteSource ?? 'formula');
+  const [noteSource, setNoteSource] = useState<'formula' | 'mesh' | 'glb'>(new URLSearchParams(location.search).has('ernie') ? 'glb' : initialShared.noteSource ?? 'formula');
   const [meshUseMtl, setMeshUseMtl] = useState(initialShared.meshUseMtl ?? false);
   const [meshAssign, setMeshAssign] = useState<'random' | 'channel'>(initialShared.meshAssign ?? 'random');
   const [noteDisplay, setNoteDisplay] = useState<'sounding' | 'all'>(initialShared.noteDisplay ?? 'sounding');
@@ -477,6 +481,20 @@ export default function App() {
   useEffect(() => { audioSourceRef.current = audioSource; }, [audioSource]);
   const [midiInfo, setMidiInfo] = useState<(ParsedMidi & { name: string }) | null>(null);
   const midiAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [modelSettings,setModelSettings]=useState<Record<ModelKind,ModelSettings>>(()=>{
+    const defaults={glb:defaultModelSettings(),obj:defaultModelSettings()};
+    try {const saved=JSON.parse(localStorage.getItem('harmonics.modelChannels.v1')??'null');
+      for(const kind of ['glb','obj'] as const)if(saved?.[kind]&&Number.isInteger(saved[kind].seed)&&saved[kind].channels&&typeof saved[kind].channels==='object')defaults[kind]={...defaults[kind],...saved[kind]};
+    }catch{}return defaults;
+  });
+  useEffect(()=>{try{localStorage.setItem('harmonics.modelChannels.v1',JSON.stringify(modelSettings));}catch{}},[modelSettings]);
+  const modelKind:ModelKind=noteSource==='mesh'?'obj':'glb';
+  const modelChannels=useMemo(()=>midiInfo?.notes.length?[...new Set(midiInfo.notes.map(n=>n.channel))].sort((a,b)=>a-b):[0,1,2,3],[midiInfo]);
+  const [modelBackground,setModelBackground]=useState<BackgroundChoice>('midnight');
+  const [hdri,setHdri]=useState<HdriFile|null>(null);
+  const [backgroundError,setBackgroundError]=useState('');
+  useEffect(()=>()=>{if(hdri)URL.revokeObjectURL(hdri.url);},[hdri]);
+
 
   // Unified transport: while a MIDI session is live, Space and the Play/Pause
   // button drive the *music*, and the visual clock follows the audio element
@@ -544,7 +562,7 @@ export default function App() {
     setCurrentLibraryId(lib.id);
     const audio = midiAudioRef.current;
     if (audio && !audio.src) audio.src = lib.audio;
-    void loadMidiSource(lib.mid);
+    void loadMidiSource(lib.mid, undefined, false);
     // Mount-time staging only; later mode/source changes handle themselves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -644,13 +662,17 @@ export default function App() {
   // sync. Also exposed as window.harmonicsMidi.load(midiUrl, audioUrl).
   // URL loads with no explicit audio probe the same folder for a rendition
   // sharing the basename (.mp3/.wav/.aif/.aiff) and use the first that
-  // exists. Local file picks can't do that — the browser sandbox has no
+  // exists. Known library pairings disable probing to keep playing audio intact.
+  // Local file picks can't do that — the browser sandbox has no
   // access to a picked file's folder — so the file dialog accepts a
   // multi-select and pairs the audio from the same selection instead.
-  const loadMidiSource = async (midiSource: File | string, audioSrc?: File | string) => {
+  const midiLoadGeneration = useRef(0);
+  const loadMidiSource = async (midiSource: File | string, audioSrc?: File | string, probeAudio = true) => {
+    const generation = ++midiLoadGeneration.current;
     const buffer = typeof midiSource === 'string'
       ? await fetch(midiSource).then((r) => r.arrayBuffer())
       : await midiSource.arrayBuffer();
+    if (generation !== midiLoadGeneration.current) return;
     const parsed = parseMidi(buffer);
     const name = typeof midiSource === 'string'
       ? midiSource.split('/').pop() ?? 'midi'
@@ -658,7 +680,7 @@ export default function App() {
     setMidiInfo({ ...parsed, name });
     if (audioSrc && midiAudioRef.current) {
       midiAudioRef.current.src = typeof audioSrc === 'string' ? audioSrc : URL.createObjectURL(audioSrc);
-    } else if (typeof midiSource === 'string' && midiAudioRef.current) {
+    } else if (probeAudio && typeof midiSource === 'string' && midiAudioRef.current) {
       const base = midiSource.replace(/\.[^./]+$/, '');
       // Probe only formats this browser can actually decode (Chrome, for
       // one, cannot play AIFF at all).
@@ -675,6 +697,7 @@ export default function App() {
           // Dev/SPA servers answer missing paths with 200 text/html fallbacks.
           const type = head.headers.get('content-type') ?? '';
           if (head.ok && !type.includes('text/html')) {
+            if (generation !== midiLoadGeneration.current || !midiAudioRef.current) return;
             midiAudioRef.current.src = candidate;
             break;
           }
@@ -1213,7 +1236,7 @@ export default function App() {
       setCurrentLibraryId(lib.id);
       const audio = midiAudioRef.current;
       if (audio) audio.src = lib.audio;
-      void loadMidiSource(lib.mid);
+      void loadMidiSource(lib.mid, undefined, false);
     }
   };
 
@@ -1230,7 +1253,7 @@ export default function App() {
       audio.src = lib.audio;
       void audio.play().catch((error) => console.warn('Autoplay blocked:', error));
     }
-    void loadMidiSource(lib.mid);
+    void loadMidiSource(lib.mid, undefined, false);
   };
 
   const loadLibraryEntry = (id: string) => {
@@ -1245,7 +1268,7 @@ export default function App() {
         // Autoplay refused (e.g. programmatic selection) — transport will start it.
       });
     }
-    void loadMidiSource(entry.mid);
+    void loadMidiSource(entry.mid, undefined, false);
   };
 
   // In-XR music helpers: seek, wall-clock readout, and library cycling.
@@ -1648,7 +1671,7 @@ export default function App() {
           )}
           <div className="flex-1 relative min-h-0">
             <ErrorBoundary>
-            {rendererMode === 'webgpu' ? (
+            {noteSource !== 'formula' ? <ErnieView midi={midiInfo} getMusicTime={getMusicTime} kind={modelKind} settings={modelSettings[modelKind]} display={noteDisplay} spacing={noteSpread/5} background={modelBackground} hdri={hdri} onBackgroundError={setBackgroundError} /> : rendererMode === 'webgpu' ? (
               <Suspense
                 fallback={
                   <div className="flex h-full w-full items-center justify-center font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
@@ -1843,6 +1866,8 @@ export default function App() {
           setNoteFxMode={setNoteFxMode}
           noteSpread={noteSpread}
           setNoteSpread={setNoteSpreadState}
+          modelControls={<ModelChannelControls kind={modelKind} settings={modelSettings[modelKind]} channels={modelChannels} onChange={settings=>setModelSettings(prev=>({...prev,[modelKind]:settings}))} onImport={(kind,settings)=>{setModelSettings(prev=>({...prev,[kind]:settings}));setNoteSource(kind==='glb'?'glb':'mesh');}} />}
+          modelBackgroundControls={<div className="space-y-2 text-xs text-white/70"><label>3D Background<select aria-label="3D Background" className="block w-full rounded bg-slate-800 p-2" value={modelBackground} onChange={e=>setModelBackground(e.target.value as BackgroundChoice)}>{(['cosmos','midnight','charcoal','slate','ivory','white','hdri'] as const).map(c=><option key={c} value={c}>{c==='hdri'?'HDRI panorama + lighting':c}</option>)}</select></label>{modelBackground==='hdri'&&<label className="block">Load equirectangular HDR / EXR<input aria-label="Load HDRI" type="file" accept=".hdr,.exr" onChange={e=>{const f=e.target.files?.[0];if(f){setBackgroundError('');setHdri({url:URL.createObjectURL(f),name:f.name});}e.target.value='';}}/>{hdri?.name}</label>}{backgroundError&&<p role="alert">{backgroundError}</p>}<p className="text-white/40">HDRIs provide panoramic backgrounds and material lighting. Gaussian splat scenes are planned for a later stage.</p></div>}
           noteSource={noteSource}
           setNoteSource={setNoteSource}
           meshUseMtl={meshUseMtl}

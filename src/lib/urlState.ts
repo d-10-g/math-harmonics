@@ -39,7 +39,7 @@ export type SharedState = {
   noteFxAmount?: number;
   noteFxMode?: 'both' | 'morph' | 'pulse' | 'off';
   noteSpread?: number;
-  noteSource?: 'formula' | 'mesh';
+  noteSource?: 'formula' | 'mesh' | 'glb';
   meshUseMtl?: boolean;
   meshAssign?: 'random' | 'channel';
   noteDisplay?: 'sounding' | 'all';
@@ -84,7 +84,7 @@ function parseParams(params: URLSearchParams): SharedState {
   state.noteFxMode = oneOf(read('nfm'), ['both', 'morph', 'pulse', 'off'] as const);
   const spread = read('nsp');
   if (spread !== undefined && Number.isFinite(parseFloat(spread))) state.noteSpread = Math.min(10, Math.max(0.5, parseFloat(spread)));
-  state.noteSource = oneOf(read('nsc'), ['formula', 'mesh'] as const);
+  state.noteSource = oneOf(read('nsc'), ['glb', 'formula', 'mesh'] as const);
   state.meshUseMtl = flag('nml');
   state.meshAssign = oneOf(read('nas'), ['random', 'channel'] as const);
   state.noteDisplay = oneOf(read('nds'), ['sounding', 'all'] as const);

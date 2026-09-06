@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { compile } from 'mathjs';
 import { cn } from '../lib/utils';
 import { useClockSnapshot } from '../lib/clock';
@@ -83,8 +83,10 @@ interface ControlsProps {
   setNoteFxMode: (mode: 'both' | 'morph' | 'pulse' | 'off') => void;
   noteSpread: number;
   setNoteSpread: (spread: number) => void;
-  noteSource: 'formula' | 'mesh';
-  setNoteSource: (source: 'formula' | 'mesh') => void;
+  modelControls?: ReactNode;
+  modelBackgroundControls?: ReactNode;
+  noteSource: 'formula' | 'mesh' | 'glb';
+  setNoteSource: (source: 'formula' | 'mesh' | 'glb') => void;
   meshUseMtl: boolean;
   setMeshUseMtl: (on: boolean) => void;
   meshAssign: 'random' | 'channel';
@@ -377,6 +379,8 @@ export default function Controls({
   setNoteFxMode,
   noteSpread,
   setNoteSpread,
+  modelControls,
+  modelBackgroundControls,
   noteSource,
   setNoteSource,
   meshUseMtl,
@@ -960,6 +964,7 @@ export default function Controls({
             />
           </div>
 
+          {noteSource !== 'formula' ? modelBackgroundControls : <>
           {/* Cosmos Backdrop Switch */}
           <div className="flex items-center justify-between group">
             <div>
@@ -981,6 +986,7 @@ export default function Controls({
               )} />
             </button>
           </div>
+          </>}
 
           {/* 2D Line Width */}
           <div className="space-y-3 group">
@@ -1315,8 +1321,8 @@ export default function Controls({
                       <div>
                         <div className="text-xs font-semibold text-white/80">Note Visuals</div>
                         <div className="text-[9px] text-white/30 font-mono">What Each Note Renders As</div>
-                        <div className="mt-1.5 grid grid-cols-2 gap-1">
-                          {(['formula', 'mesh'] as const).map((source) => (
+                        <div className="mt-1.5 grid grid-cols-3 gap-1">
+                          {(['glb', 'formula', 'mesh'] as const).map((source) => (
                             <button
                               key={source}
                               onClick={() => setNoteSource(source)}
@@ -1328,74 +1334,11 @@ export default function Controls({
                                   : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
                               )}
                             >
-                              {source === 'formula' ? 'Formulas' : '3D Meshes'}
+                              {source === 'glb' ? '3D GLB' : source === 'formula' ? 'Formulas' : '3D OBJ'}
                             </button>
                           ))}
                         </div>
-                        {noteSource === 'mesh' && (
-                          <>
-                            <div className="mt-1.5 grid grid-cols-2 gap-1">
-                              <button
-                                onClick={() => setMeshUseMtl(false)}
-                                aria-pressed={!meshUseMtl}
-                                className={cn(
-                                  "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
-                                  !meshUseMtl ? "bg-fuchsia-500/25 text-fuchsia-100" : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
-                                )}
-                              >
-                                App Materials
-                              </button>
-                              <button
-                                onClick={() => setMeshUseMtl(true)}
-                                aria-pressed={meshUseMtl}
-                                className={cn(
-                                  "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
-                                  meshUseMtl ? "bg-fuchsia-500/25 text-fuchsia-100" : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
-                                )}
-                              >
-                                MTL Colors
-                              </button>
-                            </div>
-                            <div className="mt-1.5 grid grid-cols-2 gap-1">
-                              {(['random', 'channel'] as const).map((mode) => (
-                                <button
-                                  key={mode}
-                                  onClick={() => setMeshAssign(mode)}
-                                  aria-pressed={meshAssign === mode}
-                                  className={cn(
-                                    "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
-                                    meshAssign === mode
-                                      ? "bg-fuchsia-500/25 text-fuchsia-100"
-                                      : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
-                                  )}
-                                >
-                                  {mode === 'random' ? 'Random' : 'Per Channel'}
-                                </button>
-                              ))}
-                            </div>
-                            {meshAssign === 'channel' && (
-                              <div className="mt-1.5 grid grid-cols-2 gap-1">
-                                {meshChannelMap.map((meshName, channel) => (
-                                  <select
-                                    key={channel}
-                                    value={meshName}
-                                    onChange={(e) => {
-                                      const next = [...meshChannelMap];
-                                      next[channel] = e.target.value;
-                                      setMeshChannelMap(next);
-                                    }}
-                                    aria-label={`Channel ${channel + 1} mesh`}
-                                    className="w-full rounded-md border border-white/10 bg-[#141420] py-1 px-1.5 text-[9px] font-mono text-white/70 cursor-pointer hover:bg-[#1b1b2c] transition-colors"
-                                  >
-                                    {meshLibrary.map((name) => (
-                                      <option key={name} value={name}>{`Ch${channel + 1}: ${name}`}</option>
-                                    ))}
-                                  </select>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
+                        {noteSource !== 'formula' && modelControls}
                         <div className="mt-1.5 grid grid-cols-2 gap-1">
                           {(['sounding', 'all'] as const).map((mode) => (
                             <button

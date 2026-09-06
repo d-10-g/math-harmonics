@@ -1,0 +1,194 @@
+[
+  {
+    "index": 0,
+    "name": "Head nod",
+    "clip": "01_Head_nod",
+    "duration": 1
+  },
+  {
+    "index": 1,
+    "name": "Look left",
+    "clip": "02_Look_left",
+    "duration": 1
+  },
+  {
+    "index": 2,
+    "name": "Look right",
+    "clip": "03_Look_right",
+    "duration": 1
+  },
+  {
+    "index": 3,
+    "name": "Head tilt left",
+    "clip": "04_Head_tilt_left",
+    "duration": 1
+  },
+  {
+    "index": 4,
+    "name": "Head tilt right",
+    "clip": "05_Head_tilt_right",
+    "duration": 1
+  },
+  {
+    "index": 5,
+    "name": "Chin lift",
+    "clip": "06_Chin_lift",
+    "duration": 1
+  },
+  {
+    "index": 6,
+    "name": "Sniff",
+    "clip": "07_Sniff",
+    "duration": 1
+  },
+  {
+    "index": 7,
+    "name": "Meow",
+    "clip": "08_Meow",
+    "duration": 1
+  },
+  {
+    "index": 8,
+    "name": "Left ear flick",
+    "clip": "09_Left_ear_flick",
+    "duration": 1
+  },
+  {
+    "index": 9,
+    "name": "Right ear flick",
+    "clip": "10_Right_ear_flick",
+    "duration": 1
+  },
+  {
+    "index": 10,
+    "name": "Ears perk",
+    "clip": "11_Ears_perk",
+    "duration": 1
+  },
+  {
+    "index": 11,
+    "name": "Ears relax",
+    "clip": "12_Ears_relax",
+    "duration": 1
+  },
+  {
+    "index": 12,
+    "name": "Left paw tap",
+    "clip": "13_Left_paw_tap",
+    "duration": 1
+  },
+  {
+    "index": 13,
+    "name": "Right paw tap",
+    "clip": "14_Right_paw_tap",
+    "duration": 1
+  },
+  {
+    "index": 14,
+    "name": "Left paw lift",
+    "clip": "15_Left_paw_lift",
+    "duration": 1
+  },
+  {
+    "index": 15,
+    "name": "Right paw lift",
+    "clip": "16_Right_paw_lift",
+    "duration": 1
+  },
+  {
+    "index": 16,
+    "name": "Left paw reach",
+    "clip": "17_Left_paw_reach",
+    "duration": 1
+  },
+  {
+    "index": 17,
+    "name": "Right paw reach",
+    "clip": "18_Right_paw_reach",
+    "duration": 1
+  },
+  {
+    "index": 18,
+    "name": "Knead left",
+    "clip": "19_Knead_left",
+    "duration": 1
+  },
+  {
+    "index": 19,
+    "name": "Knead right",
+    "clip": "20_Knead_right",
+    "duration": 1
+  },
+  {
+    "index": 20,
+    "name": "Back left step",
+    "clip": "21_Back_left_step",
+    "duration": 1
+  },
+  {
+    "index": 21,
+    "name": "Back right step",
+    "clip": "22_Back_right_step",
+    "duration": 1
+  },
+  {
+    "index": 22,
+    "name": "Back left toe",
+    "clip": "23_Back_left_toe",
+    "duration": 1
+  },
+  {
+    "index": 23,
+    "name": "Back right toe",
+    "clip": "24_Back_right_toe",
+    "duration": 1
+  },
+  {
+    "index": 24,
+    "name": "Tail left",
+    "clip": "25_Tail_left",
+    "duration": 1
+  },
+  {
+    "index": 25,
+    "name": "Tail right",
+    "clip": "26_Tail_right",
+    "duration": 1
+  },
+  {
+    "index": 26,
+    "name": "Tail tip curl",
+    "clip": "27_Tail_tip_curl",
+    "duration": 1
+  },
+  {
+    "index": 27,
+    "name": "Tail ripple",
+    "clip": "28_Tail_ripple",
+    "duration": 1
+  },
+  {
+    "index": 28,
+    "name": "Shoulder sway",
+    "clip": "29_Shoulder_sway",
+    "duration": 1
+  },
+  {
+    "index": 29,
+    "name": "Blink",
+    "clip": "30_Blink",
+    "duration": 1
+  },
+  {
+    "index": 30,
+    "name": "Wink left",
+    "clip": "31_Wink_left",
+    "duration": 1
+  },
+  {
+    "index": 31,
+    "name": "Wink right",
+    "clip": "32_Wink_right",
+    "duration": 1
+  }
+]

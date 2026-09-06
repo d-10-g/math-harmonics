@@ -995,8 +995,8 @@ interface GraphViewProps {
   setXrHaptics?: (on: boolean) => void;
   // Note visuals: OBJ sculpture library options + display mode. Setters and
   // the library list feed the spatial console's NOTES tab.
-  noteSource?: 'formula' | 'mesh';
-  setNoteSource?: (source: 'formula' | 'mesh') => void;
+  noteSource?: 'formula' | 'mesh' | 'glb';
+  setNoteSource?: (source: 'formula' | 'mesh' | 'glb') => void;
   meshUseMtl?: boolean;
   setMeshUseMtl?: (on: boolean) => void;
   meshAssign?: 'random' | 'channel';
@@ -1367,7 +1367,7 @@ function NoteConstellation({
   showWireframe: boolean;
   materialProfile?: WebGPUMaterialProfile;
   geometryMode?: FormulaGeometryMode;
-  noteSource?: 'formula' | 'mesh';
+  noteSource?: 'formula' | 'mesh' | 'glb';
   meshUseMtl?: boolean;
   meshAssign?: 'random' | 'channel';
   meshChannelMap?: string[];

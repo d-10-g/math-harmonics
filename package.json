@@ -2,7 +2,7 @@
   "name": "math-harmonics",
   "productName": "Harmonic.OS",
   "private": true,
-  "version": "2.5.1",
+  "version": "2.6.0",
   "type": "module",
   "main": "electron.js",
   "scripts": {
@@ -13,7 +13,11 @@
     "lint": "tsc --noEmit",
     "electron:start": "electron .",
     "electron:build": "npm run build && electron-builder -m",
-    "validate": "tsx scripts/validate-formulas.ts"
+    "validate": "tsx scripts/validate-formulas.ts",
+    "models:catalog": "node scripts/model-catalog.mjs",
+    "predev": "npm run models:catalog",
+    "prebuild": "npm run models:catalog",
+    "validate:models": "npm run models:catalog && tsx scripts/Ernie_validate.ts Ernie && tsx scripts/Ernie_validate.ts Kira && tsx scripts/validate-model-channels.ts"
   },
   "build": {
     "appId": "com.d10g.math-harmonics",

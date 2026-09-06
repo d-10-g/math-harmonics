@@ -1,0 +1,194 @@
+[
+  {
+    "index": 0,
+    "name": "Golden hello",
+    "clip": "Kira_01_Golden_hello",
+    "duration": 1.1666666666666667
+  },
+  {
+    "index": 1,
+    "name": "Curious left listen",
+    "clip": "Kira_02_Curious_left_listen",
+    "duration": 1.0833333333333333
+  },
+  {
+    "index": 2,
+    "name": "Curious right listen",
+    "clip": "Kira_03_Curious_right_listen",
+    "duration": 1.0833333333333333
+  },
+  {
+    "index": 3,
+    "name": "Soft chin tuck",
+    "clip": "Kira_04_Soft_chin_tuck",
+    "duration": 1.2083333333333333
+  },
+  {
+    "index": 4,
+    "name": "Scent the air",
+    "clip": "Kira_05_Scent_the_air",
+    "duration": 0.9583333333333334
+  },
+  {
+    "index": 5,
+    "name": "Bird watch left",
+    "clip": "Kira_06_Bird_watch_left",
+    "duration": 1.2083333333333333
+  },
+  {
+    "index": 6,
+    "name": "Bird watch right",
+    "clip": "Kira_07_Bird_watch_right",
+    "duration": 1.2083333333333333
+  },
+  {
+    "index": 7,
+    "name": "Little chirp",
+    "clip": "Kira_08_Little_chirp",
+    "duration": 0.7916666666666666
+  },
+  {
+    "index": 8,
+    "name": "Sleepy blink",
+    "clip": "Kira_09_Sleepy_blink",
+    "duration": 1.3333333333333333
+  },
+  {
+    "index": 9,
+    "name": "Left slow wink",
+    "clip": "Kira_10_Left_slow_wink",
+    "duration": 1.2083333333333333
+  },
+  {
+    "index": 10,
+    "name": "Right slow wink",
+    "clip": "Kira_11_Right_slow_wink",
+    "duration": 1.2083333333333333
+  },
+  {
+    "index": 11,
+    "name": "Both ears swivel",
+    "clip": "Kira_12_Both_ears_swivel",
+    "duration": 0.9166666666666666
+  },
+  {
+    "index": 12,
+    "name": "Left listening flick",
+    "clip": "Kira_13_Left_listening_flick",
+    "duration": 0.75
+  },
+  {
+    "index": 13,
+    "name": "Right listening flick",
+    "clip": "Kira_14_Right_listening_flick",
+    "duration": 0.75
+  },
+  {
+    "index": 14,
+    "name": "Ears soften",
+    "clip": "Kira_15_Ears_soften",
+    "duration": 1.0833333333333333
+  },
+  {
+    "index": 15,
+    "name": "Left paw curl",
+    "clip": "Kira_16_Left_paw_curl",
+    "duration": 1.0
+  },
+  {
+    "index": 16,
+    "name": "Right paw curl",
+    "clip": "Kira_17_Right_paw_curl",
+    "duration": 1.0
+  },
+  {
+    "index": 17,
+    "name": "Velvet knead left",
+    "clip": "Kira_18_Velvet_knead_left",
+    "duration": 1.2916666666666667
+  },
+  {
+    "index": 18,
+    "name": "Velvet knead right",
+    "clip": "Kira_19_Velvet_knead_right",
+    "duration": 1.2916666666666667
+  },
+  {
+    "index": 19,
+    "name": "Groom left paw",
+    "clip": "Kira_20_Groom_left_paw",
+    "duration": 1.25
+  },
+  {
+    "index": 20,
+    "name": "Groom right paw",
+    "clip": "Kira_21_Groom_right_paw",
+    "duration": 1.25
+  },
+  {
+    "index": 21,
+    "name": "Playful left bat",
+    "clip": "Kira_22_Playful_left_bat",
+    "duration": 0.8333333333333334
+  },
+  {
+    "index": 22,
+    "name": "Playful right bat",
+    "clip": "Kira_23_Playful_right_bat",
+    "duration": 0.8333333333333334
+  },
+  {
+    "index": 23,
+    "name": "Shoulder settle",
+    "clip": "Kira_24_Shoulder_settle",
+    "duration": 1.3333333333333333
+  },
+  {
+    "index": 24,
+    "name": "Hip shift left",
+    "clip": "Kira_25_Hip_shift_left",
+    "duration": 1.0833333333333333
+  },
+  {
+    "index": 25,
+    "name": "Hip shift right",
+    "clip": "Kira_26_Hip_shift_right",
+    "duration": 1.0833333333333333
+  },
+  {
+    "index": 26,
+    "name": "Question mark tail",
+    "clip": "Kira_27_Question_mark_tail",
+    "duration": 1.2916666666666667
+  },
+  {
+    "index": 27,
+    "name": "Tail tip greeting",
+    "clip": "Kira_28_Tail_tip_greeting",
+    "duration": 0.9166666666666666
+  },
+  {
+    "index": 28,
+    "name": "Tail ribbon left",
+    "clip": "Kira_29_Tail_ribbon_left",
+    "duration": 1.2083333333333333
+  },
+  {
+    "index": 29,
+    "name": "Tail ribbon right",
+    "clip": "Kira_30_Tail_ribbon_right",
+    "duration": 1.2083333333333333
+  },
+  {
+    "index": 30,
+    "name": "Happy tail tremble",
+    "clip": "Kira_31_Happy_tail_tremble",
+    "duration": 0.9166666666666666
+  },
+  {
+    "index": 31,
+    "name": "Drowsy goodnight",
+    "clip": "Kira_32_Drowsy_goodnight",
+    "duration": 1.4166666666666667
+  }
+]

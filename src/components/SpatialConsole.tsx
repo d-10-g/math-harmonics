@@ -182,8 +182,8 @@ export interface SpatialConsoleProps {
   xrHaptics?: boolean;
   setXrHaptics?: (on: boolean) => void;
   // Note-visuals options (NOTES tab).
-  noteSource?: 'formula' | 'mesh';
-  setNoteSource?: (source: 'formula' | 'mesh') => void;
+  noteSource?: 'formula' | 'mesh' | 'glb';
+  setNoteSource?: (source: 'formula' | 'mesh' | 'glb') => void;
   meshUseMtl?: boolean;
   setMeshUseMtl?: (on: boolean) => void;
   meshAssign?: 'random' | 'channel';

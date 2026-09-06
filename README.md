@@ -4,6 +4,16 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.6.0 — MIDI model stage
+
+- Rigged Ernie and Kira GLB cats, each with 32 MIDI-driven gestures.
+- GLB / Formulas / OBJ note visuals, compact centered channel rows, optional note labels, and sounding-only or all-notes display.
+- Random or explicit channel models and movements, saved as named JSON mappings.
+- Light/dark backgrounds and local HDR/EXR panorama lighting for the desktop model stage.
+- Corrected short-note animation timing and library-audio loading.
+
+Choose **Audio Sync → MIDI File → Note Visuals → 3D GLB**. Blender masters and movement catalogs are in `public/demo/meshes`, with `Ernie_` and `Kira_` prefixes. See [Ernie usage](public/demo/meshes/Ernie_README.md) and [Kira usage](public/demo/meshes/Kira_README.md).
+
 ## Highlights
 
 - **Two renderer paths**: WebGL (three.js + react-three-fiber — the path headsets use) and WebGPU (three/webgpu + TSL node materials)
@@ -24,6 +34,7 @@ npm install
 npm run dev        # https://localhost:3000 (HTTPS if ./.cert exists, else HTTP)
 npm run lint       # typecheck
 npm run validate   # assert all formulas compile + evaluate finite over (p,q,t)
+npm run validate:models # rig, MIDI, layout, and mapping regressions
 npm run build      # production build to dist/
 ```
 
