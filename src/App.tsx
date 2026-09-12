@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import NoteLayoutControls from './components/NoteLayoutControls';
+import { normalizeNoteLayout } from './lib/noteLayout';
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { compile } from 'mathjs';
 import Sidebar from './components/Sidebar';
 import ModelChannelControls from './components/ModelChannelControls';
 import { defaultModelSettings, type ModelSettings, type ModelKind, type BackgroundChoice } from './lib/modelChannels';
 import type { HdriFile } from './components/ModelBackdrop';
-import ErnieView from './components/ErnieView';
+import { ModelScene, PlaybackStatus } from './components/ErnieView';
 import GraphView from './components/GraphView';
 import Controls from './components/Controls';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -123,6 +125,7 @@ function TimeScrubber({ onScrub }: { onScrub: () => void }) {
         )}
         <input
           type="range"
+          aria-label="Temporal phase"
           min="0"
           max={PHASE_MAX}
           step="0.001"
@@ -424,6 +427,7 @@ export default function App() {
   const [noteFxAmount, setNoteFxAmount] = useState(initialShared.noteFxAmount ?? 2);
   const [noteFxMode, setNoteFxMode] = useState<NoteFxMode>(initialShared.noteFxMode ?? 'both');
   useEffect(() => { setNoteFx(noteFxAmount, noteFxMode); }, [noteFxAmount, noteFxMode]);
+  const [noteLayout, setNoteLayout] = useState(() => normalizeNoteLayout(initialShared.noteLayout));
   const [noteSpread, setNoteSpreadState] = useState(initialShared.noteSpread ?? 5);
   useEffect(() => { setNoteSpread(noteSpread); }, [noteSpread]);
   const [pageMode, setPageMode] = useState<PageMode>(INITIAL_MODE ?? 'audio');
@@ -437,7 +441,13 @@ export default function App() {
   // Note visuals: formula geometry or the OBJ sculpture library; MTL colors
   // vs app materials; random vs per-channel assignment; sounding-only vs a
   // persistent all-notes lattice that note-ons light up.
-  const [noteSource, setNoteSource] = useState<'formula' | 'mesh' | 'glb'>(new URLSearchParams(location.search).has('ernie') ? 'glb' : initialShared.noteSource ?? 'formula');
+  const [noteSource, setNoteSourceState] = useState<'formula' | 'mesh' | 'glb'>(new URLSearchParams(location.search).has('ernie') ? 'glb' : initialShared.noteSource ?? 'formula');
+  const setNoteSource = useCallback((source: 'formula' | 'mesh' | 'glb') => {
+    // Browser-offered sessions can begin while a model is displayed, even if
+    // a WebGPU preference was saved. Keep the XR canvas for source changes.
+    if (xrStore.getState().session) setRendererMode('webgl');
+    setNoteSourceState(source);
+  }, []);
   const [meshUseMtl, setMeshUseMtl] = useState(initialShared.meshUseMtl ?? false);
   const [meshAssign, setMeshAssign] = useState<'random' | 'channel'>(initialShared.meshAssign ?? 'random');
   const [noteDisplay, setNoteDisplay] = useState<'sounding' | 'all'>(initialShared.noteDisplay ?? 'sounding');
@@ -1376,12 +1386,13 @@ export default function App() {
       noteFxAmount,
       noteFxMode,
       noteSpread,
+      noteLayout,
       noteSource,
       meshUseMtl,
       meshAssign,
       noteDisplay
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteSource, meshUseMtl, meshAssign, noteDisplay]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteLayout, noteSource, meshUseMtl, meshAssign, noteDisplay]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -1550,7 +1561,7 @@ export default function App() {
   return (
     <div className="w-full h-screen bg-[#050505] text-[#e0e0e0] font-sans flex flex-col overflow-hidden p-4 lg:p-6 gap-5">
       {/* Header Section */}
-      <header className="flex justify-between items-center border-b border-white/10 pb-4 shrink-0">
+      <header data-spatial-menu="Application" className="flex justify-between items-center border-b border-white/10 pb-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center">
             <div className="w-4 h-4 border-2 border-white rounded-sm rotate-45"></div>
@@ -1575,12 +1586,12 @@ export default function App() {
           <button
             onClick={() => setShowHelp(true)}
             className="h-7 w-7 rounded-full border border-white/10 hover:bg-white/5 text-[11px] font-mono text-white/50 hover:text-white transition-colors"
-            title="Help & shortcuts (?)"
+            aria-label="Help and shortcuts" title="Help & shortcuts (?)"
           >
             ?
           </button>
           <button
-            onClick={() => window.dispatchEvent(new Event('math-harmonics:photo-mode'))}
+            data-spatial-browser onClick={() => window.dispatchEvent(new Event('math-harmonics:photo-mode'))}
             disabled={rendererMode !== 'webgl'}
             className="px-3 py-1 hover:bg-white/5 rounded-full border border-fuchsia-400/25 text-[10px] font-mono text-fuchsia-300/80 hover:text-fuchsia-200 transition-colors uppercase tracking-widest disabled:opacity-35 disabled:cursor-not-allowed"
             title={rendererMode === 'webgl' ? 'Path-traced still of the current formula' : 'Photo mode needs the WebGL renderer'}
@@ -1588,7 +1599,7 @@ export default function App() {
             Photo
           </button>
           <button
-            onClick={saveSnapshot}
+            data-spatial-browser onClick={saveSnapshot}
             className="px-3 py-1 hover:bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-white/50 hover:text-white transition-colors uppercase tracking-widest"
             title="Save the current view as a PNG"
           >
@@ -1602,7 +1613,7 @@ export default function App() {
             {copiedLink ? 'Copied ✓' : 'Copy Link'}
           </button>
           <button
-            onClick={toggleFullScreen}
+            data-spatial-browser onClick={toggleFullScreen}
             className="px-3 py-1 hover:bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-white/50 hover:text-white transition-colors uppercase tracking-widest"
             title="Toggle fullscreen (F)"
           >
@@ -1625,7 +1636,7 @@ export default function App() {
       }`}>
 
         {/* Left: Formula Library */}
-        {!sidebarCollapsed && (
+        <div className={sidebarCollapsed ? 'hidden' : 'contents'}>
           <Sidebar
             selectedFormula={selectedFormula}
             onApplyCombo={applyCombo}
@@ -1645,7 +1656,7 @@ export default function App() {
             onSaveMyCombo={pageMode === 'silent' ? saveCurrentCombo : undefined}
             onCollapse={() => setSidebarCollapsed(true)}
           />
-        )}
+        </div>
 
         {/* Center: Graph View */}
         <section className="min-h-[520px] xl:min-h-0 bg-white/5 border border-white/10 rounded-lg relative overflow-hidden flex flex-col group">
@@ -1671,7 +1682,7 @@ export default function App() {
           )}
           <div className="flex-1 relative min-h-0">
             <ErrorBoundary>
-            {noteSource !== 'formula' ? <ErnieView midi={midiInfo} getMusicTime={getMusicTime} kind={modelKind} settings={modelSettings[modelKind]} display={noteDisplay} spacing={noteSpread/5} background={modelBackground} hdri={hdri} onBackgroundError={setBackgroundError} /> : rendererMode === 'webgpu' ? (
+            {rendererMode === 'webgpu' && noteSource === 'formula' ? (
               <Suspense
                 fallback={
                   <div className="flex h-full w-full items-center justify-center font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
@@ -1696,6 +1707,8 @@ export default function App() {
               </Suspense>
             ) : (
               <GraphView
+                noteLayout={noteLayout}
+                modelScene={noteSource !== 'formula' ? <ModelScene midi={midiInfo} getMusicTime={getMusicTime} kind={modelKind} settings={modelSettings[modelKind]} display={noteDisplay} spacing={noteSpread/5} noteLayout={noteLayout} background={modelBackground} hdri={hdri} onBackgroundError={setBackgroundError} /> : undefined}
                 formula={selectedFormula}
                 shader={selectedShader}
                 noteMeshes={noteMeshes && audioSync && audioSource === 'midi' && !!midiInfo}
@@ -1772,12 +1785,13 @@ export default function App() {
               />
             )}
             </ErrorBoundary>
+            {noteSource !== 'formula' && <div data-spatial-menu="Model status"><PlaybackStatus midi={midiInfo} getMusicTime={getMusicTime}/></div>}
           </div>
 
           {/* Footer: one compact row so it survives short windows. A live
               MIDI session gets the music transport; otherwise the phase
               transport as before. */}
-          <div className="px-4 py-3 bg-[#0a0a0a]/80 border-t border-white/10 backdrop-blur-md shrink-0">
+          <div data-spatial-menu="Transport" className="px-4 py-3 bg-[#0a0a0a]/80 border-t border-white/10 backdrop-blur-md shrink-0">
             {midiTransportLive ? (
               <MusicTransport audioRef={midiAudioRef} onToggle={toggleTransport} playing={audioPlaying} />
             ) : (
@@ -1809,7 +1823,12 @@ export default function App() {
           onUpdateShader={handleUpdateShader}
           activeTab={activeTab}
           rendererMode={rendererMode}
-          setRendererMode={setRendererMode}
+          setRendererMode={(mode) => {
+            if (mode === rendererMode) return;
+            const session = xrStore.getState().session;
+            if (session) void session.end().then(() => setRendererMode(mode)).catch(error => console.warn('Unable to exit XR for renderer change:', error));
+            else setRendererMode(mode);
+          }}
           webgpuLighting={webgpuLighting}
           setWebgpuLighting={setWebgpuLighting}
           webgpuLightingPreset={webgpuLightingPreset}
@@ -1866,6 +1885,7 @@ export default function App() {
           setNoteFxMode={setNoteFxMode}
           noteSpread={noteSpread}
           setNoteSpread={setNoteSpreadState}
+          noteLayoutControls={<NoteLayoutControls value={noteLayout} onChange={value => setNoteLayout(normalizeNoteLayout(value))} />}
           modelControls={<ModelChannelControls kind={modelKind} settings={modelSettings[modelKind]} channels={modelChannels} onChange={settings=>setModelSettings(prev=>({...prev,[modelKind]:settings}))} onImport={(kind,settings)=>{setModelSettings(prev=>({...prev,[kind]:settings}));setNoteSource(kind==='glb'?'glb':'mesh');}} />}
           modelBackgroundControls={<div className="space-y-2 text-xs text-white/70"><label>3D Background<select aria-label="3D Background" className="block w-full rounded bg-slate-800 p-2" value={modelBackground} onChange={e=>setModelBackground(e.target.value as BackgroundChoice)}>{(['cosmos','midnight','charcoal','slate','ivory','white','hdri'] as const).map(c=><option key={c} value={c}>{c==='hdri'?'HDRI panorama + lighting':c}</option>)}</select></label>{modelBackground==='hdri'&&<label className="block">Load equirectangular HDR / EXR<input aria-label="Load HDRI" type="file" accept=".hdr,.exr" onChange={e=>{const f=e.target.files?.[0];if(f){setBackgroundError('');setHdri({url:URL.createObjectURL(f),name:f.name});}e.target.value='';}}/>{hdri?.name}</label>}{backgroundError&&<p role="alert">{backgroundError}</p>}<p className="text-white/40">HDRIs provide panoramic backgrounds and material lighting. Gaussian splat scenes are planned for a later stage.</p></div>}
           noteSource={noteSource}
@@ -1927,7 +1947,7 @@ export default function App() {
       </footer>
 
       {showWelcome && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md" role="dialog" aria-label="Welcome">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md" data-spatial-menu="Welcome" role="dialog" aria-label="Welcome">
           <div className="w-[min(92vw,560px)] rounded-2xl border border-fuchsia-400/25 bg-[#0b0e1a] p-8 text-center shadow-2xl shadow-fuchsia-950/30">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-400">
               <svg viewBox="0 0 64 64" className="h-7 w-7"><path d="M8 32 C 14 12, 20 12, 26 32 S 38 52, 44 32 S 54 16, 58 24" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round" /></svg>
@@ -1967,6 +1987,7 @@ export default function App() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
           onClick={() => setShowHelp(false)}
           role="dialog"
+          data-spatial-menu="Help"
           aria-label="Help and shortcuts"
         >
           <div
@@ -1978,7 +1999,7 @@ export default function App() {
               <button onClick={() => setShowHelp(false)} className="text-white/40 hover:text-white text-xs font-mono">ESC ✕</button>
             </div>
 
-            <div className="mt-4 grid gap-5 sm:grid-cols-2 text-[11px] leading-5 text-white/70">
+            <div data-spatial-status className="mt-4 grid gap-5 sm:grid-cols-2 text-[11px] leading-5 text-white/70">
               <div>
                 <div className="mb-1.5 font-bold uppercase tracking-widest text-[9px] text-white/40">Keyboard</div>
                 <div><span className="text-indigo-300 font-mono">Space</span> — play / pause</div>

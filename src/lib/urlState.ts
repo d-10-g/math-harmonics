@@ -1,3 +1,4 @@
+import { normalizeNoteLayout, type NoteLayoutSettings } from './noteLayout';
 import {
   Formula,
   PRESET_FORMULAS,
@@ -39,6 +40,7 @@ export type SharedState = {
   noteFxAmount?: number;
   noteFxMode?: 'both' | 'morph' | 'pulse' | 'off';
   noteSpread?: number;
+  noteLayout?: NoteLayoutSettings;
   noteSource?: 'formula' | 'mesh' | 'glb';
   meshUseMtl?: boolean;
   meshAssign?: 'random' | 'channel';
@@ -82,6 +84,7 @@ function parseParams(params: URLSearchParams): SharedState {
   const noteFx = read('nfa');
   if (noteFx !== undefined && Number.isFinite(parseFloat(noteFx))) state.noteFxAmount = Math.min(8, Math.max(0, parseFloat(noteFx)));
   state.noteFxMode = oneOf(read('nfm'), ['both', 'morph', 'pulse', 'off'] as const);
+  if (['nlg','nlc','nlo'].some(key=>params.has(key))) state.noteLayout = normalizeNoteLayout({geometry:read('nlg') as NoteLayoutSettings['geometry'],copies:params.has('nlc')?Number(read('nlc')):undefined,offset:params.has('nlo')?Number(read('nlo')):undefined});
   const spread = read('nsp');
   if (spread !== undefined && Number.isFinite(parseFloat(spread))) state.noteSpread = Math.min(10, Math.max(0.5, parseFloat(spread)));
   state.noteSource = oneOf(read('nsc'), ['glb', 'formula', 'mesh'] as const);
@@ -139,6 +142,10 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('nfa', state.noteFxAmount.toFixed(2));
   params.set('nfm', state.noteFxMode);
   params.set('nsp', state.noteSpread.toFixed(2));
+  const layout = normalizeNoteLayout(state.noteLayout);
+  params.set('nlg', layout.geometry);
+  params.set('nlc', String(layout.copies));
+  params.set('nlo', layout.offset.toFixed(2));
   params.set('nsc', state.noteSource);
   params.set('nml', state.meshUseMtl ? '1' : '0');
   params.set('nas', state.meshAssign);

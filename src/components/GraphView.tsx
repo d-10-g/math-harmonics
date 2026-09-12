@@ -1,3 +1,5 @@
+import VisualCopies from './VisualCopies';
+import { channelPath, DEFAULT_NOTE_LAYOUT, type NoteLayoutSettings } from '../lib/noteLayout';
 import { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, MeshReflectorMaterial, OrbitControls } from '@react-three/drei';
@@ -926,6 +928,8 @@ function buildFormulaGeometry(points: THREE.Vector3[], mode: FormulaGeometryMode
 }
 
 interface GraphViewProps {
+  noteLayout?: NoteLayoutSettings;
+  modelScene?: React.ReactNode;
   formula: Formula;
   shader: ShaderPreset;
   webgpuLighting: number;
@@ -1353,6 +1357,7 @@ const NOTE_GROUP_PROFILES: Exclude<WebGPUMaterialProfile, 'auto'>[] = ['glass', 
 const EMPTY_GEOMETRY = new THREE.BufferGeometry();
 
 function NoteConstellation({
+  noteLayout = DEFAULT_NOTE_LAYOUT,
   formula,
   showWireframe,
   materialProfile = 'auto',
@@ -1364,6 +1369,7 @@ function NoteConstellation({
   noteDisplay = 'sounding'
 }: {
   formula: Formula;
+  noteLayout?: NoteLayoutSettings;
   showWireframe: boolean;
   materialProfile?: WebGPUMaterialProfile;
   geometryMode?: FormulaGeometryMode;
@@ -1479,6 +1485,7 @@ function NoteConstellation({
   // at the same spot.
   const [latticeSnapshot, setLatticeSnapshot] = useState<LatticeNote[]>([]);
   const latticeSourceRef = useRef<LatticeNote[] | null>(null);
+  const channelRanksRef = useRef(new Map<string, {index:number;count:number}>());
   const latticeRefs = useRef<Array<THREE.Mesh | null>>([]);
 
   const materials = useMemo(() => {
@@ -1579,10 +1586,24 @@ function NoteConstellation({
     // Sync the lattice snapshot (set once per piece by the engine).
     if (clock.noteLattice !== latticeSourceRef.current) {
       latticeSourceRef.current = clock.noteLattice;
+      const ranks = new Map<string, {index:number;count:number}>();
+      for (let group = 0; group < NOTE_GROUP_CAP; group++) {
+        const entries = clock.noteLattice.filter(entry => entry.group === group).sort((a,b)=>a.pitch-b.pitch);
+        entries.forEach((entry,index)=>ranks.set(`${group}:${entry.pitch}`,{index,count:entries.length}));
+      }
+      channelRanksRef.current = ranks;
       setLatticeSnapshot(clock.noteLattice);
     }
 
     const spread = clock.noteSpread;
+    const positionFor = (group:number,pitch:number,pitch01:number): [number,number,number] => {
+      const lift = (group - (usedGroups - 1) / 2) * 1.15;
+      if (noteLayout.geometry === 'linear') return [(pitch01-.5)*17*spread,((pitch01-.5)*3.5+lift)*spread,-Math.abs(pitch01-.5)*6-group*2.4];
+      const rank = channelRanksRef.current.get(`${group}:${pitch}`) ?? { index:0,count:1 };
+      const point = channelPath(rank.index,rank.count,17*spread/Math.max(1,rank.count-1),noteLayout.geometry);
+      // Formula paths face the default camera; model paths lie on their stage.
+      return [point[0],point[2]+lift*spread,point[1]-group*2.4];
+    };
     const mtlActive = noteSource === 'mesh' && meshUseMtl;
     const allMode = noteDisplay === 'all';
     const activeKeys = allMode
@@ -1608,11 +1629,6 @@ function NoteConstellation({
         }
       }
 
-      // Each instrument gets its own depth layer and a gentle vertical
-      // stagger so groups read as parallel voices, not one crowd.
-      const depth = -g * 2.4;
-      const lift = (g - (usedGroups - 1) / 2) * 1.15;
-
       for (let slot = 0; slot < NOTE_GROUP_POOL; slot++) {
         const index = g * NOTE_GROUP_POOL + slot;
         const slotGroup = slotRefs.current[index];
@@ -1634,11 +1650,8 @@ function NoteConstellation({
         // In all-notes mode the pop-up sits exactly on its lattice object
         // (static, no bob) so the note-on reads as "that one lit up".
         const bob = allMode ? 0 : Math.sin(time * 1.6 + slot * 1.3 + g * 2.1) * 0.5;
-        slotGroup.position.set(
-          (pitch01 - 0.5) * 17 * spread,
-          ((pitch01 - 0.5) * 3.5 + lift) * spread + bob,
-          -Math.abs(pitch01 - 0.5) * 6 + depth
-        );
+        const position = positionFor(g,pitch,pitch01);
+        slotGroup.position.set(position[0],position[1]+bob,position[2]);
         slotGroup.rotation.set(
           Math.sin(time * 0.7 + id) * 0.18,
           time * (0.35 + pitch01 * 0.45) + id * 0.9,
@@ -1689,13 +1702,7 @@ function NoteConstellation({
       latticeSnapshot.forEach((entry, i) => {
         const mesh = latticeRefs.current[i];
         if (!mesh) return;
-        const depth = -entry.group * 2.4;
-        const lift = (entry.group - (usedGroups - 1) / 2) * 1.15;
-        mesh.position.set(
-          (entry.pitch01 - 0.5) * 17 * spread,
-          ((entry.pitch01 - 0.5) * 3.5 + lift) * spread,
-          -Math.abs(entry.pitch01 - 0.5) * 6 + depth
-        );
+        mesh.position.set(...positionFor(entry.group,entry.pitch,entry.pitch01));
         mesh.scale.setScalar(0.085);
         mesh.rotation.set(0, entry.pitch * 0.5, 0);
         mesh.geometry = resolveNoteGeometry(entry.group, entry.pitch) ?? EMPTY_GEOMETRY;
@@ -2114,11 +2121,13 @@ type SpatialGesture = {
 
 function SpatialWrapper({
   children,
+  modelMode = false,
   xrVisualTransform,
   setXrVisualTransform,
   dragOffsetRef
 }: {
   children: React.ReactNode;
+  modelMode?: boolean;
   xrVisualTransform: XRVisualTransform;
   setXrVisualTransform?: XRVisualTransformSetter;
   dragOffsetRef: React.MutableRefObject<THREE.Vector3>;
@@ -2240,7 +2249,7 @@ function SpatialWrapper({
     beginGesture();
   };
 
-  const scale = isPresenting ? xrVisualTransform.scale : 1;
+  const scale = isPresenting ? xrVisualTransform.scale / (modelMode ? DEFAULT_XR_VISUAL_TRANSFORM.scale : 1) : 1;
   const position: [number, number, number] = isPresenting
     ? [dragOffsetRef.current.x, 1.1 + dragOffsetRef.current.y, -xrVisualTransform.distance + dragOffsetRef.current.z]
     : [0, 0, 0];
@@ -2250,7 +2259,7 @@ function SpatialWrapper({
 
   return (
     <>
-      {!isPresenting && <DesktopOrbitControls />}
+      {!isPresenting && !modelMode && <DesktopOrbitControls />}
 
       <group
         ref={groupRef}
@@ -2271,10 +2280,12 @@ function SpatialWrapper({
 // Orbit controls with sane zoom bounds; double-click anywhere on the canvas
 // snaps the camera back to its starting framing.
 function DesktopOrbitControls() {
-  const { gl } = useThree();
+  const { gl, camera } = useThree();
   const controlsRef = useRef<any>(null);
 
   useEffect(() => {
+    camera.position.set(0, 0, 25);
+    if (camera instanceof THREE.PerspectiveCamera) { camera.fov = 50; camera.near = .1; camera.far = 1000; camera.updateProjectionMatrix(); }
     const handleDoubleClick = () => controlsRef.current?.reset();
     gl.domElement.addEventListener('dblclick', handleDoubleClick);
     return () => gl.domElement.removeEventListener('dblclick', handleDoubleClick);
@@ -2539,7 +2550,7 @@ function PhotoMode({
   };
 
   return (
-    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/85 backdrop-blur-sm p-6">
+    <div data-spatial-menu="Photo" className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/85 backdrop-blur-sm p-6">
       <div className="flex w-full max-w-[960px] items-center justify-between">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-indigo-300">
           Photo Mode — Path Traced {samples > 0 && `· ${samples} samples`}
@@ -2561,7 +2572,7 @@ function PhotoMode({
         </div>
       </div>
       <canvas ref={canvasRef} width={960} height={640} className="max-h-[70vh] w-full max-w-[960px] rounded-lg border border-white/10 bg-black object-contain" />
-      <div className="font-mono text-[10px] text-white/40">
+      <div data-spatial-status className="font-mono text-[10px] text-white/40">
         {status || 'Refining continuously — save whenever it looks good. Rig lights + floor are path-traced with real area lights.'}
       </div>
     </div>
@@ -2655,6 +2666,8 @@ function XRVisualThumbstickControls({ setXrVisualTransform }: { setXrVisualTrans
 }
 
 export default function GraphView({
+  noteLayout = DEFAULT_NOTE_LAYOUT,
+  modelScene,
   formula,
   shader,
   webgpuLighting,
@@ -2796,6 +2809,7 @@ export default function GraphView({
           <XRBeatHaptics enabled={xrHaptics ?? false} />
           <XRMusicButtons midiActive={midiActive} onToggleMusic={onToggleMusic} onCycleLibrary={onCycleLibrary} />
           <XRAlphaController />
+          {modelScene ? <SpatialWrapper modelMode xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>{modelScene}</SpatialWrapper> : <>
           <XREnvironment preset={webgpuLightingPreset} desktopVisible={showEnvironment && show3D} />
           <RigEnvironment preset={webgpuLightingPreset} intensity={webgpuLighting} />
           <GroundShadows show3D={show3D} />
@@ -2829,7 +2843,8 @@ export default function GraphView({
 
             {showMirrors && <AngledMirrorSurfaces show3D={show3D} />}
             {noteMeshes && show3D ? (
-              <NoteConstellation
+              <VisualCopies settings={noteLayout}><NoteConstellation
+                noteLayout={noteLayout}
                 formula={formula}
                 showWireframe={showWireframe}
                 materialProfile={webgpuMaterial}
@@ -2839,11 +2854,12 @@ export default function GraphView({
                 meshAssign={meshAssign}
                 meshChannelMap={meshChannelMap}
                 noteDisplay={noteDisplay}
-              />
+              /></VisualCopies>
             ) : (
               <FormulaLine formula={formula} shader={shader} show3D={show3D} showWireframe={showWireframe} materialProfile={webgpuMaterial} lineWidth={lineWidth} geometryMode={geometryMode} />
             )}
           </SpatialWrapper>
+          </>}
 
           <SpatialConsole
             onNextFormula={onNextFormula}

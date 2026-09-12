@@ -4,6 +4,18 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.7.0 — Shared VR menus and object layouts
+
+- Shared desktop/VR menus with search, editors, model settings, and full control values.
+- Linear, Circle, Spiral, Wave, and Helix note layouts with working Note Spread.
+- 1–8 copies per note and adjustable vertical copy offset; audio plays once.
+- OBJ/GLB model selection preserves the XR canvas; layouts are saved in shared links.
+- The app header and browser tab display the release version. `version.json` identifies the deployed build.
+
+Find the layout controls under **Audio Sync → MIDI File**, below **Note Spread**.
+In VR, open **All 2D Menus → Object layout**. Browser-only operations leave immersive mode.
+See [VR menus](docs/vr-menu-parity.md) and [object layouts](docs/note-layouts.md).
+
 ## v2.6.0 — MIDI model stage
 
 - Rigged Ernie and Kira GLB cats, each with 32 MIDI-driven gestures.

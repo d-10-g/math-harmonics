@@ -1,5 +1,6 @@
+import { DEFAULT_NOTE_LAYOUT, type NoteLayoutSettings } from '../lib/noteLayout';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text, useGLTF } from '@react-three/drei';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as THREE from 'three';
@@ -7,6 +8,7 @@ import type { ParsedMidi } from '../lib/midi';
 import { ernieCells, erniePose, ernieLayout, sampleErnie, type ErnieCell } from '../lib/ernie';
 import { resolveChannel, type ModelAsset, type ModelKind, type ModelSettings, type BackgroundChoice } from '../lib/modelChannels';
 import { loadMeshGroup } from '../lib/meshLibrary';
+import { useXR } from '@react-three/xr';
 import ModelBackdrop, { type HdriFile } from './ModelBackdrop';
 
 type SlotProps={cell:ErnieCell;position:[number,number,number];getTime:()=>number;settings:ModelSettings;display:'sounding'|'all';preview:boolean;asset:ModelAsset;movement?:string};
@@ -40,26 +42,27 @@ function AnimatedSlot({cell,position,getTime,settings,display,preview,template,c
   {settings.labels&&<Text position={[0,-.045,.20]} fontSize={.033} color="#93b3c5" anchorX="center">{`${['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'][cell.pitch%12]}${Math.floor(cell.pitch/12)-1}`}</Text>}
  </group>;
 }
-export default function ErnieView({midi,getMusicTime,kind,settings,display,background,hdri,onBackgroundError,spacing}:{midi:ParsedMidi|null;getMusicTime:()=>{time:number;duration:number};kind:ModelKind;settings:ModelSettings;display:'sounding'|'all';background:BackgroundChoice;hdri:HdriFile|null;onBackgroundError:(s:string)=>void;spacing:number}){
+export function ModelScene({midi,getMusicTime,kind,settings,display,background,hdri,onBackgroundError,spacing,noteLayout=DEFAULT_NOTE_LAYOUT}:{midi:ParsedMidi|null;getMusicTime:()=>{time:number;duration:number};kind:ModelKind;settings:ModelSettings;display:'sounding'|'all';background:BackgroundChoice;hdri:HdriFile|null;onBackgroundError:(s:string)=>void;spacing:number;noteLayout?:NoteLayoutSettings}){
  const cells=useMemo(()=>ernieCells(midi?.notes.length?midi.notes:Array.from({length:32},(_,i)=>({channel:Math.floor(i/8),pitch:48+i%8,time:1e10,duration:1,velocity:96,track:0}))),[midi]);
- const layout=useMemo(()=>ernieLayout(cells,spacing),[cells,spacing]);
- return <div className="absolute inset-0 bg-slate-950">
-  <Suspense fallback={<div className="p-8 text-white/60">Loading 3D models…</div>}>
-   <Canvas camera={{position:[1,1,1.6],fov:42,near:.01,far:300}} gl={{preserveDrawingBuffer:true}} dpr={[1,1.5]}>
-    <FrameModels width={layout.width} depth={layout.depth} height={layout.height} solo={settings.solo}/>
+ const layout=useMemo(()=>ernieLayout(cells,spacing,noteLayout),[cells,spacing,noteLayout]);
+ const session=useXR(state=>state.session);
+ return <>
+   <Suspense fallback={<Text position={[0,1,-2]} fontSize={.05}>Loading 3D models…</Text>}>
+    {!session && <FrameModels width={layout.width} depth={layout.depth} height={layout.height} solo={settings.solo}/>}
     <ModelBackdrop choice={background} hdri={hdri} onError={onBackgroundError}/>
     <ambientLight intensity={.7}/><hemisphereLight args={['#e4f4ff','#414653',1.8]}/><directionalLight position={[3,6,4]} intensity={2.4}/><directionalLight position={[-3,2,-4]} intensity={1.5}/>
-    {(settings.solo?layout.items.slice(0,1):layout.items).map(({cell,position})=>{const {asset,movement}=resolveChannel(settings,kind,cell.channel);if(!asset)return null;const Slot=kind==='glb'?GlbSlot:ObjSlot;return <Slot key={`${cell.key}:${asset.file}`} cell={cell} asset={asset} movement={movement} position={settings.solo?[0,0,0]:position} getTime={()=>getMusicTime().time} settings={settings} display={display} preview={!midi} />;})}
-    <OrbitControls makeDefault target={[0,settings.solo?.2:layout.height/2,0]} minDistance={.3} maxDistance={250}/>
-   </Canvas>
+    <group scale={session ? settings.solo ? 1 : Math.min(1, 2.5/Math.max(layout.width,layout.height+.53,layout.depth)) : 1}>
+    {(settings.solo?layout.items.slice(0,1):layout.items).map(({cell,position,copy})=>{const {asset,movement}=resolveChannel(settings,kind,cell.channel);if(!asset)return null;const Slot=kind==='glb'?GlbSlot:ObjSlot;return <Slot key={`${cell.key}:${copy}:${asset.file}`} cell={cell} asset={asset} movement={movement} position={settings.solo?[0,0,0]:position} getTime={()=>getMusicTime().time} settings={settings} display={display} preview={!midi} />;})}
+    </group>
+    {!session && <OrbitControls makeDefault target={[0,settings.solo?.2:layout.height/2,0]} minDistance={.3} maxDistance={250}/>}
   </Suspense>
-  <PlaybackStatus midi={midi} getMusicTime={getMusicTime}/>
-  {!midi&&<div className="absolute bottom-3 left-4 text-xs text-slate-400">Audition grid · load a MIDI score for playback</div>}
- </div>;
+ </>;
 }
+
 function FrameModels({width,depth,height,solo}:{width:number;depth:number;height:number;solo:boolean}){
  const {camera,size}=useThree();
  useEffect(()=>{
+  if (camera instanceof THREE.PerspectiveCamera) { camera.fov=42; camera.near=.01; camera.far=300; }
   const aspect=size.width/Math.max(1,size.height),tan=Math.tan(THREE.MathUtils.degToRad(42)/2);
   const direction=new THREE.Vector3(0,.45,.89).normalize(),up=new THREE.Vector3(0,direction.z,-direction.y);
   let distance=0;
@@ -72,4 +75,4 @@ function FrameModels({width,depth,height,solo}:{width:number;depth:number;height
   camera.lookAt(target);camera.updateProjectionMatrix();
  },[camera,width,depth,height,solo,size.width,size.height]);return null;
 }
-function PlaybackStatus({midi,getMusicTime}:{midi:ParsedMidi|null;getMusicTime:()=>{time:number;duration:number}}){const [status,setStatus]=useState('');useEffect(()=>{const id=window.setInterval(()=>{const {time}=getMusicTime(),sounding=midi?.notes.filter(n=>n.time<=time&&time<n.time+n.duration).length??0;setStatus(midi?`Score ${time.toFixed(1)}s · ${sounding} notes sounding`:'No MIDI score loaded');},150);return ()=>clearInterval(id);},[midi,getMusicTime]);return <div className="absolute bottom-8 left-4 text-xs text-cyan-500 pointer-events-none" role="status">{status}</div>;}
+export function PlaybackStatus({midi,getMusicTime}:{midi:ParsedMidi|null;getMusicTime:()=>{time:number;duration:number}}){const [status,setStatus]=useState('');useEffect(()=>{const id=window.setInterval(()=>{const {time}=getMusicTime(),sounding=midi?.notes.filter(n=>n.time<=time&&time<n.time+n.duration).length??0;setStatus(midi?`Score ${time.toFixed(1)}s · ${sounding} notes sounding`:'No MIDI score loaded');},150);return ()=>clearInterval(id);},[midi,getMusicTime]);return <div className="absolute bottom-8 left-4 text-xs text-cyan-500 pointer-events-none" role="status">{status}</div>;}

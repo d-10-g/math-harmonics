@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Container, Root, Text } from '@react-three/uikit';
 import { useXR, useXRInputSourceState } from '@react-three/xr';
-import { Formula, FormulaGeometryMode, PRESET_FORMULAS, ShaderPreset } from '../constants';
-import { PRESET_SHADERS } from '../shaders';
+import { Formula, FormulaGeometryMode, ShaderPreset } from '../constants';
+import SpatialMenus from './SpatialMenus';
 import {
   GEOMETRY_MODES,
   DEFAULT_XR_VISUAL_TRANSFORM,
@@ -29,11 +30,7 @@ const PANEL_BG = '#0b0e1a';
 const ROW_BG = '#161b2e';
 const ROW_HOVER = '#232a45';
 const OK = '#34d399';
-const WARN = '#f59e0b';
-const DANGER = '#ef4444';
 const TEXT_DIM = '#8b93b8';
-
-const formatQuant = (q: number) => (q >= 0 ? `${q + 1}x` : `1/${Math.abs(q) + 1}x`);
 
 function ConsoleButton({
   label,
@@ -120,7 +117,7 @@ function Stepper({
   );
 }
 
-type ConsoleTab = 'music' | 'notes' | 'control' | 'settings' | 'view' | 'pilot' | 'formulas' | 'shaders';
+type ConsoleTab = 'menus' | 'music' | 'control' | 'view';
 
 export interface SpatialConsoleProps {
   onNextFormula?: () => void;
@@ -195,7 +192,6 @@ export interface SpatialConsoleProps {
   meshLibrary?: string[];
 }
 
-const PAGE_SIZE = 6;
 
 export default function SpatialConsole(props: SpatialConsoleProps) {
   const session = useXR((state) => state.session);
@@ -204,9 +200,7 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
   const hasControllers = Boolean(leftController || rightController);
   const hudScale = hasControllers ? 1 : 1.3;
 
-  const [activeTab, setActiveTab] = useState<ConsoleTab>(props.midiActive ? 'music' : 'control');
-  const [formulaPage, setFormulaPage] = useState(0);
-  const [shaderPage, setShaderPage] = useState(0);
+  const [activeTab, setActiveTab] = useState<ConsoleTab>('menus');
   const [musicTimeLabel, setMusicTimeLabel] = useState('0:00 / 0:00');
 
   // Low-rate clock readout for the music tab (uikit re-renders on state).
@@ -224,6 +218,15 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
   const groupRef = useRef<THREE.Group>(null);
   const dragOffset = useRef(new THREE.Vector3());
 
+  const { camera } = useThree();
+  const previewDirection = useRef(new THREE.Vector3());
+  useFrame(() => {
+    if (!props.preview || session || !groupRef.current) return;
+    camera.getWorldDirection(previewDirection.current);
+    groupRef.current.position.copy(camera.position).addScaledVector(previewDirection.current, 1.6);
+    groupRef.current.quaternion.copy(camera.quaternion);
+    groupRef.current.scale.setScalar(1);
+  });
   const { preview } = props;
   const visible = !!session || !!preview;
   if (!visible) return null;
@@ -265,30 +268,12 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
     ? (props.formula.parametric ? 'SURFACE (P,Q)' : `AUTO: ${props.currentGeometryMode.toUpperCase()}`)
     : props.currentGeometryMode.toUpperCase();
 
-  const formulaPages = Math.max(1, Math.ceil(PRESET_FORMULAS.length / PAGE_SIZE));
-  const shaderPages = Math.max(1, Math.ceil(PRESET_SHADERS.length / PAGE_SIZE));
-
-  // Audio-first ordering: the music flow leads; the silent-studio pickers
-  // (formulas/shaders) close the row.
   const tabs: Array<{ key: ConsoleTab; label: string }> = [
-    { key: 'music', label: 'MUSIC' },
-    { key: 'notes', label: 'NOTES' },
-    { key: 'control', label: 'CTRL' },
-    { key: 'pilot', label: 'PILOT' },
-    { key: 'view', label: 'VIEW' },
-    { key: 'settings', label: 'SETUP' },
-    { key: 'formulas', label: 'FORMS' },
-    { key: 'shaders', label: 'SHADERS' }
+    { key: 'menus', label: 'ALL 2D MENUS' },
+    { key: 'view', label: 'SPATIAL VIEW' },
+    { key: 'music', label: 'QUICK MUSIC' },
+    { key: 'control', label: 'SESSION' }
   ];
-
-  const cycleChannelMesh = (channel: number, offset: number) => {
-    const library = props.meshLibrary ?? [];
-    if (!library.length || !props.setMeshChannelMap || !props.meshChannelMap) return;
-    const index = Math.max(0, library.indexOf(props.meshChannelMap[channel]));
-    const map = [...props.meshChannelMap];
-    map[channel] = library[(index + offset + library.length) % library.length];
-    props.setMeshChannelMap(map);
-  };
 
   const groupPosition: [number, number, number] = session ? hudPosition : [0, 0, 12];
   const groupScale = session ? hudScale : 9;
@@ -356,6 +341,8 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
           ))}
         </Container>
 
+        {activeTab === 'menus' && <SpatialMenus />}
+
         {/* MUSIC — transport, pieces, and the note dials */}
         {activeTab === 'music' && (
           <Container flexDirection="column" gap={8}>
@@ -393,120 +380,6 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
           </Container>
         )}
 
-        {/* NOTES — how each note renders and moves */}
-        {activeTab === 'notes' && (
-          <Container flexDirection="column" gap={8}>
-            <Stepper
-              label="NOTE FX"
-              value={`${Math.round((props.noteFxAmount ?? 2) * 100)}%`}
-              onDec={() => props.setNoteFxAmount?.(Math.max(0, (props.noteFxAmount ?? 2) - 0.25))}
-              onInc={() => props.setNoteFxAmount?.(Math.min(8, (props.noteFxAmount ?? 2) + 0.25))}
-            />
-            <Container flexDirection="row" gap={6}>
-              {(['both', 'morph', 'pulse', 'off'] as const).map((mode) => (
-                <ConsoleButton
-                  key={mode}
-                  grow
-                  fontSize={10.5}
-                  tone={props.noteFxMode === mode ? 'accent' : 'default'}
-                  label={mode.toUpperCase()}
-                  onTap={() => props.setNoteFxMode?.(mode)}
-                />
-              ))}
-            </Container>
-            <Stepper
-              label="NOTE SPREAD"
-              value={`${(props.noteSpread ?? 5).toFixed(1)}x`}
-              onDec={() => props.setNoteSpread?.(Math.max(0.5, (props.noteSpread ?? 5) - 0.5))}
-              onInc={() => props.setNoteSpread?.(Math.min(10, (props.noteSpread ?? 5) + 0.5))}
-            />
-            <Container flexDirection="row" gap={8}>
-              <ConsoleToggle
-                label="CONSTELLATION"
-                value={!!props.noteMeshes}
-                onTap={() => props.setNoteMeshes?.(!props.noteMeshes)}
-              />
-            </Container>
-            <Container flexDirection="row" gap={6}>
-              <ConsoleButton
-                grow
-                fontSize={10.5}
-                tone={props.noteSource !== 'mesh' ? 'accent' : 'default'}
-                label="FORMULAS"
-                onTap={() => props.setNoteSource?.('formula')}
-              />
-              <ConsoleButton
-                grow
-                fontSize={10.5}
-                tone={props.noteSource === 'mesh' ? 'accent' : 'default'}
-                label="3D MESHES"
-                onTap={() => props.setNoteSource?.('mesh')}
-              />
-            </Container>
-            {props.noteSource === 'mesh' && (
-              <>
-                <Container flexDirection="row" gap={6}>
-                  <ConsoleButton
-                    grow
-                    fontSize={10.5}
-                    tone={!props.meshUseMtl ? 'accent' : 'default'}
-                    label="APP MATERIALS"
-                    onTap={() => props.setMeshUseMtl?.(false)}
-                  />
-                  <ConsoleButton
-                    grow
-                    fontSize={10.5}
-                    tone={props.meshUseMtl ? 'accent' : 'default'}
-                    label="MTL COLORS"
-                    onTap={() => props.setMeshUseMtl?.(true)}
-                  />
-                </Container>
-                <Container flexDirection="row" gap={6}>
-                  <ConsoleButton
-                    grow
-                    fontSize={10.5}
-                    tone={props.meshAssign === 'random' ? 'accent' : 'default'}
-                    label="RANDOM"
-                    onTap={() => props.setMeshAssign?.('random')}
-                  />
-                  <ConsoleButton
-                    grow
-                    fontSize={10.5}
-                    tone={props.meshAssign === 'channel' ? 'accent' : 'default'}
-                    label="PER CHANNEL"
-                    onTap={() => props.setMeshAssign?.('channel')}
-                  />
-                </Container>
-                {props.meshAssign === 'channel' && (props.meshChannelMap ?? []).map((meshName, channel) => (
-                  <Stepper
-                    key={channel}
-                    label={`CH ${channel + 1} MESH`}
-                    value={meshName}
-                    onDec={() => cycleChannelMesh(channel, -1)}
-                    onInc={() => cycleChannelMesh(channel, 1)}
-                  />
-                ))}
-              </>
-            )}
-            <Container flexDirection="row" gap={6}>
-              <ConsoleButton
-                grow
-                fontSize={10.5}
-                tone={props.noteDisplay !== 'all' ? 'accent' : 'default'}
-                label="SOUNDING ONLY"
-                onTap={() => props.setNoteDisplay?.('sounding')}
-              />
-              <ConsoleButton
-                grow
-                fontSize={10.5}
-                tone={props.noteDisplay === 'all' ? 'accent' : 'default'}
-                label="ALL NOTES"
-                onTap={() => props.setNoteDisplay?.('all')}
-              />
-            </Container>
-          </Container>
-        )}
-
         {/* CONTROL */}
         {activeTab === 'control' && (
           <Container flexDirection="column" gap={8}>
@@ -523,26 +396,6 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
             <Container flexDirection="row" gap={8}>
               <ConsoleButton grow tone="danger" label="EXIT IMMERSIVE" onTap={() => session?.end()} />
             </Container>
-          </Container>
-        )}
-
-        {/* SETTINGS */}
-        {activeTab === 'settings' && (
-          <Container flexDirection="column" gap={8}>
-            <Container flexDirection="row" gap={8}>
-              <ConsoleToggle label="3D VOLUME" value={props.show3D} onTap={() => props.setShow3D?.(!props.show3D)} />
-              <ConsoleToggle label="WIREFRAME" value={props.showWireframe} onTap={() => props.setShowWireframe?.(!props.showWireframe)} />
-            </Container>
-            <Container flexDirection="row" gap={8}>
-              <ConsoleToggle label="GUIDE AXES" value={props.showArtifacts} onTap={() => props.setShowArtifacts?.(!props.showArtifacts)} />
-              <ConsoleToggle label="BEAT SYNC" value={props.audioSync} onTap={() => props.setAudioSync?.(!props.audioSync)} />
-            </Container>
-            <Stepper
-              label="ANIMATION SPEED"
-              value={`${props.speed.toFixed(1)}x`}
-              onDec={() => props.setSpeed?.(Math.max(0.1, props.speed - 0.5))}
-              onInc={() => props.setSpeed?.(Math.min(5, props.speed + 0.5))}
-            />
           </Container>
         )}
 
@@ -592,117 +445,10 @@ export default function SpatialConsole(props: SpatialConsoleProps) {
           </Container>
         )}
 
-        {/* PILOT */}
-        {activeTab === 'pilot' && (
-          <Container flexDirection="column" gap={8}>
-            <ConsoleToggle label="AUDIO BEAT SYNC (MIC)" value={props.audioSync} onTap={() => props.setAudioSync?.(!props.audioSync)} />
-            <Stepper
-              label={props.audioSync ? 'TEMPO QUANT' : 'SPEED'}
-              value={props.audioSync ? formatQuant(props.speedQuant) : `${props.speed.toFixed(1)}x`}
-              onDec={() => (props.audioSync ? props.setSpeedQuant?.(Math.max(-10, props.speedQuant - 1)) : props.setSpeed?.(Math.max(0.1, props.speed - 0.5)))}
-              onInc={() => (props.audioSync ? props.setSpeedQuant?.(Math.min(10, props.speedQuant + 1)) : props.setSpeed?.(Math.min(5, props.speed + 0.5)))}
-            />
-            <Container flexDirection="row" gap={8}>
-              <ConsoleToggle label="AUTO FORMULA" value={props.autoCycleFormula} onTap={() => props.setAutoCycleFormula?.(!props.autoCycleFormula)} />
-              <ConsoleToggle label="AUTO SHADER" value={props.autoCycleShader} onTap={() => props.setAutoCycleShader?.(!props.autoCycleShader)} />
-            </Container>
-            <Stepper
-              label={props.audioSync ? 'FORMULA BEAT' : 'FORMULA INTERVAL'}
-              value={props.audioSync ? formatQuant(props.formulaQuant) : `${props.formulaCycleSpeed.toFixed(1)}s`}
-              onDec={() => (props.audioSync ? props.setFormulaQuant?.(Math.max(-10, props.formulaQuant - 1)) : props.setFormulaCycleSpeed?.(Math.max(0.5, props.formulaCycleSpeed - 0.5)))}
-              onInc={() => (props.audioSync ? props.setFormulaQuant?.(Math.min(10, props.formulaQuant + 1)) : props.setFormulaCycleSpeed?.(Math.min(10, props.formulaCycleSpeed + 0.5)))}
-            />
-            <Stepper
-              label={props.audioSync ? 'SHADER BEAT' : 'SHADER INTERVAL'}
-              value={props.audioSync ? formatQuant(props.shaderQuant) : `${props.shaderCycleSpeed.toFixed(1)}s`}
-              onDec={() => (props.audioSync ? props.setShaderQuant?.(Math.max(-10, props.shaderQuant - 1)) : props.setShaderCycleSpeed?.(Math.max(0.5, props.shaderCycleSpeed - 0.5)))}
-              onInc={() => (props.audioSync ? props.setShaderQuant?.(Math.min(10, props.shaderQuant + 1)) : props.setShaderCycleSpeed?.(Math.min(10, props.shaderCycleSpeed + 0.5)))}
-            />
-          </Container>
-        )}
-
-        {/* FORMULAS */}
-        {activeTab === 'formulas' && (
-          <PresetPager
-            items={PRESET_FORMULAS}
-            page={formulaPage}
-            pages={formulaPages}
-            setPage={setFormulaPage}
-            activeId={props.formula.id}
-            onSelect={(item) => props.onSelectFormula?.(item as Formula)}
-          />
-        )}
-
-        {/* SHADERS */}
-        {activeTab === 'shaders' && (
-          <PresetPager
-            items={PRESET_SHADERS}
-            page={shaderPage}
-            pages={shaderPages}
-            setPage={setShaderPage}
-            activeId={props.shader.id}
-            onSelect={(item) => props.onSelectShader?.(item as ShaderPreset)}
-          />
-        )}
-
         <Container height={18} justifyContent="center" alignItems="center">
           <Text fontSize={8.5} color={TEXT_DIM}>{helpLine}</Text>
         </Container>
       </Root>
     </group>
-  );
-}
-
-function PresetPager({
-  items,
-  page,
-  pages,
-  setPage,
-  activeId,
-  onSelect
-}: {
-  items: Array<{ id: string; name: string; category?: string }>;
-  page: number;
-  pages: number;
-  setPage: (updater: (page: number) => number) => void;
-  activeId: string;
-  onSelect: (item: { id: string; name: string }) => void;
-}) {
-  const pageItems = useMemo(() => items.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [items, page]);
-
-  return (
-    <Container flexDirection="column" gap={6}>
-      {pageItems.map((item) => (
-        <Container
-          key={item.id}
-          height={32}
-          borderRadius={8}
-          backgroundColor={item.id === activeId ? ACCENT_STRONG : ROW_BG}
-          hover={{ backgroundColor: item.id === activeId ? ACCENT_STRONG : ROW_HOVER }}
-          flexDirection="row"
-          alignItems="center"
-          justifyContent="space-between"
-          paddingX={10}
-          onPointerDown={(e: any) => {
-            e.stopPropagation?.();
-            onSelect(item);
-          }}
-        >
-          <Text fontSize={12} fontWeight={item.id === activeId ? 'bold' : 'medium'} color="#f4f6ff">
-            {item.name.length > 34 ? `${item.name.slice(0, 33)}…` : item.name}
-          </Text>
-          <Text fontSize={9} color={item.id === activeId ? '#c7d2fe' : TEXT_DIM}>
-            {(item.category ?? 'Core').slice(0, 14)}
-          </Text>
-        </Container>
-      ))}
-      <Container flexDirection="row" gap={8} alignItems="center">
-        <ConsoleButton width={110} label="◀ PREV" onTap={() => setPage((p) => Math.max(0, p - 1))} />
-        <Container flexGrow={1} justifyContent="center" alignItems="center">
-          <Text fontSize={11} color={TEXT_DIM}>{`PAGE ${page + 1} / ${pages}`}</Text>
-        </Container>
-        <ConsoleButton width={110} label="NEXT ▶" onTap={() => setPage((p) => Math.min(pages - 1, p + 1))} />
-      </Container>
-    </Container>
   );
 }

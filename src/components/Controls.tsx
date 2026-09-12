@@ -83,6 +83,7 @@ interface ControlsProps {
   setNoteFxMode: (mode: 'both' | 'morph' | 'pulse' | 'off') => void;
   noteSpread: number;
   setNoteSpread: (spread: number) => void;
+  noteLayoutControls?: ReactNode;
   modelControls?: ReactNode;
   modelBackgroundControls?: ReactNode;
   noteSource: 'formula' | 'mesh' | 'glb';
@@ -246,7 +247,7 @@ function DataPorting() {
   };
 
   return (
-    <div className="space-y-2 pt-2 border-t border-white/5">
+    <div data-spatial-section="Settings backup" className="space-y-2 pt-2 border-t border-white/5">
       <div className="text-[9px] text-white/30 uppercase tracking-widest font-mono">Settings & Favorites</div>
       <div className="grid grid-cols-2 gap-2">
         <button
@@ -379,6 +380,7 @@ export default function Controls({
   setNoteFxMode,
   noteSpread,
   setNoteSpread,
+  noteLayoutControls,
   modelControls,
   modelBackgroundControls,
   noteSource,
@@ -463,8 +465,7 @@ export default function Controls({
   const enterVRSpace = async () => {
     try {
       if (rendererMode === 'webgpu') {
-        window.dispatchEvent(new CustomEvent(WEBGPU_XR_REQUEST_EVENT, { detail: { mode: 'vr' } }));
-        setXrActionMessage('Trying WebGPU VR. If Quest Browser cannot start it, this will switch to WebGL VR fallback.');
+        switchToWebGLForXR('vr');
         return;
       }
 
@@ -580,7 +581,7 @@ export default function Controls({
   ];
 
   return (
-    <aside className={cn(
+    <aside data-spatial-menu="Controls" className={cn(
       "min-h-[520px] lg:col-span-2 xl:col-span-1 xl:min-h-0 flex flex-col gap-6 overflow-y-auto pr-1 h-full custom-scrollbar text-[#e0e0e0] pb-4",
       collapsed && "hidden"
     )}>
@@ -588,7 +589,7 @@ export default function Controls({
         <button
           onClick={onCollapse}
           className="h-7 w-7 rounded-md border border-white/10 bg-[#101018]/90 text-[12px] text-white/45 backdrop-blur transition-colors hover:bg-white/10 hover:text-white"
-          title="Collapse this panel"
+          data-spatial-skip title="Collapse this panel"
           type="button"
         >
           ⟩
@@ -964,7 +965,7 @@ export default function Controls({
             />
           </div>
 
-          {noteSource !== 'formula' ? modelBackgroundControls : <>
+          {noteSource !== 'formula' ? <div data-spatial-section="Model background">{modelBackgroundControls}</div> : <>
           {/* Cosmos Backdrop Switch */}
           <div className="flex items-center justify-between group">
             <div>
@@ -1135,7 +1136,7 @@ export default function Controls({
                 exists only while this is on. The silent page hides it
                 entirely (hidden, not unmounted — the <audio> element's ref
                 must survive mode switches). */}
-            <div className={cn(
+            <div data-spatial-section="Audio and notes" className={cn(
               "space-y-3 rounded-lg border p-3 transition-colors",
               audioSync ? "border-indigo-400/30 bg-indigo-500/10" : "border-white/10 bg-white/[0.03]",
               pageMode === 'silent' && "hidden"
@@ -1235,11 +1236,11 @@ export default function Controls({
                           />
                         </label>
                       </div>
-                      <div className="text-[9px] font-mono text-white/40 truncate">
+                      <div data-spatial-status className="text-[9px] font-mono text-white/40 truncate">
                         {midiName ?? 'Select the .mid and its audio rendition together (one multi-select works)'}
                       </div>
                       {audioFileError && (
-                        <div className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[9px] font-mono text-amber-200">
+                        <div role="alert" className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[9px] font-mono text-amber-200">
                           {audioFileError}
                         </div>
                       )}
@@ -1318,6 +1319,7 @@ export default function Controls({
                           className="mt-1.5 w-full accent-fuchsia-500"
                         />
                       </div>
+                      {noteLayoutControls}
                       <div>
                         <div className="text-xs font-semibold text-white/80">Note Visuals</div>
                         <div className="text-[9px] text-white/30 font-mono">What Each Note Renders As</div>
@@ -1338,7 +1340,7 @@ export default function Controls({
                             </button>
                           ))}
                         </div>
-                        {noteSource !== 'formula' && modelControls}
+                        {noteSource !== 'formula' && <div data-spatial-section="Models and channel mappings">{modelControls}</div>}
                         <div className="mt-1.5 grid grid-cols-2 gap-1">
                           {(['sounding', 'all'] as const).map((mode) => (
                             <button
@@ -1541,15 +1543,15 @@ export default function Controls({
         
         <div className="pt-1 flex flex-col gap-2.5">
           <button
-            onClick={enterVRSpace}
+            data-spatial-skip onClick={enterVRSpace}
             disabled={rendererMode !== 'webgpu' && isVrSupported === false}
             className="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 via-purple-700 to-pink-600 hover:from-indigo-500 hover:via-purple-600 hover:to-pink-500 border border-indigo-400/40 rounded-xl text-[10px] font-bold tracking-widest font-sans uppercase text-white shadow-2xl transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
           >
-            {rendererMode === 'webgpu' ? 'Try WebGPU Immersive VR' : isVrSupported === null ? 'Checking Immersive Space' : isVrSupported ? 'Enter Immersive Space (VR)' : 'Immersive Space Unavailable'}
+            {rendererMode === 'webgpu' ? 'Switch to WebGL for full VR menus' : isVrSupported === null ? 'Checking Immersive Space' : isVrSupported ? 'Enter Immersive Space (VR)' : 'Immersive Space Unavailable'}
           </button>
           
           <button
-            onClick={enterPassthroughSpace}
+            data-spatial-skip onClick={enterPassthroughSpace}
             disabled={rendererMode !== 'webgpu' && isArSupported === false && isVrSupported === false}
             className="w-full py-3 px-4 bg-gradient-to-r from-teal-600 via-emerald-700 to-cyan-600 hover:from-teal-500 hover:via-emerald-600 hover:to-cyan-500 border border-teal-400/40 rounded-xl text-[10px] font-bold tracking-widest font-sans uppercase text-white shadow-2xl transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
           >

@@ -11,7 +11,15 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
     base: './',
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), {
+      name: 'release-version',
+      transformIndexHtml(html) {
+        return html.replace('<title>Harmonic.OS', `<title>Harmonic.OS v${pkg.version}`);
+      },
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version: pkg.version }) + '\n' });
+      },
+    }],
     build: {
       rollupOptions: {
         output: {

@@ -278,7 +278,7 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="min-h-[620px] lg:min-h-0 flex flex-col gap-4 overflow-hidden">
+    <aside data-spatial-menu="Library" className="min-h-[620px] lg:min-h-0 flex flex-col gap-4 overflow-hidden">
       <div className="bg-white/5 border border-white/10 rounded-lg p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
         <div className="flex justify-between items-center px-1">
           <div className="flex gap-2 rounded-lg bg-black/30 border border-white/10 p-1">
@@ -312,7 +312,7 @@ export default function Sidebar({
             </button>
             {onCollapse && (
               <button
-                onClick={onCollapse}
+                data-spatial-skip onClick={onCollapse}
                 className="h-8 w-8 rounded-md border border-white/10 bg-white/5 text-white/45 hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center text-[12px]"
                 title="Collapse this panel"
                 type="button"
@@ -424,6 +424,7 @@ export default function Sidebar({
           {categories.map((category) => (
             <button
               key={category.label}
+              aria-pressed={selectedCategory === category.label}
               onClick={() => setSelectedCategory(category.label)}
               className={cn(
                 "rounded-md border px-2.5 py-1 text-[9px] font-mono uppercase tracking-[0.12em] transition-colors",
@@ -461,6 +462,8 @@ export default function Sidebar({
                 )}
               >
                 <button
+                  aria-label={item.name}
+                  aria-pressed={isSelected}
                   onClick={() => selectItem(item)}
                   className="flex-1 min-w-0 text-left p-2.5 flex items-center gap-3"
                   type="button"
@@ -493,7 +496,7 @@ export default function Sidebar({
                       : "border-white/5 text-white/20 hover:text-white/60"
                   )}
                   title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                  aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-label={`${isFavorite ? 'Remove from favorites' : 'Add to favorites'}: ${item.name}`}
                   aria-pressed={isFavorite}
                   type="button"
                 >

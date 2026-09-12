@@ -1,3 +1,4 @@
+import { channelPath, copyOffset, DEFAULT_NOTE_LAYOUT, normalizeNoteLayout, type NoteLayoutSettings } from './noteLayout';
 import type { MidiNote } from './midi';
 
 export const ERNIE_MOVEMENTS = [
@@ -48,11 +49,23 @@ export function erniePose(n: MidiNote,time: number) {
   return {phase,weight};
 }
 
-// Compact centered rows: note rank within each channel, not global pitch.
-export function ernieLayout(cells: ErnieCell[], spacing=1) {
+// Score-ranked channel paths and repeated layers preserve MIDI identity.
+export function ernieLayout(cells: ErnieCell[], spacing=1, settings: NoteLayoutSettings=DEFAULT_NOTE_LAYOUT) {
+  const { geometry, copies, offset } = normalizeNoteLayout(settings);
   const channels=[...new Set(cells.map(c=>c.channel))].sort((a,b)=>a-b);
   const rows=channels.map(channel=>cells.filter(c=>c.channel===channel).sort((a,b)=>a.pitch-b.pitch));
-  return {width:Math.max(1,...rows.map(row=>row.length*.28*spacing)),depth:Math.max(.8,channels.length*.62),height:Math.max(0,(channels.length-1)*.14),
-    items:rows.flatMap((row,r)=>row.map((cell,i)=>({cell,position:[(i-(row.length-1)/2)*.28*spacing,r*.14,((channels.length-1)/2-r)*.62] as [number,number,number]}))),
-  };
+  const items = rows.flatMap((row,r)=>row.flatMap((cell,i)=>{
+    const path = channelPath(i,row.length,.28*spacing,geometry);
+    const position: [number,number,number] = geometry === 'linear'
+      ? [path[0],r*.14,((channels.length-1)/2-r)*.62]
+      : [path[0],path[1]+r*.75*spacing,path[2]];
+    return Array.from({length:copies},(_,copy)=>({cell,copy,position:[position[0],position[1]+copyOffset(copy,copies,offset,.75),position[2]] as [number,number,number]}));
+  }));
+  // Preserve the original linear framing. Other layouts are centered in X/Z
+  // and grounded in Y so the camera and XR fit use the actual full bounds.
+  if(geometry==='linear' && copies===1) return {width:Math.max(1,...rows.map(row=>row.length*.28*spacing)),depth:Math.max(.8,channels.length*.62),height:Math.max(0,(channels.length-1)*.14),items};
+  const min=[0,1,2].map(axis=>items.length?Math.min(...items.map(item=>item.position[axis])):0);
+  const max=[0,1,2].map(axis=>items.length?Math.max(...items.map(item=>item.position[axis])):0);
+  for(const item of items){item.position[0]-=(min[0]+max[0])/2;item.position[1]-=min[1];item.position[2]-=(min[2]+max[2])/2;}
+  return {width:Math.max(1,max[0]-min[0]+.28),height:max[1]-min[1],depth:Math.max(.8,max[2]-min[2]+.62),items};
 }

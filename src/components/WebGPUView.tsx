@@ -1689,7 +1689,7 @@ export default function WebGPUView({
         <div className="mt-3 flex items-center gap-2">
           <button
             type="button"
-            onClick={() => void enterWebGPUVR()}
+            onClick={() => webgpuXRStatus === 'presenting' ? void enterWebGPUVR() : reportWebGPUXRUnavailable('The complete VR menus use the WebGL renderer')}
             disabled={webgpuXRStatus === 'checking' || webgpuXRStatus === 'starting'}
             className="rounded-md border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-cyan-100 transition-colors hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-45"
           >
@@ -1699,7 +1699,7 @@ export default function WebGPUView({
                 ? 'Starting VR'
                 : webgpuXRStatus === 'checking'
                   ? 'Checking XR'
-                  : 'Try WebGPU VR'}
+                  : 'VR with full menus (WebGL)'}
           </button>
           <div className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.1em] text-white/35">
             {webgpuXRStatus}
