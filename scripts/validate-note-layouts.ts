@@ -6,6 +6,8 @@ import {
   NOTE_LAYOUTS,
   normalizeNoteLayout,
   copyOffset,
+  copyRotation,
+  rotateCopyPosition,
 } from "../src/lib/noteLayout";
 import { ernieCells, ernieLayout } from "../src/lib/ernie";
 import { syncVisualCopy } from "../src/components/VisualCopies";
@@ -45,7 +47,7 @@ for (const geometry of NOTE_LAYOUTS) {
     const doubled = channelPath(i, 9, 0.56, geometry);
     positions[i].forEach((v, axis) => near(doubled[axis], 2 * v));
   }
-  const layout = ernieLayout(cells, 1, { geometry, copies: 3, offset: 1.5 });
+  const layout = ernieLayout(cells, 1, { geometry, copies: 3, offset: 1.5, rotation: 0 });
   assert.equal(layout.items.length, cells.length * 3);
   assert.equal(
     new Set(layout.items.map((item) => `${item.cell.key}:${item.copy}`)).size,
@@ -73,7 +75,7 @@ for (const geometry of NOTE_LAYOUTS) {
       "Camera bounds enclose every duplicate",
     );
   }
-  const overlap = ernieLayout(cells, 1, { geometry, copies: 2, offset: 0 });
+  const overlap = ernieLayout(cells, 1, { geometry, copies: 2, offset: 0, rotation: 0 });
   assert.deepEqual(overlap.items[0].position, overlap.items[1].position);
 }
 const ring = Array.from({ length: 9 }, (_, i) =>
@@ -83,7 +85,7 @@ ring.forEach((p) => near(Math.hypot(p[0], p[2]), 9 / (2 * Math.PI)));
 assert.deepEqual(normalizeNoteLayout(), DEFAULT_NOTE_LAYOUT);
 assert.deepEqual(
   normalizeNoteLayout({ geometry: "bad" as any, copies: 99, offset: -2 }),
-  { geometry: "linear", copies: 8, offset: 0 },
+  { geometry: "linear", copies: 8, offset: 0, rotation: 0 },
 );
 assert.deepEqual(
   normalizeNoteLayout({ copies: NaN, offset: Infinity }),
@@ -120,3 +122,22 @@ material.dispose();
 console.log(
   "PASS: all layouts, spacing, empty/single-note paths, distinct endpoints, MIDI identity, copy offsets, bounds, legacy defaults, input normalization and shared formula resources.",
 );
+
+near(copyRotation(0,90),0); near(copyRotation(2,45),Math.PI/2);
+const turned=rotateCopyPosition([1,2,0],copyRotation(1,90));
+near(turned[0],0);near(turned[1],2);near(turned[2],-1);
+assert.equal(normalizeNoteLayout({rotation:Infinity}).rotation,0);
+assert.equal(normalizeNoteLayout({rotation:300}).rotation,180);
+assert.equal(normalizeNoteLayout({rotation:-300}).rotation,-180);
+for (const rotation of [-180,-45,45,90,180]) {
+ const layout=ernieLayout(cells,1,{...DEFAULT_NOTE_LAYOUT,copies:3,rotation});
+ for(const item of layout.items){
+  near(item.yaw,copyRotation(item.copy,rotation));
+  assert(Math.abs(item.position[0])<=layout.width/2 && Math.abs(item.position[2])<=layout.depth/2);
+ }
+ const a=layout.items.find(item=>item.cell===cells[0]&&item.copy===0)!;
+ const b=layout.items.find(item=>item.cell===cells[1]&&item.copy===0)!;
+ near(b.position[0]-a.position[0],.28);
+ near(b.position[2]-a.position[2],0);
+}
+console.log('PASS: signed incremental copy rotation, original orientation, rotated bounds, and legacy defaults.');

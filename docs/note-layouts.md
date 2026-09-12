@@ -21,12 +21,17 @@ to the scene's normal channel scale and is independent of Note Spread. Copies
 follow the original notes and movements without duplicating playback. The
 single-model inspection mode continues to show one object.
 
+**Copy Rotation** ranges from -180° to 180° per copy around the vertical axis.
+The original stays at 0°, the first duplicate turns by the slider angle, and
+the second turns by twice that angle. It is disabled at one copy and defaults
+to 0° for older layouts. Positions and model orientations rotate together.
+
 The camera / XR fit accounts for the expanded model bounds. Increasing spread
 or adding copies can make objects smaller on screen to keep the arrangement in
 view. Formula copies share geometry and materials, so formulas are evaluated
 once rather than once for every copy.
 
-Settings are saved locally and included in shared links (`nlg`, `nlc`, `nlo`).
+Settings are saved locally and included in shared links (`nlg`, `nlc`, `nlo`, `nlr`).
 Old links retain Linear / one copy defaults. The shared VR menu exposes the same
 controls under **Object layout**.
 

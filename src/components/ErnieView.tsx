@@ -11,7 +11,7 @@ import { loadMeshGroup } from '../lib/meshLibrary';
 import { useXR } from '@react-three/xr';
 import ModelBackdrop, { type HdriFile } from './ModelBackdrop';
 
-type SlotProps={cell:ErnieCell;position:[number,number,number];getTime:()=>number;settings:ModelSettings;display:'sounding'|'all';preview:boolean;asset:ModelAsset;movement?:string};
+type SlotProps={yaw?:number;cell:ErnieCell;position:[number,number,number];getTime:()=>number;settings:ModelSettings;display:'sounding'|'all';preview:boolean;asset:ModelAsset;movement?:string};
 function GlbSlot(props:SlotProps){const gltf=useGLTF(props.asset.url);return <AnimatedSlot {...props} template={gltf.scene} clips={gltf.animations}/>;}
 function ObjSlot(props:SlotProps){
  const [template,setTemplate]=useState<THREE.Group|null>(null),[failed,setFailed]=useState(false);
@@ -19,7 +19,7 @@ function ObjSlot(props:SlotProps){
  return template?<AnimatedSlot {...props} template={template} clips={[]}/>:<Text position={props.position} fontSize={.04}>{failed?'Model unavailable':'Loading…'}</Text>;
 }
 const NO_CLIPS:THREE.AnimationClip[]=[];
-function AnimatedSlot({cell,position,getTime,settings,display,preview,template,clips=NO_CLIPS,movement}:SlotProps&{template:THREE.Object3D;clips:THREE.AnimationClip[]}){
+function AnimatedSlot({cell,position,yaw=0,getTime,settings,display,preview,template,clips=NO_CLIPS,movement}:SlotProps&{template:THREE.Object3D;clips:THREE.AnimationClip[]}){
  const model=useMemo(()=>clone(template),[template]);
  const fit=useMemo(()=>{const box=new THREE.Box3().setFromObject(model);const size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());const scale=Math.min(.25/Math.max(size.x,.001),.8/Math.max(size.z,.001),.53/Math.max(size.y,.001));return {scale,offset:[-center.x*scale,-box.min.y*scale,-center.z*scale] as [number,number,number]};},[model]);
  const clip=useMemo(()=>clips.find(c=>c.name===(settings.movement==='channel'?movement:settings.movement))??clips[(cell.channel+settings.seed)%Math.max(1,clips.length)],[clips,movement,settings.movement,settings.seed,cell.channel]);
@@ -35,7 +35,7 @@ function AnimatedSlot({cell,position,getTime,settings,display,preview,template,c
   else if(body.current)body.current.scale.setScalar(1+.12*p.weight);
  });
  const off=()=>{if(audition.current&&audition.current.off===null)audition.current.off=performance.now()/1000;};
- return <group ref={slot} position={position}>
+ return <group ref={slot} position={position} rotation-y={yaw}>
   <group ref={body} onPointerDown={(e:any)=>{e.stopPropagation();e.target.setPointerCapture(e.pointerId);audition.current={start:performance.now()/1000,off:null};}} onPointerUp={off} onPointerCancel={off} onLostPointerCapture={off}>
    <group position={fit.offset} scale={fit.scale}><primitive object={model}/></group>
   </group>
@@ -52,7 +52,7 @@ export function ModelScene({midi,getMusicTime,kind,settings,display,background,h
     <ModelBackdrop choice={background} hdri={hdri} onError={onBackgroundError}/>
     <ambientLight intensity={.7}/><hemisphereLight args={['#e4f4ff','#414653',1.8]}/><directionalLight position={[3,6,4]} intensity={2.4}/><directionalLight position={[-3,2,-4]} intensity={1.5}/>
     <group scale={session ? settings.solo ? 1 : Math.min(1, 2.5/Math.max(layout.width,layout.height+.53,layout.depth)) : 1}>
-    {(settings.solo?layout.items.slice(0,1):layout.items).map(({cell,position,copy})=>{const {asset,movement}=resolveChannel(settings,kind,cell.channel);if(!asset)return null;const Slot=kind==='glb'?GlbSlot:ObjSlot;return <Slot key={`${cell.key}:${copy}:${asset.file}`} cell={cell} asset={asset} movement={movement} position={settings.solo?[0,0,0]:position} getTime={()=>getMusicTime().time} settings={settings} display={display} preview={!midi} />;})}
+    {(settings.solo?layout.items.slice(0,1):layout.items).map(({cell,position,copy,yaw})=>{const {asset,movement}=resolveChannel(settings,kind,cell.channel);if(!asset)return null;const Slot=kind==='glb'?GlbSlot:ObjSlot;return <Slot key={`${cell.key}:${copy}:${asset.file}`} cell={cell} asset={asset} movement={movement} yaw={settings.solo?0:yaw} position={settings.solo?[0,0,0]:position} getTime={()=>getMusicTime().time} settings={settings} display={display} preview={!midi} />;})}
     </group>
     {!session && <OrbitControls makeDefault target={[0,settings.solo?.2:layout.height/2,0]} minDistance={.3} maxDistance={250}/>}
   </Suspense>

@@ -1,7 +1,7 @@
 import { useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { copyOffset, type NoteLayoutSettings } from "../lib/noteLayout";
+import { copyRotation, copyOffset, type NoteLayoutSettings } from "../lib/noteLayout";
 
 /** Formula copies share the evaluated geometry/materials. Only transforms and
  * visibility are mirrored; geometry rebuilding and MIDI processing run once. */
@@ -48,6 +48,7 @@ export default function VisualCopies({
         holder.add(mirror);
       }
       syncVisualCopy(source.current!, mirror);
+      mirror.rotateY(copyRotation(index + 1, settings.rotation));
       mirror.position.y += (index + 1) * settings.offset * 2.4;
     });
   });

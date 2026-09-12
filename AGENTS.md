@@ -13,3 +13,10 @@ version. Before reporting an update complete:
 - Run lint, relevant validations, and the production build. Layout/menu/model
   changes use `validate:layouts`, `validate:menus`, and `validate:models`.
 - Preserve unrelated working-tree files; stage only the intended release files.
+
+# Standing update requirements
+
+- The user authorizes publishing completed updates to GitHub Pages. Publish each
+  versioned update and verify the successful deployment and live assets.
+- Keep VR menus and capabilities in parity with the 2D version for every update.
+  Shared controls must expose the same settings, ranges, and behavior in VR.

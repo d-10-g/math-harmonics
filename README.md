@@ -4,6 +4,12 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.8.0 — Copy Rotation
+
+- Copy Rotation adds a signed -180° to 180° yaw increment per duplicate, alongside Copy Offset.
+- Available in desktop and VR Object layout controls for formula, OBJ, and GLB copies.
+- Originals keep their orientation; old saved layouts default to 0°. Rotation is saved locally and in shared links.
+
 ## v2.7.0 — Shared VR menus and object layouts
 
 - Shared desktop/VR menus with search, editors, model settings, and full control values.

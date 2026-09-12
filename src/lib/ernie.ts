@@ -1,4 +1,4 @@
-import { channelPath, copyOffset, DEFAULT_NOTE_LAYOUT, normalizeNoteLayout, type NoteLayoutSettings } from './noteLayout';
+import { copyRotation, rotateCopyPosition, channelPath, copyOffset, DEFAULT_NOTE_LAYOUT, normalizeNoteLayout, type NoteLayoutSettings } from './noteLayout';
 import type { MidiNote } from './midi';
 
 export const ERNIE_MOVEMENTS = [
@@ -51,7 +51,7 @@ export function erniePose(n: MidiNote,time: number) {
 
 // Score-ranked channel paths and repeated layers preserve MIDI identity.
 export function ernieLayout(cells: ErnieCell[], spacing=1, settings: NoteLayoutSettings=DEFAULT_NOTE_LAYOUT) {
-  const { geometry, copies, offset } = normalizeNoteLayout(settings);
+  const { geometry, copies, offset, rotation } = normalizeNoteLayout(settings);
   const channels=[...new Set(cells.map(c=>c.channel))].sort((a,b)=>a-b);
   const rows=channels.map(channel=>cells.filter(c=>c.channel===channel).sort((a,b)=>a.pitch-b.pitch));
   const items = rows.flatMap((row,r)=>row.flatMap((cell,i)=>{
@@ -59,7 +59,12 @@ export function ernieLayout(cells: ErnieCell[], spacing=1, settings: NoteLayoutS
     const position: [number,number,number] = geometry === 'linear'
       ? [path[0],r*.14,((channels.length-1)/2-r)*.62]
       : [path[0],path[1]+r*.75*spacing,path[2]];
-    return Array.from({length:copies},(_,copy)=>({cell,copy,position:[position[0],position[1]+copyOffset(copy,copies,offset,.75),position[2]] as [number,number,number]}));
+    return Array.from({length:copies},(_,copy)=>{
+      const yaw=copyRotation(copy,rotation);
+      const rotated=rotateCopyPosition(position,yaw);
+      rotated[1]+=copyOffset(copy,copies,offset,.75);
+      return {cell,copy,yaw,position:rotated};
+    });
   }));
   // Preserve the original linear framing. Other layouts are centered in X/Z
   // and grounded in Y so the camera and XR fit use the actual full bounds.
@@ -67,5 +72,10 @@ export function ernieLayout(cells: ErnieCell[], spacing=1, settings: NoteLayoutS
   const min=[0,1,2].map(axis=>items.length?Math.min(...items.map(item=>item.position[axis])):0);
   const max=[0,1,2].map(axis=>items.length?Math.max(...items.map(item=>item.position[axis])):0);
   for(const item of items){item.position[0]-=(min[0]+max[0])/2;item.position[1]-=min[1];item.position[2]-=(min[2]+max[2])/2;}
-  return {width:Math.max(1,max[0]-min[0]+.28),height:max[1]-min[1],depth:Math.max(.8,max[2]-min[2]+.62),items};
+  // Rotated models can be wider than their unrotated footprint. Include the
+  // maximum rotated extent in camera/XR framing without changing old layouts.
+  const rotated = rotation !== 0 && copies > 1;
+  const widthPad = rotated ? Math.max(...items.map(item=>Math.abs(Math.cos(item.yaw))*.28+Math.abs(Math.sin(item.yaw))*.8),.28) : .28;
+  const depthPad = rotated ? Math.max(...items.map(item=>Math.abs(Math.sin(item.yaw))*.28+Math.abs(Math.cos(item.yaw))*.8),.62) : .62;
+  return {width:Math.max(1,max[0]-min[0]+widthPad),height:max[1]-min[1],depth:Math.max(.8,max[2]-min[2]+depthPad),items};
 }

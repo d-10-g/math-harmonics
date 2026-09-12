@@ -62,9 +62,16 @@ export default function NoteLayoutControls({
           }
         />
       </label>
+      <label className="block">
+        Copy Rotation: {value.rotation}°
+        <input aria-label="Copy Rotation" className="mt-1 w-full accent-fuchsia-500"
+          type="range" min="-180" max="180" step="1"
+          disabled={value.copies === 1} value={value.rotation}
+          onChange={event => onChange({ ...value, rotation: +event.target.value })} />
+      </label>
       <p className="text-[10px] leading-relaxed text-white/40">
         Spacing spreads notes along the selected path. Copies include the
-        original; offset stacks them vertically. Audio plays once.
+        original; offset stacks them vertically and rotation turns each successive copy around the vertical axis. Audio plays once.
       </p>
     </div>
   );

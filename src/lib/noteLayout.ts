@@ -10,16 +10,19 @@ export interface NoteLayoutSettings {
   geometry: NoteLayoutGeometry;
   copies: number;
   offset: number;
+  rotation: number;
 }
 export const DEFAULT_NOTE_LAYOUT: NoteLayoutSettings = {
   geometry: "linear",
   copies: 1,
   offset: 1,
+  rotation: 0,
 };
 export function normalizeNoteLayout(
   value?: Partial<NoteLayoutSettings> | null,
 ): NoteLayoutSettings {
   return {
+    rotation: Number.isFinite(value?.rotation) ? Math.max(-180, Math.min(180, value!.rotation!)) : 0,
     geometry: NOTE_LAYOUTS.includes(value?.geometry as NoteLayoutGeometry)
       ? value!.geometry!
       : "linear",
@@ -73,4 +76,13 @@ export function copyOffset(
   unit = 1,
 ) {
   return (copy - (count - 1) / 2) * offset * unit;
+}
+
+/** Per-copy yaw increment; copy zero always retains the original orientation. */
+export function copyRotation(copy: number, degrees: number) {
+  return copy * degrees * Math.PI / 180;
+}
+export function rotateCopyPosition(position: [number, number, number], angle: number): [number, number, number] {
+  const [x,y,z] = position, c = Math.cos(angle), s = Math.sin(angle);
+  return [x*c + z*s, y, z*c - x*s];
 }
