@@ -41,7 +41,7 @@ export type SharedState = {
   noteFxMode?: 'both' | 'morph' | 'pulse' | 'off';
   noteSpread?: number;
   noteLayout?: NoteLayoutSettings;
-  noteSource?: 'formula' | 'mesh' | 'glb';
+  noteSource?: 'formula' | 'mesh' | 'glb' | 'prism';
   meshUseMtl?: boolean;
   meshAssign?: 'random' | 'channel';
   noteDisplay?: 'sounding' | 'all';
@@ -87,7 +87,7 @@ function parseParams(params: URLSearchParams): SharedState {
   if (['nlg','nlc','nlo','nlr'].some(key=>params.has(key))) state.noteLayout = normalizeNoteLayout({rotation:params.has('nlr')?Number(read('nlr')):undefined,geometry:read('nlg') as NoteLayoutSettings['geometry'],copies:params.has('nlc')?Number(read('nlc')):undefined,offset:params.has('nlo')?Number(read('nlo')):undefined});
   const spread = read('nsp');
   if (spread !== undefined && Number.isFinite(parseFloat(spread))) state.noteSpread = Math.min(10, Math.max(0.5, parseFloat(spread)));
-  state.noteSource = oneOf(read('nsc'), ['glb', 'formula', 'mesh'] as const);
+  state.noteSource = oneOf(read('nsc'), ['glb', 'formula', 'mesh', 'prism'] as const);
   state.meshUseMtl = flag('nml');
   state.meshAssign = oneOf(read('nas'), ['random', 'channel'] as const);
   state.noteDisplay = oneOf(read('nds'), ['sounding', 'all'] as const);

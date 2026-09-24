@@ -9,7 +9,8 @@ backspace, case, punctuation, newline, Apply, and Cancel.
 The menus share the mounted desktop controls. This includes the mode switch,
 formula and shader editors with validation, preset search/categories/favorites,
 combos, lighting/material/geometry options and cycling, visual effects,
-autopilot, audio source/library/transport, note effects, OBJ/GLB channel and
+autopilot, audio source/library/transport, note effects, note visuals (formulas,
+OBJ, GLB, prism canvas), OBJ/GLB channel and
 movement mappings, OBJ finish, gesture strength, backgrounds (including the mirror dome), and
 settings import/export. Conditional
 controls follow the same audio/silent/source rules as the desktop UI. A

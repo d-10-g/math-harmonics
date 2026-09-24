@@ -441,8 +441,8 @@ export default function App() {
   // Note visuals: formula geometry or the OBJ sculpture library; MTL colors
   // vs app materials; random vs per-channel assignment; sounding-only vs a
   // persistent all-notes lattice that note-ons light up.
-  const [noteSource, setNoteSourceState] = useState<'formula' | 'mesh' | 'glb'>(new URLSearchParams(location.search).has('ernie') ? 'glb' : initialShared.noteSource ?? 'formula');
-  const setNoteSource = useCallback((source: 'formula' | 'mesh' | 'glb') => {
+  const [noteSource, setNoteSourceState] = useState<'formula' | 'mesh' | 'glb' | 'prism'>(new URLSearchParams(location.search).has('ernie') ? 'glb' : initialShared.noteSource ?? 'formula');
+  const setNoteSource = useCallback((source: 'formula' | 'mesh' | 'glb' | 'prism') => {
     // Browser-offered sessions can begin while a model is displayed, even if
     // a WebGPU preference was saved. Keep the XR canvas for source changes.
     if (xrStore.getState().session) setRendererMode('webgl');
@@ -1725,7 +1725,8 @@ export default function App() {
             ) : (
               <GraphView
                 noteLayout={noteLayout}
-                modelScene={noteSource !== 'formula' ? <ModelScene midi={midiInfo} getMusicTime={getMusicTime} kind={modelKind} settings={modelSettings[modelKind]} display={noteDisplay} spacing={noteSpread/5} noteLayout={noteLayout} background={modelBackground} hdri={hdri} onBackgroundError={setBackgroundError} materialProfile={webgpuMaterial} lightingPreset={webgpuLightingPreset} noteFxAmount={noteFxAmount} noteFxMode={noteFxMode} /> : undefined}
+                midi={midiInfo}
+                modelScene={noteSource === 'mesh' || noteSource === 'glb' ? <ModelScene midi={midiInfo} getMusicTime={getMusicTime} kind={modelKind} settings={modelSettings[modelKind]} display={noteDisplay} spacing={noteSpread/5} noteLayout={noteLayout} background={modelBackground} hdri={hdri} onBackgroundError={setBackgroundError} materialProfile={webgpuMaterial} lightingPreset={webgpuLightingPreset} noteFxAmount={noteFxAmount} noteFxMode={noteFxMode} /> : undefined}
                 formula={selectedFormula}
                 shader={selectedShader}
                 noteMeshes={noteMeshes && audioSync && audioSource === 'midi' && !!midiInfo}
@@ -1802,7 +1803,7 @@ export default function App() {
               />
             )}
             </ErrorBoundary>
-            {noteSource !== 'formula' && <div data-spatial-menu="Model status"><PlaybackStatus midi={midiInfo} getMusicTime={getMusicTime}/></div>}
+            {(noteSource === 'mesh' || noteSource === 'glb') && <div data-spatial-menu="Model status"><PlaybackStatus midi={midiInfo} getMusicTime={getMusicTime}/></div>}
           </div>
 
           {/* Footer: one compact row so it survives short windows. A live

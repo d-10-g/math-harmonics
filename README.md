@@ -4,6 +4,13 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.11.0 — Prism canvas
+
+- New note visual, **Prism** (Audio Sync → MIDI File → Note Visuals), separate from formulas and models. An invisible rectangular canvas rides a slow, curving path through space; every note is painted on it the instant it sounds as a dispersed prism spectrum (a white beam entering, a rainbow fanning out), sized by velocity, placed by pitch across and instrument row up, then stays exactly where it was painted while the canvas moves on.
+- Held notes keep drawing, so they stretch into streaks that reach from their birth point to the canvas; the sustain pedal extends them. New notes flare white-hot and pop, sounding notes glow at full colour, and the trail settles into a receding tunnel of spectra that dims with age but never disappears.
+- You ride the canvas: on the desktop orbit around it to look down the tunnel, in a headset it recedes in front of you. Note FX scales the flares and pops, Note Spread the canvas width, and the mirror dome and cosmos backdrop apply.
+- The whole score is precomputed into one instanced draw, so twenty-thousand-note pieces run at full frame rate.
+
 ## v2.10.0 — Expressive MIDI: controllers, gesture strength, harder pops
 
 - The MIDI parser now reads pitch bend, mod wheel, volume, expression, sustain and soft pedals, pan and aftertouch, per channel. Both stages act on them: pitch bend leans and slides a channel's objects, the mod wheel wobbles them, expression × volume sets their size and glow, aftertouch presses them larger, the sustain pedal lifts them while it is down and lets released notes ring on until it lifts, pan nudges them sideways. Note FX scales all of it and switches it off with the rest.

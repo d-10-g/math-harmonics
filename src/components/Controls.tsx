@@ -86,8 +86,8 @@ interface ControlsProps {
   noteLayoutControls?: ReactNode;
   modelControls?: ReactNode;
   modelBackgroundControls?: ReactNode;
-  noteSource: 'formula' | 'mesh' | 'glb';
-  setNoteSource: (source: 'formula' | 'mesh' | 'glb') => void;
+  noteSource: 'formula' | 'mesh' | 'glb' | 'prism';
+  setNoteSource: (source: 'formula' | 'mesh' | 'glb' | 'prism') => void;
   meshUseMtl: boolean;
   setMeshUseMtl: (on: boolean) => void;
   meshAssign: 'random' | 'channel';
@@ -426,6 +426,9 @@ export default function Controls({
   setBloomIntensity,
   xrStore
 }: ControlsProps) {
+  // OBJ/GLB stages carry their own background + channel mappings; formula
+  // and prism stages share the cosmos backdrop and mirror dome.
+  const modelStage = noteSource === 'mesh' || noteSource === 'glb';
   const [isArSupported, setIsArSupported] = useState<boolean | null>(null);
   const [isVrSupported, setIsVrSupported] = useState<boolean | null>(null);
   const [xrActionMessage, setXrActionMessage] = useState<string | null>(null);
@@ -965,7 +968,7 @@ export default function Controls({
             />
           </div>
 
-          {noteSource !== 'formula' ? <div data-spatial-section="Model background">{modelBackgroundControls}</div> : <>
+          {modelStage ? <div data-spatial-section="Model background">{modelBackgroundControls}</div> : <>
           {/* Cosmos Backdrop Switch */}
           <div className="flex items-center justify-between group">
             <div>
@@ -1071,7 +1074,7 @@ export default function Controls({
 
           {/* Mirror Dome Switch — formula stage only; the model stage picks
               its dome from the 3D Background list above */}
-          {noteSource === 'formula' && <div className="flex items-center justify-between group">
+          {!modelStage && <div className="flex items-center justify-between group">
             <div>
               <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Mirror Dome</div>
               <div className="text-[9px] text-white/30 font-mono">Live Reflections Of The Scene (3D)</div>
@@ -1324,8 +1327,8 @@ export default function Controls({
                       <div>
                         <div className="text-xs font-semibold text-white/80">Note Visuals</div>
                         <div className="text-[9px] text-white/30 font-mono">What Each Note Renders As</div>
-                        <div className="mt-1.5 grid grid-cols-3 gap-1">
-                          {(['glb', 'formula', 'mesh'] as const).map((source) => (
+                        <div className="mt-1.5 grid grid-cols-4 gap-1">
+                          {(['glb', 'formula', 'mesh', 'prism'] as const).map((source) => (
                             <button
                               key={source}
                               onClick={() => setNoteSource(source)}
@@ -1337,11 +1340,11 @@ export default function Controls({
                                   : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
                               )}
                             >
-                              {source === 'glb' ? '3D GLB' : source === 'formula' ? 'Formulas' : '3D OBJ'}
+                              {source === 'glb' ? '3D GLB' : source === 'formula' ? 'Formulas' : source === 'mesh' ? '3D OBJ' : 'Prism'}
                             </button>
                           ))}
                         </div>
-                        {noteSource !== 'formula' && <div data-spatial-section="Models and channel mappings">{modelControls}</div>}
+                        {modelStage && <div data-spatial-section="Models and channel mappings">{modelControls}</div>}
                         <div className="mt-1.5 grid grid-cols-2 gap-1">
                           {(['sounding', 'all'] as const).map((mode) => (
                             <button

@@ -21,6 +21,8 @@ import { XR, XROrigin, useXR, useXRInputSourceState } from '@react-three/xr';
 import { clockStore, getClockTime, reportVerts, LatticeNote } from '../lib/clock';
 import { DEFAULT_CHANNEL_MESHES, RANDOM_MESH_POOL, loadMeshGeometry, loadMeshGroup } from '../lib/meshLibrary';
 import MirrorDome from './MirrorDome';
+import PrismStage from './PrismStage';
+import type { ParsedMidi } from '../lib/midi';
 import { lightingRigSettings } from '../lib/lighting';
 import { COMBOS } from '../lib/combos';
 import { createPhysicalMaterial } from '../lib/materials';
@@ -950,6 +952,8 @@ interface GraphViewProps {
   onToggleMusic?: () => void;
   onSeekMusic?: (deltaSeconds: number) => void;
   getMusicTime?: () => { time: number; duration: number };
+  // Parsed score for the prism canvas (all notes are painted ahead of time).
+  midi?: ParsedMidi | null;
   onCycleLibrary?: (offset: number) => void;
   libraryName?: string | null;
   noteFxAmount?: number;
@@ -964,8 +968,8 @@ interface GraphViewProps {
   setXrHaptics?: (on: boolean) => void;
   // Note visuals: OBJ sculpture library options + display mode. Setters and
   // the library list feed the spatial console's NOTES tab.
-  noteSource?: 'formula' | 'mesh' | 'glb';
-  setNoteSource?: (source: 'formula' | 'mesh' | 'glb') => void;
+  noteSource?: 'formula' | 'mesh' | 'glb' | 'prism';
+  setNoteSource?: (source: 'formula' | 'mesh' | 'glb' | 'prism') => void;
   meshUseMtl?: boolean;
   setMeshUseMtl?: (on: boolean) => void;
   meshAssign?: 'random' | 'channel';
@@ -1338,7 +1342,7 @@ function NoteConstellation({
   showWireframe: boolean;
   materialProfile?: WebGPUMaterialProfile;
   geometryMode?: FormulaGeometryMode;
-  noteSource?: 'formula' | 'mesh' | 'glb';
+  noteSource?: 'formula' | 'mesh' | 'glb' | 'prism';
   meshUseMtl?: boolean;
   meshAssign?: 'random' | 'channel';
   meshChannelMap?: string[];
@@ -2642,6 +2646,7 @@ export default function GraphView({
   onToggleMusic,
   onSeekMusic,
   getMusicTime,
+  midi = null,
   onCycleLibrary,
   libraryName,
   noteFxAmount,
@@ -2740,7 +2745,7 @@ export default function GraphView({
           <XREnvironment preset={webgpuLightingPreset} desktopVisible={showEnvironment && show3D} />
           <RigEnvironment preset={webgpuLightingPreset} intensity={webgpuLighting} />
           {showMirrors && show3D && <MirrorDome radius={80} xrRadius={8} captureOffset={6} xrCaptureOffset={0.35} anchorRef={mirrorAnchorRef} />}
-          <GroundShadows show3D={show3D} />
+          {noteSource !== 'prism' && <GroundShadows show3D={show3D} />}
           <PostEffects enabled={postFX} bloom={bloomIntensity} />
           <SpatialWrapper xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
             <LightingRig preset={webgpuLightingPreset} intensity={webgpuLighting} />
@@ -2770,7 +2775,9 @@ export default function GraphView({
             )}
 
             <group ref={mirrorAnchorRef} />
-            {noteMeshes && show3D ? (
+            {noteSource === 'prism' && show3D ? (
+              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} />
+            ) : noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}
                 formula={formula}
