@@ -7,7 +7,7 @@ export type MenuElement =
   | HTMLInputElement
   | HTMLTextAreaElement
   | HTMLSelectElement
-  | HTMLAudioElement;
+  | HTMLMediaElement;
 export interface MenuItem {
   id: number;
   element: MenuElement;
@@ -41,7 +41,7 @@ function labelFor(element: MenuElement) {
   if (explicit) return explicit;
   if (element instanceof HTMLButtonElement)
     return text(element) || element.title;
-  if (element instanceof HTMLAudioElement) return "Audio playback";
+  if (element instanceof HTMLMediaElement) return "Audio playback";
   if (element.labels?.length) {
     const clone = element.labels[0].cloneNode(true) as Element;
     clone
@@ -113,14 +113,16 @@ export function readSpatialMenus(document: Document): MenuSection[] {
         return groups.get(key)!;
       };
       root
-        .querySelectorAll<MenuElement>("button,input,textarea,select,audio")
+        .querySelectorAll<MenuElement>("button,input,textarea,select,audio,video")
         .forEach((element) => {
           if (hidden(element, root) || element.closest("[data-spatial-skip]"))
             return;
           const input = element instanceof HTMLInputElement ? element : null;
           if (input?.type === "hidden") return;
           const select = element instanceof HTMLSelectElement ? element : null;
-          const audio = element instanceof HTMLAudioElement ? element : null;
+          // The music player is a hidden <video> (browsers only allow muted
+          // autoplay for video); it is still the audio transport here.
+          const audio = element instanceof HTMLMediaElement ? element : null;
           const kind: MenuItem["kind"] = audio
             ? "audio"
             : select
@@ -190,7 +192,7 @@ export function setMenuValue(item: MenuItem, value: string) {
   if (
     !element.isConnected ||
     item.disabled ||
-    element instanceof HTMLAudioElement ||
+    element instanceof HTMLMediaElement ||
     element instanceof HTMLButtonElement
   )
     return;

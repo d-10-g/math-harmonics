@@ -373,7 +373,7 @@ export default function SpatialMenus() {
                   </Container>
                 );
               if (item.kind === "audio") {
-                const audio = item.element as HTMLAudioElement;
+                const audio = item.element as HTMLMediaElement;
                 return (
                   <Container key={item.id} flexDirection="column" gap={5}>
                     <Text fontSize={12} color="#bbc4e4">

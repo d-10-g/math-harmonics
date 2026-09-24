@@ -114,7 +114,7 @@ interface ControlsProps {
   onCollapse: () => void;
   onLoadMidiFile: (files: File[]) => void;
   onLoadAudioFile: (file: File) => void;
-  midiAudioRef: React.RefObject<HTMLAudioElement | null>;
+  midiAudioRef: React.RefObject<HTMLVideoElement | null>;
   speedQuant: number;
   setSpeedQuant: (q: number) => void;
   formulaQuant: number;
@@ -1453,11 +1453,17 @@ export default function Controls({
               )}
 
               {/* Always mounted so the ref survives source switches and the
-                  window.harmonicsMidi.load() hook can set src immediately. */}
-              <audio
+                  window.harmonicsMidi.load() hook can set src immediately.
+                  A <video> rather than <audio>: browsers grant gesture-free
+                  MUTED autoplay to video only, which is what lets the audio
+                  page start itself. Audio files play in it unchanged. */}
+              <video
                 ref={midiAudioRef}
                 controls
-                className={cn("w-full h-8", audioSync && audioSource === 'midi' ? '' : 'hidden')}
+                playsInline
+                preload="auto"
+                aria-label="Music player"
+                className={cn("w-full h-9 rounded bg-black/40", audioSync && audioSource === 'midi' ? '' : 'hidden')}
               />
             </div>
 

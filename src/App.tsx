@@ -271,7 +271,7 @@ const MY_COMBOS_KEY = 'harmonics.mycombos.v1';
 
 // Compact music transport for MIDI sessions: play/pause, seek, time.
 function MusicTransport({ audioRef, onToggle, playing }: {
-  audioRef: React.RefObject<HTMLAudioElement | null>;
+  audioRef: React.RefObject<HTMLVideoElement | null>;
   onToggle: () => void;
   playing: boolean;
 }) {
@@ -417,10 +417,12 @@ export default function App() {
   const [autoCycleShader, setAutoCycleShader] = useState(false);
   const [formulaCycleSpeed, setFormulaCycleSpeed] = useState(3); // Seconds
   const [shaderCycleSpeed, setShaderCycleSpeed] = useState(5); // Seconds
-  const [audioSync, setAudioSync] = useState(FIRST_VISIT);
+  // The audio page lands with its session live, exactly as if the AUDIO pill
+  // had been pressed: sync on, MIDI source, default piece staged and playing.
+  const [audioSync, setAudioSync] = useState((INITIAL_MODE ?? 'audio') === 'audio');
   const audioSyncRef = useRef(audioSync);
   useEffect(() => { audioSyncRef.current = audioSync; }, [audioSync]);
-  const [audioSource, setAudioSource] = useState<'mic' | 'midi'>(initialShared.audioSource ?? 'mic');
+  const [audioSource, setAudioSource] = useState<'mic' | 'midi'>((INITIAL_MODE ?? 'audio') === 'audio' ? 'midi' : (initialShared.audioSource ?? 'mic'));
   // Constellation is the default MIDI experience; the gate below keeps it
   // inert until a MIDI session is actually live, so mic users see no change.
   const [noteMeshes, setNoteMeshes] = useState(initialShared.noteMeshes ?? true);
@@ -494,7 +496,7 @@ export default function App() {
   const audioSourceRef = useRef(audioSource);
   useEffect(() => { audioSourceRef.current = audioSource; }, [audioSource]);
   const [midiInfo, setMidiInfo] = useState<(ParsedMidi & { name: string }) | null>(null);
-  const midiAudioRef = useRef<HTMLAudioElement | null>(null);
+  const midiAudioRef = useRef<HTMLVideoElement | null>(null);
   const [modelSettings,setModelSettings]=useState<Record<ModelKind,ModelSettings>>(()=>{
     const defaults={glb:defaultModelSettings(),obj:defaultModelSettings()};
     try {const saved=JSON.parse(localStorage.getItem('harmonics.modelChannels.v1')??'null');
@@ -567,9 +569,40 @@ export default function App() {
     };
   }, []);
 
-  // Landing in audio mode should be one press from magic: if no score is
-  // loaded yet, stage the default piece (no autoplay — the transport's play
-  // button is the user's first gesture).
+  // Landing autoplay. Browsers only allow sound without a gesture when the
+  // site has earned it (Chrome's media engagement score does that for a
+  // regular visitor). Try the real thing first; if it is refused, play MUTED
+  // so the scene runs from the first frame, and unmute on the first tap or
+  // key anywhere on the page.
+  const [autoplayMuted, setAutoplayMuted] = useState(false);
+  const autoStartPlayback = (audio: HTMLVideoElement) => {
+    audio.muted = false;
+    audio.play().then(() => setAutoplayMuted(false)).catch(() => {
+      audio.muted = true;
+      audio.play().then(() => setAutoplayMuted(true)).catch(() => {
+        audio.muted = false; // even muted playback refused: the transport starts it
+      });
+    });
+  };
+  const unmuteAutoplay = () => {
+    const audio = midiAudioRef.current;
+    if (audio) audio.muted = false;
+    setAutoplayMuted(false);
+  };
+  useEffect(() => {
+    if (!autoplayMuted) return;
+    const options = { capture: true } as const;
+    window.addEventListener('pointerdown', unmuteAutoplay, options);
+    window.addEventListener('keydown', unmuteAutoplay, options);
+    return () => {
+      window.removeEventListener('pointerdown', unmuteAutoplay, options);
+      window.removeEventListener('keydown', unmuteAutoplay, options);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoplayMuted]);
+
+  // Landing in audio mode acts as if the AUDIO pill and the transport's play
+  // button had both been pressed: stage the default piece and start it.
   useEffect(() => {
     if (pageMode !== 'audio' || !audioSync || audioSource !== 'midi' || midiInfo) return;
     const lib = MIDI_LIBRARY[0];
@@ -577,6 +610,7 @@ export default function App() {
     const audio = midiAudioRef.current;
     if (audio && !audio.src) audio.src = lib.audio;
     void loadMidiSource(lib.mid, undefined, false);
+    if (audio) autoStartPlayback(audio);
     // Mount-time staging only; later mode/source changes handle themselves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1813,6 +1847,15 @@ export default function App() {
               />
             )}
             </ErrorBoundary>
+            {autoplayMuted && (
+              <button
+                onClick={unmuteAutoplay}
+                aria-label="Unmute: the piece started muted because the browser needs a tap before it plays sound"
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-fuchsia-400/40 bg-black/70 px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest text-fuchsia-200 backdrop-blur hover:bg-black/85"
+              >
+                🔇 Playing muted · tap anywhere for sound
+              </button>
+            )}
             {(noteSource === 'mesh' || noteSource === 'glb') && <div data-spatial-menu="Model status"><PlaybackStatus midi={midiInfo} getMusicTime={getMusicTime}/></div>}
           </div>
 

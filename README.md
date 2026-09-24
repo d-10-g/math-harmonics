@@ -4,6 +4,11 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.12.1 — The audio page starts itself
+
+- Landing on the audio page now behaves as if the AUDIO pill and the transport's play button had both been pressed: audio sync on, MIDI source, the default piece staged and playing. Reloads no longer drop back to the silent phase transport.
+- Browsers refuse sound before a gesture unless the site has earned it (Chrome's media-engagement score does that for a regular visitor). When playback is refused the piece starts muted so the scene runs from the first frame, a small chip says so, and the first tap or key anywhere unmutes it.
+
 ## v2.12.0 — Prism colour slices and per-channel canvases
 
 - **Prism Colour**: every note can carry the whole spectrum (as before) or a slice of it chosen by note value: pitch across the piece's range, pitch class (C is always the same colour in every octave), or note length. **Slice Width** sets how much of the spectrum each note shows, 5% to 50%.

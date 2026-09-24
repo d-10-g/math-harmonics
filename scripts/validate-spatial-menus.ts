@@ -12,7 +12,9 @@ for (const name of [
   "HTMLInputElement",
   "HTMLTextAreaElement",
   "HTMLSelectElement",
+  "HTMLMediaElement",
   "HTMLAudioElement",
+  "HTMLVideoElement",
   "HTMLOptGroupElement",
   "Event",
 ]) {
