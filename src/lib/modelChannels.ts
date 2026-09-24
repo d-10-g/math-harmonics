@@ -10,8 +10,8 @@ export type ChannelChoice={asset?:string;movement?:string};
 // OBJ finish: 'auto' keeps authored MTL colors and dresses stand-in MTLs in app
 // materials; 'app' dresses everything; 'mtl' keeps every MTL as loaded.
 export type ObjFinish='auto'|'app'|'mtl';
-export type ModelSettings={seed:number;channels:Record<string,ChannelChoice>;labels:boolean;velocity:number;solo:boolean;movement:string;finish?:ObjFinish};
-export const defaultModelSettings=():ModelSettings=>({seed:Math.floor(Math.random()*0x7fffffff),channels:{},labels:true,velocity:96,solo:false,movement:'channel',finish:'auto'});
+export type ModelSettings={seed:number;channels:Record<string,ChannelChoice>;labels:boolean;velocity:number;solo:boolean;movement:string;finish?:ObjFinish;gesture?:number};
+export const defaultModelSettings=():ModelSettings=>({seed:Math.floor(Math.random()*0x7fffffff),channels:{},labels:true,velocity:96,solo:false,movement:'channel',finish:'auto',gesture:2});
 function randomIndex(seed:number,channel:number,salt:number,length:number){let n=(seed+Math.imul(channel+1,0x9e3779b9)+salt)|0;n=Math.imul(n^(n>>>16),0x45d9f3b);return (n>>>0)%Math.max(1,length);}
 export function resolveChannel(settings:ModelSettings,kind:ModelKind,channel:number){
  const pool=MODEL_ASSETS.filter(a=>a.kind===kind),choice=settings.channels[channel];

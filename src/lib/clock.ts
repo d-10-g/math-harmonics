@@ -1,4 +1,5 @@
 import { createStore } from 'zustand/vanilla';
+import { DEFAULT_CHANNEL_CONTROLS, type ChannelControls } from './midi';
 import { useEffect, useState } from 'react';
 
 // The animation clock lives outside React so the tree doesn't re-render per
@@ -8,6 +9,8 @@ import { useEffect, useState } from 'react';
 export const PHASE_RANGE = Math.PI * 4;
 
 export type ActiveNote = {
+  age: number; // seconds since note-on
+  channel: number; // MIDI channel, for the per-channel controller state
   id: number; // index into the parsed score's note list — stable identity
   pitch: number; // raw MIDI pitch, for exact lattice matching
   pitch01: number; // normalized to the file's own pitch range
@@ -63,6 +66,10 @@ export type ClockState = {
   noteFxMode: NoteFxMode;
   // Pitch-axis spacing between a channel's note meshes (constellation).
   noteSpread: number; // 0.5..10
+  // Live MIDI controller state per instrument group (bend, mod wheel,
+  // dynamics, sustain, pan, aftertouch). The engine mutates these objects in
+  // place every frame; consumers read them from the frame loop.
+  noteGroupControls: ChannelControls[];
   // A/B loop: when both are set, playback wraps inside [loopStart, loopEnd).
   loopStart: number | null;
   loopEnd: number | null;
@@ -91,6 +98,7 @@ export const clockStore = createStore<ClockState>(() => ({
   noteFxAmount: 2,
   noteFxMode: 'both',
   noteSpread: 5,
+  noteGroupControls: Array.from({ length: 4 }, () => ({ ...DEFAULT_CHANNEL_CONTROLS })),
   loopStart: null,
   loopEnd: null
 }));
@@ -130,6 +138,15 @@ export const setNoteFx = (noteFxAmount: number, noteFxMode: NoteFxMode) =>
   clockStore.setState({ noteFxAmount, noteFxMode });
 
 export const setNoteSpread = (noteSpread: number) => clockStore.setState({ noteSpread });
+
+export const updateNoteGroupControls = (group: number, controls: ChannelControls) => {
+  const target = clockStore.getState().noteGroupControls[group];
+  if (target) Object.assign(target, controls);
+};
+
+export const resetNoteGroupControls = () => {
+  for (const group of clockStore.getState().noteGroupControls) Object.assign(group, DEFAULT_CHANNEL_CONTROLS);
+};
 
 export const markBeat = () => clockStore.setState({ lastBeatAt: performance.now() });
 

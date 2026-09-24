@@ -12,8 +12,30 @@ export type MidiNote = {
   channel: number;
 };
 
+// Per-channel controller stream: pitch bend, mod wheel, volume, expression,
+// sustain/soft pedals, pan and (channel or polyphonic) aftertouch, normalized
+// so every visual can read them without knowing MIDI's data ranges.
+export type MidiControlKind = 'bend' | 'mod' | 'volume' | 'expression' | 'sustain' | 'soft' | 'pan' | 'aftertouch';
+export type MidiControl = { time: number; channel: number; kind: MidiControlKind; value: number };
+export type ChannelControls = {
+  bend: number; // -1..1
+  mod: number; // 0..1
+  volume: number; // 0..1 (GM default 100/127)
+  expression: number; // 0..1 (default 1)
+  sustain: number; // 0..1, >= 0.5 is pedal down
+  soft: number; // 0..1
+  pan: number; // -1..1
+  aftertouch: number; // 0..1
+  dynamics: number; // expression x volume relative to the GM defaults, 0..1.27
+};
+export const DEFAULT_CHANNEL_CONTROLS: Readonly<ChannelControls> = Object.freeze({
+  bend: 0, mod: 0, volume: 100 / 127, expression: 1, sustain: 0, soft: 0, pan: 0, aftertouch: 0, dynamics: 1
+});
+const CC_KINDS: Record<number, MidiControlKind> = { 1: 'mod', 7: 'volume', 10: 'pan', 11: 'expression', 64: 'sustain', 67: 'soft' };
+
 export type ParsedMidi = {
   notes: MidiNote[];
+  controls: MidiControl[]; // time-sorted
   beats: number[]; // quarter-note grid, seconds
   duration: number; // seconds
   bpm: number; // initial tempo
@@ -111,6 +133,8 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   // per key handles (rare) re-struck pitches before the first release.
   const openNotes = new Map<string, number[]>();
   const programs: Record<number, number> = {};
+  type RawControl = { tick: number; channel: number; kind: MidiControlKind; value: number };
+  const rawControls: RawControl[] = [];
   const tempoEvents: Array<{ tick: number; usPerBeat: number }> = [];
   let maxTick = 0;
 
@@ -160,11 +184,24 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
           const program = reader.u8();
           if (programs[channel] === undefined) programs[channel] = program;
         } else if (kind === 0xd0) {
-          reader.skip(1);
+          rawControls.push({ tick, channel, kind: 'aftertouch', value: reader.u8() / 127 });
         } else {
           const data1 = reader.u8();
           const data2 = reader.u8();
-          if (kind === 0x90 && data2 > 0) {
+          if (kind === 0xb0) {
+            const ccKind = CC_KINDS[data1];
+            if (ccKind) rawControls.push({ tick, channel, kind: ccKind, value: data1 === 10 ? (data2 - 64) / 64 : data2 / 127 });
+            else if (data1 === 121) {
+              // Reset All Controllers: back to the GM defaults.
+              for (const resetKind of ['bend', 'mod', 'expression', 'sustain', 'soft', 'aftertouch'] as const) {
+                rawControls.push({ tick, channel, kind: resetKind, value: DEFAULT_CHANNEL_CONTROLS[resetKind] });
+              }
+            }
+          } else if (kind === 0xe0) {
+            rawControls.push({ tick, channel, kind: 'bend', value: (((data2 << 7) | data1) - 8192) / 8192 });
+          } else if (kind === 0xa0) {
+            rawControls.push({ tick, channel, kind: 'aftertouch', value: data2 / 127 });
+          } else if (kind === 0x90 && data2 > 0) {
             const key = `${trackIndex}:${channel}:${data1}`;
             let stack = openNotes.get(key);
             if (!stack) openNotes.set(key, (stack = []));
@@ -227,8 +264,75 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     beats.push(tickToSeconds(tick));
   }
 
+  const controls: MidiControl[] = rawControls
+    .map((raw, index) => ({ time: tickToSeconds(raw.tick), channel: raw.channel, kind: raw.kind, value: raw.value, index }))
+    .sort((a, b) => a.time - b.time || a.index - b.index)
+    .map(({ time, channel, kind, value }) => ({ time, channel, kind, value }));
+
   const duration = (notes.length ? notes[notes.length - 1].time : 0) + 2;
   const bpm = Math.round(60e6 / (tempoEvents[0]?.usPerBeat ?? 500000));
 
-  return { notes, beats, duration, bpm, trackCount, programs };
+  return { notes, controls, beats, duration, bpm, trackCount, programs };
+}
+
+// Plays the controller stream forward from a cursor: cheap per frame during
+// playback, and a backward seek simply replays from the start. The returned
+// array is reused — read it, don't keep it.
+export class MidiControlSampler {
+  readonly state: ChannelControls[] = Array.from({ length: 16 }, () => ({ ...DEFAULT_CHANNEL_CONTROLS }));
+  private cursor = 0;
+  private lastTime = -Infinity;
+
+  constructor(private readonly controls: readonly MidiControl[]) {}
+
+  at(time: number): ChannelControls[] {
+    if (time < this.lastTime) {
+      this.cursor = 0;
+      for (const channel of this.state) Object.assign(channel, DEFAULT_CHANNEL_CONTROLS);
+    }
+    this.lastTime = time;
+    while (this.cursor < this.controls.length && this.controls[this.cursor].time <= time) {
+      const control = this.controls[this.cursor++];
+      const channel = this.state[control.channel];
+      channel[control.kind] = control.value;
+      if (control.kind === 'volume' || control.kind === 'expression') {
+        channel.dynamics = Math.min(1.27, (channel.expression * channel.volume) / DEFAULT_CHANNEL_CONTROLS.volume);
+      }
+    }
+    return this.state;
+  }
+}
+
+// Sustain pedal lookahead: a note released while the pedal is down keeps
+// ringing until the pedal lifts (capped), exactly as the instrument would.
+export class SustainMap {
+  private readonly byChannel = new Map<number, Array<{ time: number; down: boolean }>>();
+
+  constructor(controls: readonly MidiControl[]) {
+    for (const control of controls) {
+      if (control.kind !== 'sustain') continue;
+      let list = this.byChannel.get(control.channel);
+      if (!list) this.byChannel.set(control.channel, (list = []));
+      list.push({ time: control.time, down: control.value >= 0.5 });
+    }
+  }
+
+  holdUntil(channel: number, time: number, maxHold: number): number {
+    const list = this.byChannel.get(channel);
+    if (!list || !list.length) return time;
+    // Last pedal event at or before `time` (binary search).
+    let lo = 0;
+    let hi = list.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (list[mid].time <= time) lo = mid + 1;
+      else hi = mid;
+    }
+    const current = list[lo - 1];
+    if (!current || !current.down) return time;
+    for (let i = lo; i < list.length; i++) {
+      if (!list[i].down) return Math.min(list[i].time, time + maxHold);
+    }
+    return time + maxHold;
+  }
 }

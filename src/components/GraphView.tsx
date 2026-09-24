@@ -1529,6 +1529,9 @@ function NoteConstellation({
     const active = clock.activeNotes;
     const usedGroups = Math.max(1, Math.min(NOTE_GROUP_CAP, clock.noteGroupCount));
     const fxAmount = clock.noteFxAmount;
+    // Controller-driven motion (bend, mod, dynamics, sustain, pan, aftertouch)
+    // follows the same dial, and rests when Note FX is off.
+    const ctl = clock.noteFxMode === 'off' ? 0 : Math.min(3, fxAmount) / 2;
 
     const now = performance.now();
     if (now - lastRebuildRef.current >= rebuildMs) {
@@ -1609,22 +1612,35 @@ function NoteConstellation({
           continue;
         }
 
-        const { pitch, pitch01, velocity01, env, id } = note;
+        const { pitch, pitch01, velocity01, env, id, age } = note;
+        const gc = clock.noteGroupControls[g] ?? clock.noteGroupControls[0];
         const eased = 1 - Math.pow(1 - env, 3);
         slotGroup.visible = eased > 0.01;
         // In all-notes mode the pop-up sits exactly on its lattice object
         // (static, no bob) so the note-on reads as "that one lit up".
         const bob = allMode ? 0 : Math.sin(time * 1.6 + slot * 1.3 + g * 2.1) * 0.5;
         const position = positionFor(g,pitch,pitch01);
-        slotGroup.position.set(position[0],position[1]+bob,position[2]);
+        // Pitch bend slides and rolls the channel's notes, pan nudges them
+        // sideways, the sustain pedal lifts them while it is down.
+        slotGroup.position.set(
+          position[0] + (gc.bend * 3 * spread + gc.pan * 1.5) * ctl,
+          position[1] + bob + gc.sustain * 1.2 * ctl,
+          position[2]
+        );
         slotGroup.rotation.set(
           Math.sin(time * 0.7 + id) * 0.18,
-          time * (0.35 + pitch01 * 0.45) + id * 0.9,
-          0
+          time * (0.35 + pitch01 * 0.45) + id * 0.9 + Math.sin(time * 24 + id) * gc.mod * 0.5 * ctl,
+          gc.bend * 0.6 * ctl
         );
         // The FX amount dial scales the velocity accent, not the note's
         // core lifecycle — at 0 every note is still born and released.
-        slotGroup.scale.setScalar((0.17 + velocity01 * 0.12 * fxAmount) * eased);
+        // Velocity also lands as an attack POP (an overshoot decaying over
+        // ~130 ms), dynamics (expression x volume) set the body size, and
+        // aftertouch presses it larger.
+        const pop = 1 + velocity01 * 0.55 * ctl * Math.exp(-age / 0.13);
+        slotGroup.scale.setScalar(
+          (0.17 + velocity01 * 0.12 * fxAmount) * eased * pop * (0.65 + 0.35 * gc.dynamics) * (1 + 0.4 * gc.aftertouch * ctl)
+        );
 
         // Content: MTL clone when active and loaded, else the app-material
         // mesh with the resolved geometry (formula or OBJ).
@@ -1657,7 +1673,10 @@ function NoteConstellation({
         // Emissive swing follows the FX dial but caps at 4x — motion and
         // size may exaggerate freely, brightness must not re-open the
         // white-washout wound.
-        material.emissiveIntensity = (material.userData.baseEmissiveIntensity as number) * (0.6 + env * 1.5 * Math.min(4, Math.max(0.35, fxAmount)));
+        material.emissiveIntensity = (material.userData.baseEmissiveIntensity as number)
+          * (0.6 + env * 1.5 * Math.min(4, Math.max(0.35, fxAmount)))
+          * (0.55 + 0.45 * gc.dynamics)
+          * (1 + 0.5 * velocity01 * ctl * Math.exp(-age / 0.13));
       }
     }
 

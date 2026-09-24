@@ -29,11 +29,11 @@ import {
 } from './constants';
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
-import { ActiveNote, LatticeNote, NoteFxMode, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteFx, setNoteGroupCount, setNoteLattice, setNoteSignals, setNoteSpread, startClock, useClockSnapshot } from './lib/clock';
+import { ActiveNote, LatticeNote, NoteFxMode, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteFx, setNoteGroupCount, setNoteLattice, setNoteSignals, setNoteSpread, startClock, useClockSnapshot, resetNoteGroupControls, updateNoteGroupControls } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 import { COMBOS, Combo } from './lib/combos';
-import { gmInstrumentName, parseMidi, ParsedMidi } from './lib/midi';
+import { gmInstrumentName, parseMidi, ParsedMidi, MidiControlSampler, SustainMap } from './lib/midi';
 import { DEFAULT_CHANNEL_MESHES, MESH_LIBRARY } from './lib/meshLibrary';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
@@ -500,7 +500,7 @@ export default function App() {
   useEffect(()=>{try{localStorage.setItem('harmonics.modelChannels.v1',JSON.stringify(modelSettings));}catch{}},[modelSettings]);
   const modelKind:ModelKind=noteSource==='mesh'?'obj':'glb';
   const modelChannels=useMemo(()=>midiInfo?.notes.length?[...new Set(midiInfo.notes.map(n=>n.channel))].sort((a,b)=>a-b):[0,1,2,3],[midiInfo]);
-  const [modelBackground,setModelBackground]=useState<BackgroundChoice>('midnight');
+  const [modelBackground,setModelBackground]=useState<BackgroundChoice>('slate');
   const [hdri,setHdri]=useState<HdriFile|null>(null);
   const [backgroundError,setBackgroundError]=useState('');
   useEffect(()=>()=>{if(hdri)URL.revokeObjectURL(hdri.url);},[hdri]);
@@ -779,7 +779,7 @@ export default function App() {
     // fast attack, sustain until the score's note-off, then a release tail.
     const ATTACK = 0.045;
     const RELEASE = 0.4;
-    let sounding: Array<{ id: number; time: number; end: number; pitch: number; velocity: number; group: number }> = [];
+    let sounding: Array<{ id: number; time: number; end: number; pitch: number; velocity: number; group: number; channel: number }> = [];
 
     // Instrument groups: distinct track:channel pairs ranked by note count.
     // The constellation renders each group as its own formula + material;
@@ -817,6 +817,17 @@ export default function App() {
     }
     setNoteLattice(lattice);
 
+    // Controller stream (bend, mod wheel, dynamics, pedals, pan, aftertouch)
+    // sampled per frame and published per instrument group; the sustain
+    // pedal also lets released notes ring on, as it does on the instrument.
+    const sampler = new MidiControlSampler(midiInfo.controls ?? []);
+    const sustain = new SustainMap(midiInfo.controls ?? []);
+    const SUSTAIN_HOLD_MAX = 2.5;
+    const groupChannel: number[] = [];
+    for (const [key, group] of groupByPair) {
+      if (groupChannel[group] === undefined) groupChannel[group] = Number(key.split(':')[1]);
+    }
+
     const step = () => {
       const t = audio.currentTime;
       if (t < lastTime) {
@@ -828,6 +839,8 @@ export default function App() {
         sounding = [];
       }
       lastTime = t;
+      const controls = sampler.at(t);
+      for (let g = 0; g < GROUP_CAP; g++) updateNoteGroupControls(g, controls[groupChannel[g] ?? 0]);
 
       bass *= 0.9;
       mid *= 0.9;
@@ -845,10 +858,11 @@ export default function App() {
         sounding.push({
           id,
           time: note.time,
-          end: note.time + note.duration,
+          end: sustain.holdUntil(note.channel, note.time + note.duration, SUSTAIN_HOLD_MAX),
           pitch: note.pitch,
           velocity: note.velocity,
-          group: groupByPair.get(`${note.track}:${note.channel}`) ?? 0
+          group: groupByPair.get(`${note.track}:${note.channel}`) ?? 0,
+          channel: note.channel
         });
       }
       melody += (melodyTarget - melody) * 0.16;
@@ -865,7 +879,9 @@ export default function App() {
           pitch01: (n.pitch - minPitch) / pitchSpan,
           velocity01: Math.min(1, n.velocity / 96),
           env: Math.min(1, (t - n.time) / ATTACK) * (t > n.end ? Math.max(0, 1 - (t - n.end) / RELEASE) : 1),
-          group: n.group
+          group: n.group,
+          age: t - n.time,
+          channel: n.channel
         })));
 
         while (beatIndex < midiInfo.beats.length && midiInfo.beats[beatIndex] <= t) {
@@ -937,6 +953,7 @@ export default function App() {
       clearAudioBands();
       setNoteGroupCount(1);
       setNoteLattice([]);
+      resetNoteGroupControls();
     };
   }, [audioSync, audioSource, midiInfo]);
 
@@ -1708,7 +1725,7 @@ export default function App() {
             ) : (
               <GraphView
                 noteLayout={noteLayout}
-                modelScene={noteSource !== 'formula' ? <ModelScene midi={midiInfo} getMusicTime={getMusicTime} kind={modelKind} settings={modelSettings[modelKind]} display={noteDisplay} spacing={noteSpread/5} noteLayout={noteLayout} background={modelBackground} hdri={hdri} onBackgroundError={setBackgroundError} materialProfile={webgpuMaterial} lightingPreset={webgpuLightingPreset} /> : undefined}
+                modelScene={noteSource !== 'formula' ? <ModelScene midi={midiInfo} getMusicTime={getMusicTime} kind={modelKind} settings={modelSettings[modelKind]} display={noteDisplay} spacing={noteSpread/5} noteLayout={noteLayout} background={modelBackground} hdri={hdri} onBackgroundError={setBackgroundError} materialProfile={webgpuMaterial} lightingPreset={webgpuLightingPreset} noteFxAmount={noteFxAmount} noteFxMode={noteFxMode} /> : undefined}
                 formula={selectedFormula}
                 shader={selectedShader}
                 noteMeshes={noteMeshes && audioSync && audioSource === 'midi' && !!midiInfo}

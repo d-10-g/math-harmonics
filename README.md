@@ -4,6 +4,14 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.10.0 — Expressive MIDI: controllers, gesture strength, harder pops
+
+- The MIDI parser now reads pitch bend, mod wheel, volume, expression, sustain and soft pedals, pan and aftertouch, per channel. Both stages act on them: pitch bend leans and slides a channel's objects, the mod wheel wobbles them, expression × volume sets their size and glow, aftertouch presses them larger, the sustain pedal lifts them while it is down and lets released notes ring on until it lifts, pan nudges them sideways. Note FX scales all of it and switches it off with the rest.
+- Velocity hits harder: an attack pop that overshoots and settles within ~130 ms on the formula stage, and a squash-and-stretch hop on OBJ and GLB models.
+- **Gesture strength** (GLB models, default 2×) pushes every rigged gesture past its keyframes by extrapolating from the rest pose, so the cats move visibly with each note.
+- The model stage now defaults to the Slate background.
+- Local HDR/EXR panoramas live in `hdr_exr/` at the repo root (ignored by git) instead of `public/`, so they no longer ride along into builds.
+
 ## v2.9.0 — Mirror dome and honest OBJ finishes
 
 - **Mirror Dome** replaces the old reflector panels, which never showed a usable reflection (and could not under WebXR). The dome is an inverted sphere reflecting a live cube-camera capture of the scene, so every note object, the starfield and, in a headset, your own controllers appear mirrored around you. The capture point sits behind the visual relative to the viewer, so the wall you face carries a true mirror image; one cube face is captured per frame to keep the cost flat, and the dome hides in passthrough.
