@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MODEL_ASSETS, resolveChannel, mappingDocument, parseMapping, type ModelKind, type ModelSettings } from '../lib/modelChannels';
+import { MODEL_ASSETS, resolveChannel, mappingDocument, parseMapping, type ModelKind, type ModelSettings, type ObjFinish } from '../lib/modelChannels';
 export default function ModelChannelControls({kind,settings,onChange,channels,onImport}:{kind:ModelKind;settings:ModelSettings;onChange:(s:ModelSettings)=>void;channels:number[];onImport:(kind:ModelKind,s:ModelSettings)=>void}){
  const [name,setName]=useState('Pavane'),[message,setMessage]=useState('');
  const pool=MODEL_ASSETS.filter(a=>a.kind===kind);
@@ -8,6 +8,7 @@ export default function ModelChannelControls({kind,settings,onChange,channels,on
  return <div className="mt-2 space-y-2 rounded border border-white/10 p-2 text-xs text-white/75">
   <div className="flex gap-2"><button onClick={()=>onChange({...settings,seed:Math.floor(Math.random()*0x7fffffff),movement:'channel',channels:{}})} className="rounded bg-white/10 p-2">Random per channel</button>{kind==='glb'&&<button onClick={()=>onChange({...settings,seed:Math.floor(Math.random()*0x7fffffff),movement:'channel',channels:Object.fromEntries(channels.map(c=>[c,{asset:resolveChannel(settings,kind,c).asset?.file}]))})} className="rounded bg-white/10 p-2">Shuffle movements</button>}</div>
   {kind==='glb'&&<label className="block">Movement override<select aria-label="GLB movement override" className={selectStyle} value={settings.movement} onChange={e=>onChange({...settings,movement:e.target.value})}><option value="channel">Per-channel movements</option>{Array.from(new Map(pool.flatMap(a=>a.movements).map(m=>[m.clip,m])).values()).map(m=><option key={m.clip} value={m.clip}>{m.name}</option>)}</select></label>}
+  {kind==='obj'&&<label className="block">OBJ finish<select aria-label="OBJ finish" className={selectStyle} value={settings.finish??'auto'} onChange={e=>onChange({...settings,finish:e.target.value as ObjFinish})}><option value="auto">Auto: MTL when authored, app material for stand-in MTLs</option><option value="app">App materials on every OBJ</option><option value="mtl">MTL colors on every OBJ</option></select><span className="block text-white/40">App materials follow the Output material profile; Auto rotates the profiles per channel.</span></label>}
   <label className="flex gap-2"><input type="checkbox" checked={settings.labels} onChange={e=>onChange({...settings,labels:e.target.checked})}/>Show note labels</label>
   <label className="block">Audition velocity: {settings.velocity}<input aria-label="Audition velocity" className="w-full" type="range" min="1" max="127" value={settings.velocity} onChange={e=>onChange({...settings,velocity:+e.target.value})}/></label>
   <button className="rounded bg-white/10 p-2" onClick={()=>onChange({...settings,solo:!settings.solo})}>{settings.solo?'Show channel grid':'Inspect one model'}</button>

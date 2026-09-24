@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three/webgpu';
 import { color, float, mix, mx_noise_float, positionWorld, smoothstep, time as tslTime } from 'three/tsl';
+import { renderCubeFace, type CubeFaceRenderer } from '../lib/mirrorCapture';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { compile } from 'mathjs';
 import {
@@ -51,6 +52,8 @@ type WebGPURefs = {
   mesh: THREE.Mesh;
   extras: THREE.Group;
   mirrors: THREE.Group;
+  mirrorCamera: THREE.CubeCamera;
+  mirrorTarget: THREE.CubeRenderTarget;
   material: THREE.MeshStandardNodeMaterial;
   geometry: THREE.BufferGeometry;
   ambientLight: THREE.AmbientLight;
@@ -1143,32 +1146,25 @@ function createExtras() {
   return group;
 }
 
-function createMirrorPanels() {
+// Mirror dome: an inverted sphere reflecting a live cube-camera capture of
+// the scene (same design as the WebGL path's MirrorDome).
+function createMirrorDome() {
   const group = new THREE.Group();
-  const configs: Array<[number, number, number, number, number, number, number]> = [
-    [-6.6, 0, -4.4, -0.06, 0.3, -0.08, 0x153040],
-    [0, 0.1, -5.2, 0.08, 0, 0.05, 0x211c45],
-    [6.4, -0.1, -4.6, 0.05, -0.32, 0.08, 0x3a1930]
-  ];
-
-  configs.forEach(([x, y, z, rx, ry, rz, tint]) => {
-    const panel = new THREE.Mesh(
-      new THREE.PlaneGeometry(5.8, 9.5),
-      new THREE.MeshStandardMaterial({
-        color: tint,
-        metalness: 1,
-        roughness: 0.18,
-        transparent: true,
-        opacity: 0.26,
-        side: THREE.DoubleSide
-      })
-    );
-    panel.position.set(x, y, z);
-    panel.rotation.set(rx, ry, rz);
-    group.add(panel);
-  });
-
-  return group;
+  const target = new THREE.CubeRenderTarget(256, { type: THREE.HalfFloatType });
+  const cubeCamera = new THREE.CubeCamera(0.1, 400, target);
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(120, 96, 48),
+    new THREE.MeshBasicMaterial({
+      color: 0xd9dfea,
+      envMap: target.texture,
+      combine: THREE.MultiplyOperation,
+      reflectivity: 1,
+      side: THREE.BackSide
+    })
+  );
+  dome.renderOrder = 10;
+  group.add(dome);
+  return { group, cubeCamera, target };
 }
 
 export default function WebGPUView({
@@ -1490,7 +1486,8 @@ export default function WebGPUView({
 
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0x07090d);
-      const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
+      // Far plane covers the mirror dome's far wall from any orbit distance.
+      const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 400);
       camera.position.set(0, 0.5, 22);
 
       const controls = new OrbitControls(camera, renderer.domElement);
@@ -1531,7 +1528,7 @@ export default function WebGPUView({
       extras.visible = showArtifacts;
       contentGroup.add(extras);
 
-      const mirrors = createMirrorPanels();
+      const { group: mirrors, cubeCamera: mirrorCamera, target: mirrorTarget } = createMirrorDome();
       mirrors.visible = showMirrors && show3DRef.current;
       contentGroup.add(mirrors);
 
@@ -1577,6 +1574,8 @@ export default function WebGPUView({
         mesh,
         extras,
         mirrors,
+        mirrorCamera,
+        mirrorTarget,
         material,
         geometry,
         ambientLight,
@@ -1594,6 +1593,8 @@ export default function WebGPUView({
 
       let activeGeometry = geometry;
       let lastGeometryUpdate = 0;
+      let mirrorFace = 0;
+      const mirrorDir = new THREE.Vector3();
       let lastFrameTime = performance.now();
       await renderer.setAnimationLoop(() => {
         const now = performance.now();
@@ -1621,6 +1622,18 @@ export default function WebGPUView({
         mesh.rotation.x = Math.sin(getClockTime() * 0.45) * 0.12;
         updateWebGPUXRInput(refs.current!, deltaSeconds);
         if (!refs.current?.isXRPresenting) controls.update();
+        // Live reflections: one cube face per frame, captured from behind the
+        // visual (relative to the viewer) so the facing wall carries a true
+        // mirror image; the dome hides during its own capture. See MirrorDome.
+        if (mirrors.visible) {
+          mirrors.visible = false;
+          mirrors.getWorldPosition(mirrorCamera.position);
+          mirrorDir.copy(mirrorCamera.position).sub(camera.position);
+          if (mirrorDir.lengthSq() > 1e-6) mirrorCamera.position.addScaledVector(mirrorDir.normalize(), 12);
+          renderCubeFace(renderer as unknown as CubeFaceRenderer, scene, mirrorCamera, mirrorFace);
+          mirrorFace = (mirrorFace + 1) % 6;
+          mirrors.visible = true;
+        }
         renderer.render(scene, camera);
 
         if (captureRequestRef.current) {
@@ -1676,6 +1689,7 @@ export default function WebGPUView({
           }
         }
       });
+      current.mirrorTarget.dispose();
       current.renderer.dispose();
       current.renderer.domElement.remove();
     };

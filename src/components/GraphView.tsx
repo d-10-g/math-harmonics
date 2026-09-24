@@ -2,7 +2,7 @@ import VisualCopies from './VisualCopies';
 import { channelPath, DEFAULT_NOTE_LAYOUT, type NoteLayoutSettings } from '../lib/noteLayout';
 import { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { ContactShadows, MeshReflectorMaterial, OrbitControls } from '@react-three/drei';
+import { ContactShadows, OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
@@ -20,6 +20,7 @@ import { DEFAULT_VERTEX_SHADER, PRESET_SHADERS } from '../shaders';
 import { XR, XROrigin, useXR, useXRInputSourceState } from '@react-three/xr';
 import { clockStore, getClockTime, reportVerts, LatticeNote } from '../lib/clock';
 import { DEFAULT_CHANNEL_MESHES, RANDOM_MESH_POOL, loadMeshGeometry, loadMeshGroup } from '../lib/meshLibrary';
+import MirrorDome from './MirrorDome';
 import { lightingRigSettings } from '../lib/lighting';
 import { COMBOS } from '../lib/combos';
 import { createPhysicalMaterial } from '../lib/materials';
@@ -82,42 +83,6 @@ type FormulaScalarTarget = {
   field: ScalarTargetField;
   match: string;
 };
-
-type MirrorPanelConfig = {
-  id: string;
-  position: [number, number, number];
-  rotation: [number, number, number];
-  size: [number, number];
-  tint: string;
-  accent: string;
-};
-
-const MIRROR_PANEL_LAYOUT: MirrorPanelConfig[] = [
-  {
-    id: 'left',
-    position: [-8.4, 0.9, -8.2],
-    rotation: [THREE.MathUtils.degToRad(-4), THREE.MathUtils.degToRad(20), THREE.MathUtils.degToRad(-7)],
-    size: [7.4, 13.2],
-    tint: '#182238',
-    accent: '#22d3ee'
-  },
-  {
-    id: 'center',
-    position: [0, 0.1, -9.1],
-    rotation: [THREE.MathUtils.degToRad(6), 0, THREE.MathUtils.degToRad(4)],
-    size: [9.2, 14.8],
-    tint: '#101827',
-    accent: '#a78bfa'
-  },
-  {
-    id: 'right',
-    position: [8.2, -0.5, -8.5],
-    rotation: [THREE.MathUtils.degToRad(3), THREE.MathUtils.degToRad(-22), THREE.MathUtils.degToRad(8)],
-    size: [7.2, 12.8],
-    tint: '#171b2d',
-    accent: '#f472b6'
-  }
-];
 
 function hashText(text: string) {
   let hash = 0;
@@ -2040,66 +2005,6 @@ function XREnvironment({ preset, desktopVisible }: { preset: WebGPULightingPrese
   );
 }
 
-function AngledMirrorSurfaces({ show3D }: { show3D: boolean }) {
-  if (!show3D) return null;
-
-  return (
-    <group position={[0, 0, 0]} renderOrder={-2}>
-      {MIRROR_PANEL_LAYOUT.map((panel) => (
-        <group
-          key={panel.id}
-          position={panel.position}
-          rotation={panel.rotation}
-        >
-          <mesh position={[0, 0, -0.04]}>
-            <boxGeometry args={[panel.size[0] + 0.42, panel.size[1] + 0.42, 0.08]} />
-            <meshStandardMaterial
-              color="#070b12"
-              emissive={panel.accent}
-              emissiveIntensity={0.08}
-              metalness={0.85}
-              roughness={0.22}
-              transparent
-              opacity={0.78}
-            />
-          </mesh>
-
-          <mesh>
-            <planeGeometry args={panel.size} />
-            <MeshReflectorMaterial
-              resolution={512}
-              blur={[180, 70]}
-              mixBlur={0.28}
-              mixStrength={1.05}
-              mixContrast={1.12}
-              mirror={0.82}
-              depthScale={0.32}
-              minDepthThreshold={0.18}
-              maxDepthThreshold={1}
-              color={panel.tint}
-              metalness={1}
-              roughness={0.04}
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-
-          <mesh position={[0, 0, 0.012]}>
-            <planeGeometry args={[panel.size[0] * 0.92, panel.size[1] * 0.92]} />
-            <meshBasicMaterial
-              color={panel.accent}
-              transparent
-              opacity={0.055}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  );
-}
-
 type SpatialPointer = {
   // Ray-object intersection: tracks where the user is "pointing at".
   point: THREE.Vector3;
@@ -2767,6 +2672,9 @@ export default function GraphView({
   }, [xrVisualTransform]);
   const [xrGeometrySelection, setXrGeometrySelection] = useState<GraphGeometrySelection>('formula');
   const xrOriginRef = useRef<THREE.Group>(null);
+  // World-space anchor for the mirror dome: sits inside the spatial wrapper so
+  // the dome (mounted at the root, in metres) tracks the visual in XR.
+  const mirrorAnchorRef = useRef<THREE.Group>(null);
   const xrDragOffsetRef = useRef(new THREE.Vector3());
   const readoutRef = useRef<HTMLDivElement>(null);
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -2812,6 +2720,7 @@ export default function GraphView({
           {modelScene ? <SpatialWrapper modelMode xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>{modelScene}</SpatialWrapper> : <>
           <XREnvironment preset={webgpuLightingPreset} desktopVisible={showEnvironment && show3D} />
           <RigEnvironment preset={webgpuLightingPreset} intensity={webgpuLighting} />
+          {showMirrors && show3D && <MirrorDome radius={80} xrRadius={8} captureOffset={6} xrCaptureOffset={0.35} anchorRef={mirrorAnchorRef} />}
           <GroundShadows show3D={show3D} />
           <PostEffects enabled={postFX} bloom={bloomIntensity} />
           <SpatialWrapper xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
@@ -2841,7 +2750,7 @@ export default function GraphView({
               </group>
             )}
 
-            {showMirrors && <AngledMirrorSurfaces show3D={show3D} />}
+            <group ref={mirrorAnchorRef} />
             {noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}

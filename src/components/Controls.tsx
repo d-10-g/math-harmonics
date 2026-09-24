@@ -1069,15 +1069,16 @@ export default function Controls({
             </button>
           </div>
 
-          {/* Background Mirrors Switch */}
-          <div className="flex items-center justify-between group">
+          {/* Mirror Dome Switch — formula stage only; the model stage picks
+              its dome from the 3D Background list above */}
+          {noteSource === 'formula' && <div className="flex items-center justify-between group">
             <div>
-              <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Background Mirrors</div>
-              <div className="text-[9px] text-white/30 font-mono">Reflector Panels</div>
+              <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Mirror Dome</div>
+              <div className="text-[9px] text-white/30 font-mono">Live Reflections Of The Scene (3D)</div>
             </div>
             <button
               onClick={() => setShowMirrors(!showMirrors)}
-              aria-label="Background Mirrors"
+              aria-label="Mirror dome"
               aria-pressed={showMirrors}
               className={cn(
                 "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center px-1",
@@ -1089,7 +1090,7 @@ export default function Controls({
                 showMirrors ? "translate-x-5" : "translate-x-0"
               )} />
             </button>
-          </div>
+          </div>}
 
           <div className="h-[1px] bg-white/5" />
 

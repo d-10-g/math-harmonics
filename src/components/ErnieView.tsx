@@ -1,26 +1,40 @@
 import { DEFAULT_NOTE_LAYOUT, type NoteLayoutSettings } from '../lib/noteLayout';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text, useGLTF } from '@react-three/drei';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as THREE from 'three';
 import type { ParsedMidi } from '../lib/midi';
 import { ernieCells, erniePose, ernieLayout, sampleErnie, type ErnieCell } from '../lib/ernie';
-import { resolveChannel, type ModelAsset, type ModelKind, type ModelSettings, type BackgroundChoice } from '../lib/modelChannels';
-import { loadMeshGroup } from '../lib/meshLibrary';
+import { resolveChannel, type ModelAsset, type ModelKind, type ModelSettings, type BackgroundChoice, type ObjFinish } from '../lib/modelChannels';
+import { loadMeshGroup, dressObjMaterials } from '../lib/meshLibrary';
+import { createPhysicalMaterial } from '../lib/materials';
+import type { WebGPULightingPreset, WebGPUMaterialProfile } from '../constants';
 import { useXR } from '@react-three/xr';
 import ModelBackdrop, { type HdriFile } from './ModelBackdrop';
 
-type SlotProps={yaw?:number;cell:ErnieCell;position:[number,number,number];getTime:()=>number;settings:ModelSettings;display:'sounding'|'all';preview:boolean;asset:ModelAsset;movement?:string};
+type SlotProps={yaw?:number;cell:ErnieCell;position:[number,number,number];getTime:()=>number;settings:ModelSettings;display:'sounding'|'all';preview:boolean;asset:ModelAsset;movement?:string;dress?:(model:THREE.Object3D)=>THREE.MeshPhysicalMaterial[]};
+// App material profiles for OBJ channels while the Output material profile is
+// "auto": one per MIDI channel, the constellation's favourites first.
+const STAGE_PROFILES:Exclude<WebGPUMaterialProfile,'auto'>[]=['pearl','glass','ruby','copper','ice','jade','chrome','obsidian','ceramic','plasma','liquid-metal','velvet','carbon','hologram','neon','xray'];
 function GlbSlot(props:SlotProps){const gltf=useGLTF(props.asset.url);return <AnimatedSlot {...props} template={gltf.scene} clips={gltf.animations}/>;}
-function ObjSlot(props:SlotProps){
+function ObjSlot({finish,profile,...props}:SlotProps&{finish:ObjFinish;profile:WebGPUMaterialProfile}){
  const [template,setTemplate]=useState<THREE.Group|null>(null),[failed,setFailed]=useState(false);
  useEffect(()=>{let alive=true;setTemplate(null);setFailed(false);void loadMeshGroup(props.asset.file.replace(/\.obj$/,'')).then(t=>{if(alive){setTemplate(t);setFailed(!t);}});return ()=>{alive=false;};},[props.asset.file]);
- return template?<AnimatedSlot {...props} template={template} clips={[]}/>:<Text position={props.position} fontSize={.04}>{failed?'Model unavailable':'Loading…'}</Text>;
+ // Stand-in MTLs (Blender debug green / default gray, or no MTL at all) are
+ // dressed in the app's physical profiles; authored MTL colors stay unless the
+ // finish says otherwise. Materials are per slot so each note can pulse its own.
+ const channel=props.cell.channel;
+ const dress=useCallback((model:THREE.Object3D)=>{
+  const chosen=profile!=='auto'?profile:STAGE_PROFILES[channel%STAGE_PROFILES.length];
+  return dressObjMaterials(model,finish,()=>{const m=createPhysicalMaterial(chosen,false);m.userData.baseEmissiveIntensity=m.emissiveIntensity;return m;});
+ },[finish,profile,channel]);
+ return template?<AnimatedSlot {...props} template={template} clips={[]} dress={dress}/>:<Text position={props.position} fontSize={.04}>{failed?'Model unavailable':'Loading…'}</Text>;
 }
 const NO_CLIPS:THREE.AnimationClip[]=[];
-function AnimatedSlot({cell,position,yaw=0,getTime,settings,display,preview,template,clips=NO_CLIPS,movement}:SlotProps&{template:THREE.Object3D;clips:THREE.AnimationClip[]}){
- const model=useMemo(()=>clone(template),[template]);
+function AnimatedSlot({cell,position,yaw=0,getTime,settings,display,preview,template,clips=NO_CLIPS,movement,dress}:SlotProps&{template:THREE.Object3D;clips:THREE.AnimationClip[]}){
+ const {model,dressed}=useMemo(()=>{const model=clone(template);return {model,dressed:dress?.(model)??[]};},[template,dress]);
+ useEffect(()=>()=>dressed.forEach(m=>m.dispose()),[dressed]);
  const fit=useMemo(()=>{const box=new THREE.Box3().setFromObject(model);const size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());const scale=Math.min(.25/Math.max(size.x,.001),.8/Math.max(size.z,.001),.53/Math.max(size.y,.001));return {scale,offset:[-center.x*scale,-box.min.y*scale,-center.z*scale] as [number,number,number]};},[model]);
  const clip=useMemo(()=>clips.find(c=>c.name===(settings.movement==='channel'?movement:settings.movement))??clips[(cell.channel+settings.seed)%Math.max(1,clips.length)],[clips,movement,settings.movement,settings.seed,cell.channel]);
  const player=useRef<{mixer:THREE.AnimationMixer;action:THREE.AnimationAction}|null>(null),slot=useRef<THREE.Group>(null),body=useRef<THREE.Group>(null);
@@ -33,6 +47,8 @@ function AnimatedSlot({cell,position,yaw=0,getTime,settings,display,preview,temp
   if(slot.current)slot.current.visible=display==='all'||preview||p.weight>0;
   if(player.current){const {action,mixer}=player.current;action.enabled=true;action.setEffectiveWeight(p.weight);action.time=p.phase*clip!.duration;mixer.update(0);}
   else if(body.current)body.current.scale.setScalar(1+.12*p.weight);
+  // App materials glow with the note; MTL colors are the object's own.
+  for(const m of dressed)m.emissiveIntensity=(m.userData.baseEmissiveIntensity as number)*(.6+1.4*p.weight);
  });
  const off=()=>{if(audition.current&&audition.current.off===null)audition.current.off=performance.now()/1000;};
  return <group ref={slot} position={position} rotation-y={yaw}>
@@ -42,17 +58,20 @@ function AnimatedSlot({cell,position,yaw=0,getTime,settings,display,preview,temp
   {settings.labels&&<Text position={[0,-.045,.20]} fontSize={.033} color="#93b3c5" anchorX="center">{`${['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'][cell.pitch%12]}${Math.floor(cell.pitch/12)-1}`}</Text>}
  </group>;
 }
-export function ModelScene({midi,getMusicTime,kind,settings,display,background,hdri,onBackgroundError,spacing,noteLayout=DEFAULT_NOTE_LAYOUT}:{midi:ParsedMidi|null;getMusicTime:()=>{time:number;duration:number};kind:ModelKind;settings:ModelSettings;display:'sounding'|'all';background:BackgroundChoice;hdri:HdriFile|null;onBackgroundError:(s:string)=>void;spacing:number;noteLayout?:NoteLayoutSettings}){
+export function ModelScene({midi,getMusicTime,kind,settings,display,background,hdri,onBackgroundError,spacing,noteLayout=DEFAULT_NOTE_LAYOUT,materialProfile='auto',lightingPreset='studio'}:{midi:ParsedMidi|null;getMusicTime:()=>{time:number;duration:number};kind:ModelKind;settings:ModelSettings;display:'sounding'|'all';background:BackgroundChoice;hdri:HdriFile|null;onBackgroundError:(s:string)=>void;spacing:number;noteLayout?:NoteLayoutSettings;materialProfile?:WebGPUMaterialProfile;lightingPreset?:WebGPULightingPreset}){
+ const finish=settings.finish??'auto';
  const cells=useMemo(()=>ernieCells(midi?.notes.length?midi.notes:Array.from({length:32},(_,i)=>({channel:Math.floor(i/8),pitch:48+i%8,time:1e10,duration:1,velocity:96,track:0}))),[midi]);
  const layout=useMemo(()=>ernieLayout(cells,spacing,noteLayout),[cells,spacing,noteLayout]);
  const session=useXR(state=>state.session);
  return <>
    <Suspense fallback={<Text position={[0,1,-2]} fontSize={.05}>Loading 3D models…</Text>}>
     {!session && <FrameModels width={layout.width} depth={layout.depth} height={layout.height} solo={settings.solo}/>}
-    <ModelBackdrop choice={background} hdri={hdri} onError={onBackgroundError}/>
+    {/* Mirror capture point at mid-model height (the dome offsets it behind
+        the stage relative to the viewer). */}
+    <ModelBackdrop choice={background} hdri={hdri} onError={onBackgroundError} center={[0,(settings.solo?.53:layout.height)/2+.1,0]} lighting={lightingPreset} environment={kind==='obj'&&finish!=='mtl'}/>
     <ambientLight intensity={.7}/><hemisphereLight args={['#e4f4ff','#414653',1.8]}/><directionalLight position={[3,6,4]} intensity={2.4}/><directionalLight position={[-3,2,-4]} intensity={1.5}/>
     <group scale={session ? settings.solo ? 1 : Math.min(1, 2.5/Math.max(layout.width,layout.height+.53,layout.depth)) : 1}>
-    {(settings.solo?layout.items.slice(0,1):layout.items).map(({cell,position,copy,yaw})=>{const {asset,movement}=resolveChannel(settings,kind,cell.channel);if(!asset)return null;const Slot=kind==='glb'?GlbSlot:ObjSlot;return <Slot key={`${cell.key}:${copy}:${asset.file}`} cell={cell} asset={asset} movement={movement} yaw={settings.solo?0:yaw} position={settings.solo?[0,0,0]:position} getTime={()=>getMusicTime().time} settings={settings} display={display} preview={!midi} />;})}
+    {(settings.solo?layout.items.slice(0,1):layout.items).map(({cell,position,copy,yaw})=>{const {asset,movement}=resolveChannel(settings,kind,cell.channel);if(!asset)return null;const key=`${cell.key}:${copy}:${asset.file}`,common={cell,asset,movement,yaw:settings.solo?0:yaw,position:(settings.solo?[0,0,0]:position) as [number,number,number],getTime:()=>getMusicTime().time,settings,display,preview:!midi};return kind==='glb'?<GlbSlot key={key} {...common}/>:<ObjSlot key={key} {...common} finish={finish} profile={materialProfile}/>;})}
     </group>
     {!session && <OrbitControls makeDefault target={[0,settings.solo?.2:layout.height/2,0]} minDistance={.3} maxDistance={250}/>}
   </Suspense>

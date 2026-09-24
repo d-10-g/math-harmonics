@@ -4,6 +4,13 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.9.0 — Mirror dome and honest OBJ finishes
+
+- **Mirror Dome** replaces the old reflector panels, which never showed a usable reflection (and could not under WebXR). The dome is an inverted sphere reflecting a live cube-camera capture of the scene, so every note object, the starfield and, in a headset, your own controllers appear mirrored around you. The capture point sits behind the visual relative to the viewer, so the wall you face carries a true mirror image; one cube face is captured per frame to keep the cost flat, and the dome hides in passthrough.
+- Formula stage: **Output → Mirror Dome** (same `mr` share key). Model stage: **3D Background → Mirror dome (live reflections)**. Both reach VR through the shared menus.
+- **OBJ finish** (Models and channel mappings): stand-in MTLs — the Blender debug green and default gray most library files carry, or files with no MTL — are now dressed in the app's physical material profiles instead of made-up palette hues. *Auto* keeps authored MTL colors and dresses only stand-ins; *App materials* and *MTL colors* force either. App materials follow the Output material profile, rotate per channel on *auto*, glow with each note, and the OBJ stage gains the rig's reflective environment.
+- The WebGPU renderer's mirrors are the same live dome.
+
 ## v2.8.0 — Copy Rotation
 
 - Copy Rotation adds a signed -180° to 180° yaw increment per duplicate, alongside Copy Offset.

@@ -10,7 +10,8 @@ The menus share the mounted desktop controls. This includes the mode switch,
 formula and shader editors with validation, preset search/categories/favorites,
 combos, lighting/material/geometry options and cycling, visual effects,
 autopilot, audio source/library/transport, note effects, OBJ/GLB channel and
-movement mappings, backgrounds, and settings import/export. Conditional
+movement mappings, OBJ finish, backgrounds (including the mirror dome), and
+settings import/export. Conditional
 controls follow the same audio/silent/source rules as the desktop UI. A
 collapsed desktop panel remains available to the spatial console.
 

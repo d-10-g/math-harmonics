@@ -3,6 +3,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MESH_LIBRARY } from './meshManifest';
+import type { ObjFinish } from './modelChannels';
 
 // Owner-provided OBJ/MTL sculpture library (public/demo/meshes). Meshes can
 // stand in for formula geometry in the note constellation: either wearing
@@ -82,13 +83,21 @@ export function loadMeshGeometry(name: string): Promise<THREE.BufferGeometry | n
 }
 
 // Most of the library's MTLs share one Blender debug material (Kd 0.2/1/0.2
-// green; some default 0.8 gray). Those aren't authored colors — when we see
-// them, substitute a stable, distinct, tone-safe hue derived from the mesh
-// name. Genuinely authored MTL colors pass through untouched.
+// green; some default 0.8 gray). Those aren't authored colors. Each such
+// material is FLAGGED (userData.placeholder) so the stage can dress it in an
+// app material profile instead — and, for callers that insist on MTL colors,
+// gets a stable, distinct, tone-safe hue derived from the mesh name.
+// Genuinely authored MTL colors pass through untouched.
 function isPlaceholderColor(color: THREE.Color): boolean {
   const near = (v: number, t: number) => Math.abs(v - t) < 0.02;
-  return (near(color.r, 0.2) && near(color.g, 1.0) && near(color.b, 0.2))
-    || (near(color.r, 0.8) && near(color.g, 0.8) && near(color.b, 0.8));
+  const matches = (c: THREE.Color) =>
+    (near(c.r, 0.2) && near(c.g, 1.0) && near(c.b, 0.2))
+    || (near(c.r, 0.8) && near(c.g, 0.8) && near(c.b, 0.8));
+  // MTLLoader converts Kd from sRGB into the (linear) working space, so the
+  // file's 0.2/1.0/0.2 arrives as 0.033/1.0/0.033 — compare in sRGB, and in
+  // the raw values in case color management is off.
+  const srgb = THREE.ColorManagement.workingToColorSpace(new THREE.Color().copy(color), THREE.SRGBColorSpace);
+  return matches(srgb) || matches(color);
 }
 
 function paletteColor(name: string): THREE.Color {
@@ -98,24 +107,35 @@ function paletteColor(name: string): THREE.Color {
   return new THREE.Color().setHSL(hue, 0.62, 0.52);
 }
 
-function applyPaletteToPlaceholders(group: THREE.Group, name: string): void {
+export type ObjFinishReport = { placeholders: number; total: number };
+
+// `everything` marks every material a placeholder (no MTL loaded at all —
+// OBJLoader's default white is no more authored than debug green).
+function markPlaceholders(group: THREE.Group, name: string, everything: boolean): ObjFinishReport {
+  let placeholders = 0;
+  let total = 0;
   group.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (!mesh.isMesh || !mesh.material) return;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     materials.forEach((material, index) => {
+      total++;
       const colored = material as THREE.MeshPhongMaterial;
-      if (colored.color && isPlaceholderColor(colored.color)) {
+      if (everything || (colored.color && isPlaceholderColor(colored.color))) {
+        placeholders++;
+        material.userData.placeholder = true;
         // Multi-material meshes get slightly rotated hues so parts differ.
-        colored.color.copy(paletteColor(index === 0 ? name : `${name}:${index}`));
+        if (colored.color) colored.color.copy(paletteColor(index === 0 ? name : `${name}:${index}`));
       }
     });
   });
+  return { placeholders, total };
 }
 
-// Full load with the OBJ's own MTL colors. Returns a normalized TEMPLATE —
-// callers clone() it per slot (clones share geometry + materials, which is
-// exactly right: MTL mode does not modulate materials per note).
+// Full load with the OBJ's own MTL materials. Returns a normalized TEMPLATE —
+// callers clone() it per slot (clones share geometry + materials; dress the
+// clone with dressObjMaterials when per-slot materials are wanted).
+// template.userData.finish reports how many materials were placeholders.
 export function loadMeshGroup(name: string): Promise<THREE.Group | null> {
   const cached = groupCache.get(name);
   if (cached) return cached;
@@ -124,12 +144,15 @@ export function loadMeshGroup(name: string): Promise<THREE.Group | null> {
     .loadAsync(`${name}.mtl`)
     .then((materials) => {
       materials.preload();
-      return new OBJLoader().setMaterials(materials).loadAsync(`${MESH_BASE}${name}.obj`);
+      return new OBJLoader()
+        .setMaterials(materials)
+        .loadAsync(`${MESH_BASE}${name}.obj`)
+        .then((group) => ({ group, authored: true }));
     })
-    .catch(() => new OBJLoader().loadAsync(`${MESH_BASE}${name}.obj`))
-    .then((group) => {
+    .catch(() => new OBJLoader().loadAsync(`${MESH_BASE}${name}.obj`).then((group) => ({ group, authored: false })))
+    .then(({ group, authored }) => {
       if (!group) return null;
-      applyPaletteToPlaceholders(group, name);
+      const finish = markPlaceholders(group, name, !authored);
       const box = new THREE.Box3().setFromObject(group);
       const sphere = box.getBoundingSphere(new THREE.Sphere());
       const wrapper = new THREE.Group();
@@ -140,11 +163,41 @@ export function loadMeshGroup(name: string): Promise<THREE.Group | null> {
       // Bake the fit into a single template node.
       const template = new THREE.Group();
       template.add(wrapper);
+      template.userData.finish = finish;
       return template;
     })
     .catch(() => null);
   groupCache.set(name, promise);
   return promise;
+}
+
+// Dress an OBJ clone for the stage. 'mtl' keeps every MTL material
+// (placeholders wear their palette hue); 'app' replaces every material with a
+// fresh app material; 'auto' replaces only flagged placeholders, so authored
+// colors survive next to dressed stand-ins. Returns the materials it created
+// so the caller can pulse and dispose them.
+export function dressObjMaterials<T extends THREE.Material>(
+  root: THREE.Object3D,
+  finish: ObjFinish,
+  makeMaterial: () => T
+): T[] {
+  const created: T[] = [];
+  if (finish === 'mtl') return created;
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    let changed = false;
+    const next = materials.map((material) => {
+      if (finish !== 'app' && !material.userData.placeholder) return material;
+      const made = makeMaterial();
+      created.push(made);
+      changed = true;
+      return made;
+    });
+    if (changed) mesh.material = Array.isArray(mesh.material) ? next : next[0];
+  });
+  return created;
 }
 
 export function isValidMeshName(name: string): boolean {
