@@ -30,7 +30,7 @@ import {
 import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
 import { ActiveNote, LatticeNote, NoteFxMode, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteFx, setNoteGroupCount, setNoteLattice, setNoteSignals, setNoteSpread, startClock, useClockSnapshot, resetNoteGroupControls, updateNoteGroupControls } from './lib/clock';
-import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader } from './lib/urlState';
+import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader, type PrismColorMode } from './lib/urlState';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 import { COMBOS, Combo } from './lib/combos';
 import { gmInstrumentName, parseMidi, ParsedMidi, MidiControlSampler, SustainMap } from './lib/midi';
@@ -451,6 +451,10 @@ export default function App() {
   const [meshUseMtl, setMeshUseMtl] = useState(initialShared.meshUseMtl ?? false);
   const [meshAssign, setMeshAssign] = useState<'random' | 'channel'>(initialShared.meshAssign ?? 'random');
   const [noteDisplay, setNoteDisplay] = useState<'sounding' | 'all'>(initialShared.noteDisplay ?? 'sounding');
+  // Prism canvas options: spectrum slice per note and one canvas per channel.
+  const [prismColor, setPrismColor] = useState<PrismColorMode>(initialShared.prismColor ?? 'full');
+  const [prismSlice, setPrismSlice] = useState(initialShared.prismSlice ?? 0.14);
+  const [prismPerChannel, setPrismPerChannel] = useState(initialShared.prismPerChannel ?? false);
   const [meshChannelMap, setMeshChannelMap] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem('harmonics.meshmap.v1');
@@ -1407,9 +1411,12 @@ export default function App() {
       noteSource,
       meshUseMtl,
       meshAssign,
-      noteDisplay
+      noteDisplay,
+      prismColor,
+      prismSlice,
+      prismPerChannel
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteLayout, noteSource, meshUseMtl, meshAssign, noteDisplay]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteLayout, noteSource, meshUseMtl, meshAssign, noteDisplay, prismColor, prismSlice, prismPerChannel]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -1759,6 +1766,9 @@ export default function App() {
                 noteDisplay={noteDisplay}
                 setNoteDisplay={setNoteDisplay}
                 meshLibrary={MESH_LIBRARY}
+                prismColor={prismColor}
+                prismSlice={prismSlice}
+                prismPerChannel={prismPerChannel}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
@@ -1917,6 +1927,12 @@ export default function App() {
           noteDisplay={noteDisplay}
           setNoteDisplay={setNoteDisplay}
           meshLibrary={MESH_LIBRARY}
+          prismColor={prismColor}
+          setPrismColor={setPrismColor}
+          prismSlice={prismSlice}
+          setPrismSlice={setPrismSlice}
+          prismPerChannel={prismPerChannel}
+          setPrismPerChannel={setPrismPerChannel}
           collapsed={controlsCollapsed}
           onCollapse={() => setControlsCollapsed(true)}
           pageMode={pageMode}

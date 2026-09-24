@@ -4,6 +4,12 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.12.0 — Prism colour slices and per-channel canvases
+
+- **Prism Colour**: every note can carry the whole spectrum (as before) or a slice of it chosen by note value: pitch across the piece's range, pitch class (C is always the same colour in every octave), or note length. **Slice Width** sets how much of the spectrum each note shows, 5% to 50%.
+- **Canvas**: one shared plane with an instrument row per channel, or one plane per channel. Per-channel planes sit on a ring around the line of travel and each drifts and wobbles on its own, so the trails weave as separate ribbons. Up to eight channels.
+- Both are share-link and VR-menu options, and rebuild the score instantly.
+
 ## v2.11.0 — Prism canvas
 
 - New note visual, **Prism** (Audio Sync → MIDI File → Note Visuals), separate from formulas and models. An invisible rectangular canvas rides a slow, curving path through space; every note is painted on it the instant it sounds as a dispersed prism spectrum (a white beam entering, a rainbow fanning out), sized by velocity, placed by pitch across and instrument row up, then stays exactly where it was painted while the canvas moves on.

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { compile } from 'mathjs';
+import type { PrismColorMode } from '../lib/urlState';
 import { cn } from '../lib/utils';
 import { useClockSnapshot } from '../lib/clock';
 import { glslFragmentError } from '../lib/glsl';
@@ -95,6 +96,12 @@ interface ControlsProps {
   meshChannelMap: string[];
   setMeshChannelMap: (map: string[]) => void;
   noteDisplay: 'sounding' | 'all';
+  prismColor: PrismColorMode;
+  setPrismColor: (mode: PrismColorMode) => void;
+  prismSlice: number;
+  setPrismSlice: (width: number) => void;
+  prismPerChannel: boolean;
+  setPrismPerChannel: (on: boolean) => void;
   setNoteDisplay: (mode: 'sounding' | 'all') => void;
   meshLibrary: string[];
   pageMode: 'audio' | 'silent';
@@ -393,6 +400,12 @@ export default function Controls({
   setMeshChannelMap,
   noteDisplay,
   setNoteDisplay,
+  prismColor,
+  setPrismColor,
+  prismSlice,
+  setPrismSlice,
+  prismPerChannel,
+  setPrismPerChannel,
   meshLibrary,
   pageMode,
   midiLibrary,
@@ -1345,6 +1358,74 @@ export default function Controls({
                           ))}
                         </div>
                         {modelStage && <div data-spatial-section="Models and channel mappings">{modelControls}</div>}
+                        {noteSource === 'prism' && (
+                          <div data-spatial-section="Prism canvas" className="mt-2 space-y-2.5 rounded-lg border border-fuchsia-400/20 p-2">
+                            <div>
+                              <div className="text-xs font-semibold text-white/80">Prism Colour</div>
+                              <div className="text-[9px] text-white/30 font-mono">Whole Spectrum Per Note, Or A Slice By Note Value</div>
+                              <div className="mt-1.5 grid grid-cols-4 gap-1">
+                                {(['full', 'pitch', 'chroma', 'length'] as const).map((mode) => (
+                                  <button
+                                    key={mode}
+                                    onClick={() => setPrismColor(mode)}
+                                    aria-pressed={prismColor === mode}
+                                    aria-label={`Prism colour: ${mode === 'full' ? 'full spectrum' : mode === 'pitch' ? 'slice by pitch' : mode === 'chroma' ? 'slice by pitch class' : 'slice by note length'}`}
+                                    className={cn(
+                                      "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
+                                      prismColor === mode
+                                        ? "bg-fuchsia-500/25 text-fuchsia-100"
+                                        : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
+                                    )}
+                                  >
+                                    {mode === 'full' ? 'Full' : mode === 'pitch' ? 'Pitch' : mode === 'chroma' ? 'Pitch Class' : 'Length'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="text-xs font-semibold text-white/80">Slice Width</div>
+                                  <div className="text-[9px] text-white/30 font-mono">How Much Of The Spectrum Each Note Shows</div>
+                                </div>
+                                <div className="text-[10px] font-mono text-fuchsia-300">{Math.round(prismSlice * 100)}%</div>
+                              </div>
+                              <input
+                                type="range"
+                                min={0.05}
+                                max={0.5}
+                                step={0.01}
+                                value={prismSlice}
+                                disabled={prismColor === 'full'}
+                                onChange={(e) => setPrismSlice(parseFloat(e.target.value))}
+                                aria-label="Prism slice width"
+                                className={cn("mt-1.5 w-full accent-fuchsia-500", prismColor === 'full' && "opacity-35")}
+                              />
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-white/80">Canvas</div>
+                              <div className="text-[9px] text-white/30 font-mono">One Shared Plane, Or A Plane Per Channel On Its Own Path</div>
+                              <div className="mt-1.5 grid grid-cols-2 gap-1">
+                                {([false, true] as const).map((perChannel) => (
+                                  <button
+                                    key={String(perChannel)}
+                                    onClick={() => setPrismPerChannel(perChannel)}
+                                    aria-pressed={prismPerChannel === perChannel}
+                                    aria-label={perChannel ? 'Prism canvas: one per channel' : 'Prism canvas: shared'}
+                                    className={cn(
+                                      "rounded-md py-1 text-[9px] font-mono uppercase transition-colors",
+                                      prismPerChannel === perChannel
+                                        ? "bg-fuchsia-500/25 text-fuchsia-100"
+                                        : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
+                                    )}
+                                  >
+                                    {perChannel ? 'One Per Channel' : 'Shared'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <div className="mt-1.5 grid grid-cols-2 gap-1">
                           {(['sounding', 'all'] as const).map((mode) => (
                             <button

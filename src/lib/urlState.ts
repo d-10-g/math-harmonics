@@ -15,6 +15,10 @@ import { PRESET_SHADERS } from '../shaders';
 
 const STORAGE_KEY = 'harmonics.state.v1';
 
+// Prism canvas colour: every note carries the whole spectrum, or a slice of
+// it chosen by pitch, pitch class or note length.
+export type PrismColorMode = 'full' | 'pitch' | 'chroma' | 'length';
+
 export type SharedState = {
   formulaId?: string;
   shaderId?: string;
@@ -45,6 +49,9 @@ export type SharedState = {
   meshUseMtl?: boolean;
   meshAssign?: 'random' | 'channel';
   noteDisplay?: 'sounding' | 'all';
+  prismColor?: PrismColorMode;
+  prismSlice?: number; // 0.05..0.5 of the spectrum per note
+  prismPerChannel?: boolean;
 };
 
 const GEOMETRY_VALUES: WebGPUGeometryProfile[] = ['auto', 'tube', 'ribbon', 'extrude', 'lathe', 'crystal', 'surface', 'helix', 'shell', 'terrain', 'constellation', 'knot', 'mandala', 'lattice', 'ripple', 'prism', 'vortex'];
@@ -91,6 +98,10 @@ function parseParams(params: URLSearchParams): SharedState {
   state.meshUseMtl = flag('nml');
   state.meshAssign = oneOf(read('nas'), ['random', 'channel'] as const);
   state.noteDisplay = oneOf(read('nds'), ['sounding', 'all'] as const);
+  state.prismColor = oneOf(read('pcm'), ['full', 'pitch', 'chroma', 'length'] as const);
+  const prismSlice = read('psw');
+  if (prismSlice !== undefined && Number.isFinite(parseFloat(prismSlice))) state.prismSlice = Math.min(0.5, Math.max(0.05, parseFloat(prismSlice)));
+  state.prismPerChannel = flag('ppc');
   const bloom = read('bl');
   if (bloom !== undefined && Number.isFinite(parseFloat(bloom))) state.bloomIntensity = Math.min(3, Math.max(0, parseFloat(bloom)));
   const lineWidth = read('lw');
@@ -151,6 +162,9 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('nml', state.meshUseMtl ? '1' : '0');
   params.set('nas', state.meshAssign);
   params.set('nds', state.noteDisplay);
+  params.set('pcm', state.prismColor);
+  params.set('psw', state.prismSlice.toFixed(2));
+  params.set('ppc', state.prismPerChannel ? '1' : '0');
 
   try {
     history.replaceState(null, '', `#${params.toString()}`);

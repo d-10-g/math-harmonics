@@ -22,6 +22,7 @@ import { clockStore, getClockTime, reportVerts, LatticeNote } from '../lib/clock
 import { DEFAULT_CHANNEL_MESHES, RANDOM_MESH_POOL, loadMeshGeometry, loadMeshGroup } from '../lib/meshLibrary';
 import MirrorDome from './MirrorDome';
 import PrismStage from './PrismStage';
+import type { PrismColorMode } from '../lib/urlState';
 import type { ParsedMidi } from '../lib/midi';
 import { lightingRigSettings } from '../lib/lighting';
 import { COMBOS } from '../lib/combos';
@@ -977,6 +978,9 @@ interface GraphViewProps {
   meshChannelMap?: string[];
   setMeshChannelMap?: (map: string[]) => void;
   noteDisplay?: 'sounding' | 'all';
+  prismColor?: PrismColorMode;
+  prismSlice?: number;
+  prismPerChannel?: boolean;
   setNoteDisplay?: (mode: 'sounding' | 'all') => void;
   meshLibrary?: string[];
 }
@@ -2669,7 +2673,10 @@ export default function GraphView({
   setMeshChannelMap,
   noteDisplay,
   setNoteDisplay,
-  meshLibrary
+  meshLibrary,
+  prismColor = 'full',
+  prismSlice = 0.14,
+  prismPerChannel = false
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
@@ -2776,7 +2783,7 @@ export default function GraphView({
 
             <group ref={mirrorAnchorRef} />
             {noteSource === 'prism' && show3D ? (
-              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} />
+              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} />
             ) : noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}
