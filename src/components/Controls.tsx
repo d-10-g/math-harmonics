@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { compile } from 'mathjs';
 import type { PrismColorMode } from '../lib/urlState';
 import { cn } from '../lib/utils';
+import { ALPHABET_STEREO_MODES, type AlphabetSettings } from '../lib/alphabetSphere';
 import { useClockSnapshot } from '../lib/clock';
 import { glslFragmentError } from '../lib/glsl';
 import {
@@ -104,7 +105,9 @@ interface ControlsProps {
   setPrismPerChannel: (on: boolean) => void;
   setNoteDisplay: (mode: 'sounding' | 'all') => void;
   meshLibrary: string[];
-  pageMode: 'audio' | 'silent';
+  pageMode: 'audio' | 'silent' | 'letters';
+  alphabet: AlphabetSettings;
+  setAlphabet: (patch: Partial<AlphabetSettings>) => void;
   midiLibrary: Array<{ id: string; name: string }>;
   onSelectLibrary: (id: string) => void;
   audioFileError: string | null;
@@ -328,6 +331,43 @@ function LiveStats() {
   );
 }
 
+// Alphabet Sphere slider row: label, hint and live value above a range input.
+function AlphabetSlider({ label, hint, value, display, min, max, step, disabled, ariaLabel, onChange }: {
+  label: string;
+  hint: string;
+  value: number;
+  display: string;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  ariaLabel: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className={cn(disabled && "opacity-40")}>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-xs font-semibold text-white/80">{label}</div>
+          <div className="text-[9px] text-white/30 font-mono">{hint}</div>
+        </div>
+        <div className="text-[10px] font-mono text-fuchsia-300">{display}</div>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        aria-label={ariaLabel}
+        className="mt-1.5 w-full accent-fuchsia-500"
+      />
+    </div>
+  );
+}
+
 export default function Controls({
   selectedFormula,
   onUpdateFormula,
@@ -408,6 +448,8 @@ export default function Controls({
   setPrismPerChannel,
   meshLibrary,
   pageMode,
+  alphabet,
+  setAlphabet,
   midiLibrary,
   onSelectLibrary,
   audioFileError,
@@ -613,7 +655,7 @@ export default function Controls({
       </div>
       {/* Dynamic Editor — silent studio only; the audio page keeps the
           music controls on top and the editors out of the way. */}
-      <div className={cn("bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col shrink-0", pageMode === 'audio' && "hidden")}>
+      <div className={cn("bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col shrink-0", pageMode !== 'silent' && "hidden")}>
         <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300 mb-5">
            {activeTab === 'formulas' ? 'Coordinate Matrix' : 'Shader Core Engine'}
         </h2>
@@ -665,8 +707,89 @@ export default function Controls({
         </div>
       </div>
 
+      {/* Alphabet Sphere — the Letters page's own controls. Hidden on the
+          other pages so the VR menu lists them only while the sphere is on
+          stage; the output card below hides in turn while it is. */}
+      <div data-spatial-section="Alphabet sphere" className={cn("bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col gap-4 shrink-0", pageMode !== 'letters' && "hidden")}>
+        <div>
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300">Alphabet Sphere</h2>
+          <p className="mt-1 text-[9px] font-mono text-white/35">70,000 Points · 26 Viewing Axes · One Letter Resolves Per Axis</p>
+        </div>
+        <div>
+          <div className="text-xs font-semibold text-white/80">Stereo View</div>
+          <div className="text-[9px] text-white/30 font-mono">Flat-Screen 3D Tricks · Headsets Get True Stereo In Immersive Space</div>
+          <div className="mt-1.5 grid grid-cols-5 gap-1">
+            {ALPHABET_STEREO_MODES.map((mode) => (
+              <button
+                key={mode.id}
+                onClick={() => setAlphabet({ stereo: mode.id })}
+                aria-pressed={alphabet.stereo === mode.id}
+                aria-label={`Stereo view: ${mode.label}`}
+                className={cn(
+                  "rounded-md px-0.5 py-1 text-[9px] font-mono uppercase transition-colors",
+                  alphabet.stereo === mode.id
+                    ? "bg-fuchsia-500/25 text-fuchsia-100"
+                    : "bg-white/[0.05] text-white/35 hover:bg-white/[0.1] hover:text-white/70"
+                )}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[9px] leading-snug text-white/40">{ALPHABET_STEREO_MODES.find((mode) => mode.id === alphabet.stereo)?.hint}</p>
+        </div>
+        <AlphabetSlider label="Stereo Baseline" hint="Eye Separation For The Flat-Screen Stereo Views" value={alphabet.baseline} display={alphabet.baseline.toFixed(2)} min={0} max={0.65} step={0.01} disabled={alphabet.stereo === 'mono'} ariaLabel="Stereo baseline" onChange={(baseline) => setAlphabet({ baseline })} />
+        <AlphabetSlider label="Letter Relief" hint="How Far Aligned Points Gather Into A Sculpted Bas-Relief" value={alphabet.relief} display={alphabet.relief.toFixed(2)} min={0} max={1} step={0.01} ariaLabel="Letter relief coherency" onChange={(relief) => setAlphabet({ relief })} />
+        <AlphabetSlider label="Collimation" hint="Contrast Between The Aligned Letter And The Cloud" value={alphabet.collimation} display={alphabet.collimation.toFixed(2)} min={0} max={1} step={0.01} ariaLabel="Optical collimation" onChange={(collimation) => setAlphabet({ collimation })} />
+        <AlphabetSlider label="Point Size" hint="Sprite Size At The Orbit Distance" value={alphabet.pointSize} display={`${alphabet.pointSize.toFixed(1)} px`} min={1} max={5} step={0.1} ariaLabel="Point size" onChange={(pointSize) => setAlphabet({ pointSize })} />
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setAlphabet({ tour: !alphabet.tour })}
+            aria-pressed={alphabet.tour}
+            className={cn(
+              "rounded-md py-1.5 text-[9px] font-mono uppercase transition-colors",
+              alphabet.tour ? "bg-white text-[#05060a]" : "bg-white/[0.08] text-white/50 hover:bg-white/[0.15] hover:text-white/80"
+            )}
+          >
+            {alphabet.tour ? 'Auto-Tour A → Z' : 'Resume A → Z Tour'}
+          </button>
+          <button
+            onClick={() => setAlphabet({ rings: !alphabet.rings })}
+            aria-pressed={alphabet.rings}
+            className={cn(
+              "rounded-md py-1.5 text-[9px] font-mono uppercase transition-colors",
+              alphabet.rings ? "bg-white text-[#05060a]" : "bg-white/[0.08] text-white/50 hover:bg-white/[0.15] hover:text-white/80"
+            )}
+          >
+            3D Depth Rings
+          </button>
+        </div>
+        <div>
+          <div className="text-xs font-semibold text-white/80">Music</div>
+          <div className="text-[9px] text-white/30 font-mono">The Aligned Letter Pulses With The Piece · ← → Step Letters</div>
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) {
+                setAudioSync(true);
+                setAudioSource('midi');
+                onSelectLibrary(e.target.value);
+              }
+              e.target.value = '';
+            }}
+            aria-label="Play a pre-installed score"
+            className="mt-1.5 w-full rounded-md border border-fuchsia-400/25 bg-[#141420] py-1.5 px-2 text-[10px] font-mono uppercase text-fuchsia-200 cursor-pointer hover:bg-[#1b1b2c] transition-colors"
+          >
+            <option value="">♪ Pre-installed scores…</option>
+            {midiLibrary.map((entry) => (
+              <option key={entry.id} value={entry.id}>{entry.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       {/* Rendering Controls */}
-      <div className="bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col shrink-0">
+      <div className={cn("bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col shrink-0", pageMode === 'letters' && "hidden")}>
         <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300 mb-5">Output Configuration</h2>
         
         <div className="flex flex-col gap-6">

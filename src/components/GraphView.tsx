@@ -22,6 +22,9 @@ import { clockStore, getClockTime, reportVerts, LatticeNote } from '../lib/clock
 import { DEFAULT_CHANNEL_MESHES, RANDOM_MESH_POOL, loadMeshGeometry, loadMeshGroup } from '../lib/meshLibrary';
 import MirrorDome from './MirrorDome';
 import PrismStage from './PrismStage';
+import AlphabetSphere from './AlphabetSphere';
+import AlphabetOverlay from './AlphabetOverlay';
+import { requestAlphabetLetter, type AlphabetSettings } from '../lib/alphabetSphere';
 import type { PrismColorMode } from '../lib/urlState';
 import type { ParsedMidi } from '../lib/midi';
 import { lightingRigSettings } from '../lib/lighting';
@@ -898,6 +901,9 @@ function buildFormulaGeometry(points: THREE.Vector3[], mode: FormulaGeometryMode
 interface GraphViewProps {
   noteLayout?: NoteLayoutSettings;
   modelScene?: React.ReactNode;
+  // Alphabet Sphere settings while the Letters page is on stage.
+  alphabet?: AlphabetSettings;
+  setAlphabetTour?: (on: boolean) => void;
   formula: Formula;
   shader: ShaderPreset;
   webgpuLighting: number;
@@ -2600,6 +2606,8 @@ function XRVisualThumbstickControls({ setXrVisualTransform }: { setXrVisualTrans
 export default function GraphView({
   noteLayout = DEFAULT_NOTE_LAYOUT,
   modelScene,
+  alphabet,
+  setAlphabetTour,
   formula,
   shader,
   webgpuLighting,
@@ -2741,14 +2749,14 @@ export default function GraphView({
         }}
       >
         <XR store={xrStore}>
-          <CursorReadout targetRef={readoutRef} enabled={!show3D} />
+          <CursorReadout targetRef={readoutRef} enabled={!show3D && !alphabet} />
           <XRPlayerOrigin originRef={xrOriginRef} />
           <XRJoystickLocomotion originRef={xrOriginRef} />
           <XRVisualThumbstickControls setXrVisualTransform={setXrVisualTransform} />
           <XRBeatHaptics enabled={xrHaptics ?? false} />
           <XRMusicButtons midiActive={midiActive} onToggleMusic={onToggleMusic} onCycleLibrary={onCycleLibrary} />
           <XRAlphaController />
-          {modelScene ? <SpatialWrapper modelMode xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>{modelScene}</SpatialWrapper> : <>
+          {alphabet ? <SpatialWrapper modelMode xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}><AlphabetSphere settings={alphabet} onTourInterrupted={() => setAlphabetTour?.(false)} /></SpatialWrapper> : modelScene ? <SpatialWrapper modelMode xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>{modelScene}</SpatialWrapper> : <>
           <XREnvironment preset={webgpuLightingPreset} desktopVisible={showEnvironment && show3D} />
           <RigEnvironment preset={webgpuLightingPreset} intensity={webgpuLighting} />
           {showMirrors && show3D && <MirrorDome radius={80} xrRadius={8} captureOffset={6} xrCaptureOffset={0.35} anchorRef={mirrorAnchorRef} />}
@@ -2876,7 +2884,7 @@ export default function GraphView({
         </XR>
       </Canvas>
       
-      {!show3D && (
+      {!show3D && !alphabet && (
         <div
           ref={readoutRef}
           className="absolute bottom-4 left-4 min-h-[22px] min-w-[130px] rounded border border-cyan-400/15 bg-black/55 px-2.5 py-1 font-mono text-[10px] text-cyan-200/80 backdrop-blur pointer-events-none"
@@ -2889,6 +2897,16 @@ export default function GraphView({
           materialProfile={webgpuMaterial}
           lightingPreset={webgpuLightingPreset}
           onClose={() => setPhotoOpen(false)}
+        />
+      )}
+
+      {alphabet && (
+        <AlphabetOverlay
+          settings={alphabet}
+          onPickLetter={(index) => {
+            requestAlphabetLetter(index);
+            setAlphabetTour?.(false);
+          }}
         />
       )}
 

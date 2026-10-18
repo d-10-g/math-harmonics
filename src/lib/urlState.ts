@@ -8,6 +8,7 @@ import {
   WebGPUMaterialProfile
 } from '../constants';
 import { PRESET_SHADERS } from '../shaders';
+import { ALPHABET_STEREO_MODES, DEFAULT_ALPHABET_SETTINGS, type AlphabetSettings, type AlphabetStereoMode } from './alphabetSphere';
 
 // Shareable state: URL hash wins over localStorage, which wins over defaults.
 // Only preset ids and settings are encoded; custom-edited formula/shader
@@ -52,6 +53,9 @@ export type SharedState = {
   prismColor?: PrismColorMode;
   prismSlice?: number; // 0.05..0.5 of the spectrum per note
   prismPerChannel?: boolean;
+  // Alphabet Sphere (the Letters page): stereo view, baseline, relief,
+  // collimation, point size, tour and rings.
+  alphabet?: Partial<AlphabetSettings>;
 };
 
 const GEOMETRY_VALUES: WebGPUGeometryProfile[] = ['auto', 'tube', 'ribbon', 'extrude', 'lathe', 'crystal', 'surface', 'helix', 'shell', 'terrain', 'constellation', 'knot', 'mandala', 'lattice', 'ripple', 'prism', 'vortex'];
@@ -102,6 +106,23 @@ function parseParams(params: URLSearchParams): SharedState {
   const prismSlice = read('psw');
   if (prismSlice !== undefined && Number.isFinite(parseFloat(prismSlice))) state.prismSlice = Math.min(0.5, Math.max(0.05, parseFloat(prismSlice)));
   state.prismPerChannel = flag('ppc');
+  const bounded = (key: string, min: number, max: number) => {
+    const raw = read(key);
+    if (raw === undefined) return undefined;
+    const value = parseFloat(raw);
+    return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : undefined;
+  };
+  const alphabet: Partial<AlphabetSettings> = {
+    stereo: oneOf(read('als'), ALPHABET_STEREO_MODES.map((mode) => mode.id) as AlphabetStereoMode[]),
+    baseline: bounded('alb', 0, 0.65),
+    relief: bounded('alr', 0, 1),
+    collimation: bounded('alc', 0, 1),
+    pointSize: bounded('alp', 1, 5),
+    tour: flag('alt'),
+    rings: flag('alg')
+  };
+  const alphabetDefined = Object.fromEntries(Object.entries(alphabet).filter(([, v]) => v !== undefined)) as Partial<AlphabetSettings>;
+  if (Object.keys(alphabetDefined).length) state.alphabet = alphabetDefined;
   const bloom = read('bl');
   if (bloom !== undefined && Number.isFinite(parseFloat(bloom))) state.bloomIntensity = Math.min(3, Math.max(0, parseFloat(bloom)));
   const lineWidth = read('lw');
@@ -165,6 +186,14 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('pcm', state.prismColor);
   params.set('psw', state.prismSlice.toFixed(2));
   params.set('ppc', state.prismPerChannel ? '1' : '0');
+  const alphabet = { ...DEFAULT_ALPHABET_SETTINGS, ...state.alphabet };
+  params.set('als', alphabet.stereo);
+  params.set('alb', alphabet.baseline.toFixed(2));
+  params.set('alr', alphabet.relief.toFixed(2));
+  params.set('alc', alphabet.collimation.toFixed(2));
+  params.set('alp', alphabet.pointSize.toFixed(1));
+  params.set('alt', alphabet.tour ? '1' : '0');
+  params.set('alg', alphabet.rings ? '1' : '0');
 
   try {
     history.replaceState(null, '', `#${params.toString()}`);

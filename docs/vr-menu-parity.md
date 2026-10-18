@@ -11,8 +11,10 @@ formula and shader editors with validation, preset search/categories/favorites,
 combos, lighting/material/geometry options and cycling, visual effects,
 autopilot, audio source/library/transport, note effects, note visuals (formulas,
 OBJ, GLB, prism canvas with its colour, slice and per-channel options), OBJ/GLB channel and
-movement mappings, OBJ finish, gesture strength, backgrounds (including the mirror dome), and
-settings import/export. Conditional
+movement mappings, OBJ finish, gesture strength, backgrounds (including the mirror dome),
+settings import/export, and the Letters page's Alphabet Sphere card (stereo view,
+baseline, relief, collimation, point size, tour, depth rings, score picker) plus
+its A–Z letter bar and aligned-letter status over the stage. Conditional
 controls follow the same audio/silent/source rules as the desktop UI. A
 collapsed desktop panel remains available to the spatial console.
 

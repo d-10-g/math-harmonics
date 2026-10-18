@@ -4,6 +4,14 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.13.0 — Letters: the Alphabet Sphere
+
+- A third page beside Audio and Silent: **Letters** (the new header pill, or `?mode=letters`). 70,000 points fill a sphere; 26 viewing axes are spread over it on a Fibonacci spiral, and along each axis the points are arranged so that one capital letter snaps into focus only when you look straight down that axis. From anywhere else they are just the cloud. The perspective pre-compensation is computed in the vertex shader from the live viewing distance, so the letters stay crisp at the desktop orbit distance and as you walk up to the sphere in a headset.
+- **Auto-Tour A → Z** flies from letter to letter and dwells on each; drag to orbit by hand (the tour steps aside), click a letter in the bar under the stage, or step with ← →. The badge names the aligned glyph and its axis angles.
+- **Letter Relief**, **Collimation** and **Point Size** match the standalone page: relief pulls the aligned points forward into a sculpted bas-relief, which is what gives the letters real depth in stereo; collimation sets the contrast between letter and cloud; depth rings frame the sphere.
+- Flat-screen stereo: cross-eye and parallel side-by-side views with fusion guides, red–cyan anaglyph, and a glasses-free wiggle view, all rendered through off-axis eye cameras with an adjustable baseline. In a headset the sphere floats in front of you at true scale, the tour turns the sphere to aim each letter at your head instead of moving you, and the usual grab, scale and turn gestures apply.
+- The music keeps playing: the page lands with the session live like the audio page, the aligned letter pulses gently with the notes, and a score picker sits with the sphere's controls. Every setting is a share-link and VR-menu option.
+
 ## v2.12.1 — The audio page starts itself
 
 - Landing on the audio page now behaves as if the AUDIO pill and the transport's play button had both been pressed: audio sync on, MIDI source, the default piece staged and playing. Reloads no longer drop back to the silent phase transport.

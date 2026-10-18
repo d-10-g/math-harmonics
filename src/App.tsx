@@ -31,6 +31,7 @@ import { PRESET_SHADERS } from './shaders';
 import { createXRStore } from '@react-three/xr';
 import { ActiveNote, LatticeNote, NoteFxMode, clearAudioBands, clearLoop, markBeat, setActiveNotes, setAudioBands, setClockPlayback, setClockTime, setLoopPoint, setNoteFx, setNoteGroupCount, setNoteLattice, setNoteSignals, setNoteSpread, startClock, useClockSnapshot, resetNoteGroupControls, updateNoteGroupControls } from './lib/clock';
 import { loadSharedState, persistSharedState, resolveInitialFormula, resolveInitialShader, type PrismColorMode } from './lib/urlState';
+import { DEFAULT_ALPHABET_SETTINGS, alphabetStatus, requestAlphabetLetter, type AlphabetSettings } from './lib/alphabetSphere';
 import { isVisionProSafari, shouldDefaultToWebGLForXR } from './lib/platform';
 import { COMBOS, Combo } from './lib/combos';
 import { gmInstrumentName, parseMidi, ParsedMidi, MidiControlSampler, SustainMap } from './lib/midi';
@@ -215,23 +216,29 @@ function markWelcomed() {
   }
 }
 
-// Two front doors: 'audio' (music-driven — MIDI library, constellation,
-// transport) and 'silent' (formula/shader studio with no audio UI at all).
+// Three front doors: 'audio' (music-driven — MIDI library, constellation,
+// transport), 'silent' (formula/shader studio with no audio UI at all) and
+// 'letters' (the Alphabet Sphere, which keeps whatever music is playing).
 // The choice is stored per person; ?mode= overrides for shareable links.
-type PageMode = 'audio' | 'silent';
+type PageMode = 'audio' | 'silent' | 'letters';
+const PAGE_MODES: readonly PageMode[] = ['audio', 'silent', 'letters'];
+const isPageMode = (value: string | null): value is PageMode => !!value && (PAGE_MODES as readonly string[]).includes(value);
 const MODE_KEY = 'harmonics.mode.v1';
 const INITIAL_MODE: PageMode | null = (() => {
   try {
     const param = new URLSearchParams(location.search).get('mode');
-    if (param === 'audio' || param === 'silent') return param;
+    if (isPageMode(param)) return param;
     if (new URLSearchParams(location.search).has('demo')) return 'audio';
     const stored = localStorage.getItem(MODE_KEY);
-    if (stored === 'audio' || stored === 'silent') return stored;
+    if (isPageMode(stored)) return stored;
   } catch {
     // Fall through: the chooser overlay will ask.
   }
   return null;
 })();
+
+// Every page but the silent studio lands with the music session live.
+const AUDIO_LANDING = (INITIAL_MODE ?? 'audio') !== 'silent';
 
 // Pre-installed score + rendition pairs (bundled with the owner's consent).
 const MIDI_LIBRARY = [
@@ -419,10 +426,10 @@ export default function App() {
   const [shaderCycleSpeed, setShaderCycleSpeed] = useState(5); // Seconds
   // The audio page lands with its session live, exactly as if the AUDIO pill
   // had been pressed: sync on, MIDI source, default piece staged and playing.
-  const [audioSync, setAudioSync] = useState((INITIAL_MODE ?? 'audio') === 'audio');
+  const [audioSync, setAudioSync] = useState(AUDIO_LANDING);
   const audioSyncRef = useRef(audioSync);
   useEffect(() => { audioSyncRef.current = audioSync; }, [audioSync]);
-  const [audioSource, setAudioSource] = useState<'mic' | 'midi'>((INITIAL_MODE ?? 'audio') === 'audio' ? 'midi' : (initialShared.audioSource ?? 'mic'));
+  const [audioSource, setAudioSource] = useState<'mic' | 'midi'>(AUDIO_LANDING ? 'midi' : (initialShared.audioSource ?? 'mic'));
   // Constellation is the default MIDI experience; the gate below keeps it
   // inert until a MIDI session is actually live, so mic users see no change.
   const [noteMeshes, setNoteMeshes] = useState(initialShared.noteMeshes ?? true);
@@ -433,6 +440,18 @@ export default function App() {
   const [noteSpread, setNoteSpreadState] = useState(initialShared.noteSpread ?? 5);
   useEffect(() => { setNoteSpread(noteSpread); }, [noteSpread]);
   const [pageMode, setPageMode] = useState<PageMode>(INITIAL_MODE ?? 'audio');
+  const pageModeRef = useRef(pageMode);
+  useEffect(() => { pageModeRef.current = pageMode; }, [pageMode]);
+  // Alphabet Sphere settings (the Letters page), shared through the URL hash
+  // like everything else.
+  const [alphabet, setAlphabetState] = useState<AlphabetSettings>(() => ({ ...DEFAULT_ALPHABET_SETTINGS, ...initialShared.alphabet }));
+  const setAlphabet = (patch: Partial<AlphabetSettings>) => setAlphabetState((prev) => ({ ...prev, ...patch }));
+  // Arrow keys on the Letters page: step to the neighbouring letter and take
+  // over from the tour, like picking a letter from the bar.
+  const stepAlphabetLetter = (direction: number) => {
+    requestAlphabetLetter(alphabetStatus.getState().index + direction);
+    setAlphabetState((prev) => (prev.tour ? { ...prev, tour: false } : prev));
+  };
   // The formula library leads the silent studio; the audio page keeps it
   // tucked away (the edge chevron can still peek).
   const [sidebarCollapsed, setSidebarCollapsed] = useState((INITIAL_MODE ?? 'audio') !== 'silent');
@@ -601,10 +620,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoplayMuted]);
 
-  // Landing in audio mode acts as if the AUDIO pill and the transport's play
-  // button had both been pressed: stage the default piece and start it.
+  // Landing on the audio or letters page acts as if the AUDIO pill and the
+  // transport's play button had both been pressed: stage the default piece
+  // and start it.
   useEffect(() => {
-    if (pageMode !== 'audio' || !audioSync || audioSource !== 'midi' || midiInfo) return;
+    if (pageMode === 'silent' || !audioSync || audioSource !== 'midi' || midiInfo) return;
     const lib = MIDI_LIBRARY[0];
     setCurrentLibraryId(lib.id);
     const audio = midiAudioRef.current;
@@ -1283,6 +1303,11 @@ export default function App() {
       setSidebarCollapsed(false); // the formula library is the studio's centerpiece
       return;
     }
+    if (mode === 'letters') {
+      // The sphere keeps whatever music is playing; only the library folds away.
+      setSidebarCollapsed(true);
+      return;
+    }
     setSidebarCollapsed(true);
     setAudioSync(true);
     setAudioSource('midi');
@@ -1448,9 +1473,10 @@ export default function App() {
       noteDisplay,
       prismColor,
       prismSlice,
-      prismPerChannel
+      prismPerChannel,
+      alphabet
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteLayout, noteSource, meshUseMtl, meshAssign, noteDisplay, prismColor, prismSlice, prismPerChannel]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteLayout, noteSource, meshUseMtl, meshAssign, noteDisplay, prismColor, prismSlice, prismPerChannel, alphabet]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -1473,11 +1499,13 @@ export default function App() {
           break;
         case 'ArrowRight':
           e.preventDefault();
-          handleNextFormula();
+          if (pageModeRef.current === 'letters') stepAlphabetLetter(1);
+          else handleNextFormula();
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          handlePrevFormula();
+          if (pageModeRef.current === 'letters') stepAlphabetLetter(-1);
+          else handlePrevFormula();
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -1626,7 +1654,7 @@ export default function App() {
           </div>
           <h1 className="text-xl font-medium tracking-tight">Harmonic.OS <span className="text-indigo-300/80 font-mono text-xs ml-2 uppercase tracking-widest">{APP_VERSION}</span></h1>
           <div className="ml-3 flex rounded-full border border-white/10 bg-white/5 p-0.5">
-            {(['audio', 'silent'] as const).map((mode) => (
+            {(['audio', 'silent', 'letters'] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() => selectMode(mode)}
@@ -1635,7 +1663,7 @@ export default function App() {
                   pageMode === mode ? 'bg-fuchsia-600/40 text-fuchsia-100' : 'text-white/40 hover:text-white/80'
                 }`}
               >
-                {mode === 'audio' ? '♪ Audio' : '✦ Silent'}
+                {mode === 'audio' ? '♪ Audio' : mode === 'silent' ? '✦ Silent' : '◍ Letters'}
               </button>
             ))}
           </div>
@@ -1740,7 +1768,7 @@ export default function App() {
           )}
           <div className="flex-1 relative min-h-0">
             <ErrorBoundary>
-            {rendererMode === 'webgpu' && noteSource === 'formula' ? (
+            {rendererMode === 'webgpu' && noteSource === 'formula' && pageMode !== 'letters' ? (
               <Suspense
                 fallback={
                   <div className="flex h-full w-full items-center justify-center font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
@@ -1767,6 +1795,8 @@ export default function App() {
               <GraphView
                 noteLayout={noteLayout}
                 midi={midiInfo}
+                alphabet={pageMode === 'letters' ? alphabet : undefined}
+                setAlphabetTour={(on) => setAlphabet({ tour: on })}
                 modelScene={noteSource === 'mesh' || noteSource === 'glb' ? <ModelScene midi={midiInfo} getMusicTime={getMusicTime} kind={modelKind} settings={modelSettings[modelKind]} display={noteDisplay} spacing={noteSpread/5} noteLayout={noteLayout} background={modelBackground} hdri={hdri} onBackgroundError={setBackgroundError} materialProfile={webgpuMaterial} lightingPreset={webgpuLightingPreset} noteFxAmount={noteFxAmount} noteFxMode={noteFxMode} /> : undefined}
                 formula={selectedFormula}
                 shader={selectedShader}
@@ -1843,7 +1873,7 @@ export default function App() {
                 setFormulaCycleSpeed={setFormulaCycleSpeed}
                 shaderCycleSpeed={shaderCycleSpeed}
                 setShaderCycleSpeed={setShaderCycleSpeed}
-                showHudInfo={pageMode !== 'audio'}
+                showHudInfo={pageMode === 'silent'}
               />
             )}
             </ErrorBoundary>
@@ -1856,7 +1886,7 @@ export default function App() {
                 🔇 Playing muted · tap anywhere for sound
               </button>
             )}
-            {(noteSource === 'mesh' || noteSource === 'glb') && <div data-spatial-menu="Model status"><PlaybackStatus midi={midiInfo} getMusicTime={getMusicTime}/></div>}
+            {pageMode !== 'letters' && (noteSource === 'mesh' || noteSource === 'glb') && <div data-spatial-menu="Model status"><PlaybackStatus midi={midiInfo} getMusicTime={getMusicTime}/></div>}
           </div>
 
           {/* Footer: one compact row so it survives short windows. A live
@@ -1979,6 +2009,8 @@ export default function App() {
           collapsed={controlsCollapsed}
           onCollapse={() => setControlsCollapsed(true)}
           pageMode={pageMode}
+          alphabet={alphabet}
+          setAlphabet={setAlphabet}
           midiLibrary={MIDI_LIBRARY.map(({ id, name }) => ({ id, name }))}
           onSelectLibrary={loadLibraryEntry}
           audioFileError={audioFileError}
@@ -2080,7 +2112,7 @@ export default function App() {
               <div>
                 <div className="mb-1.5 font-bold uppercase tracking-widest text-[9px] text-white/40">Keyboard</div>
                 <div><span className="text-indigo-300 font-mono">Space</span> — play / pause</div>
-                <div><span className="text-indigo-300 font-mono">← →</span> — previous / next formula</div>
+                <div><span className="text-indigo-300 font-mono">← →</span> — previous / next formula (previous / next letter on the Letters page)</div>
                 <div><span className="text-indigo-300 font-mono">↑ ↓</span> — previous / next shader</div>
                 <div><span className="text-indigo-300 font-mono">F</span> — fullscreen</div>
                 <div><span className="text-indigo-300 font-mono">?</span> — this overlay</div>
