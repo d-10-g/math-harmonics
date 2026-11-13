@@ -59,3 +59,7 @@ Run `npm run validate:menus`, `npm run lint`, `npm run validate:models`, and
 checks, including after model switches. Actual headset testing is still needed
 for controller/gaze ergonomics, system file pickers, and immersive renderer
 transitions.
+
+## Flight studio (v2.14.0)
+
+`Controls · Prism canvas` mirrors the desktop Flight studio, including four look buttons, six trail shapes, three surface modes, the complete OBJ sculpture selector, Flight divergence (0–2 in 0.1 increments), Trail memory (0–120 seconds in 5-second increments, zero = whole score), spectrum slices and shared/per-channel canvases. Divergence is disabled in shared mode on both surfaces. The same DOM controls drive VR, so selected options, disabled states, numeric bounds, and preset actions match. Flights remain on the WebGL/XR canvas. New physical material profiles are available in the shared Output controls.

@@ -26,6 +26,7 @@ import AlphabetSphere from './AlphabetSphere';
 import AlphabetOverlay from './AlphabetOverlay';
 import { requestAlphabetLetter, type AlphabetSettings } from '../lib/alphabetSphere';
 import type { PrismColorMode } from '../lib/urlState';
+import type { PrismShape, PrismFinish } from '../lib/prismTrail';
 import type { ParsedMidi } from '../lib/midi';
 import { lightingRigSettings } from '../lib/lighting';
 import { COMBOS } from '../lib/combos';
@@ -987,6 +988,11 @@ interface GraphViewProps {
   prismColor?: PrismColorMode;
   prismSlice?: number;
   prismPerChannel?: boolean;
+  prismShape?: PrismShape;
+  prismFinish?: PrismFinish;
+  prismPathSpread?: number;
+  prismTrailLength?: number;
+  prismMesh?: string;
   setNoteDisplay?: (mode: 'sounding' | 'all') => void;
   meshLibrary?: string[];
 }
@@ -1756,11 +1762,12 @@ function RigEnvironment({ preset, intensity }: { preset: WebGPULightingPreset; i
   useEffect(() => {
     const pmrem = new THREE.PMREMGenerator(gl);
     const envScene = buildRigEnvironmentScene(preset);
-    const envTexture = pmrem.fromScene(envScene, 0.04).texture;
+    const envTarget = pmrem.fromScene(envScene, 0.04);
+    const envTexture = envTarget.texture;
     scene.environment = envTexture;
     return () => {
       if (scene.environment === envTexture) scene.environment = null;
-      envTexture.dispose();
+      envTarget.dispose();
       pmrem.dispose();
       disposeEnvironmentScene(envScene);
     };
@@ -2339,6 +2346,8 @@ function PhotoMode({
   const [status, setStatus] = useState('Loading path tracer…');
 
   useEffect(() => {
+    setSamples(0);
+    setStatus('Loading path tracer…');
     let disposed = false;
     let raf = 0;
     let renderer: THREE.WebGLRenderer | null = null;
@@ -2684,7 +2693,12 @@ export default function GraphView({
   meshLibrary,
   prismColor = 'full',
   prismSlice = 0.14,
-  prismPerChannel = false
+  prismPerChannel = true,
+  prismShape = 'spectrum',
+  prismFinish = 'spectrum',
+  prismPathSpread = 1,
+  prismTrailLength = 0,
+  prismMesh = 'Star'
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
@@ -2791,7 +2805,7 @@ export default function GraphView({
 
             <group ref={mirrorAnchorRef} />
             {noteSource === 'prism' && show3D ? (
-              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} />
+              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} materialProfile={webgpuMaterial} showWireframe={showWireframe} />
             ) : noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}
@@ -2915,16 +2929,16 @@ export default function GraphView({
           {/* HUD Info */}
           <div className="absolute top-4 left-4 flex flex-col gap-1 pointer-events-none">
             <div className="bg-black/60 border border-white/10 backdrop-blur px-3 py-1.5 rounded-lg">
-              <div className="text-[10px] font-mono text-indigo-400 uppercase tracking-widest">{formula.name}</div>
+              <div className="text-[10px] font-mono text-indigo-400 uppercase tracking-widest">{noteSource === 'prism' ? 'Prism Flight' : formula.name}</div>
             </div>
             <div className="bg-black/40 border border-white/5 backdrop-blur px-2 py-1 rounded text-[8px] font-mono text-white/30 truncate max-w-[200px]">
-              {formula.description}
+              {noteSource === 'prism' ? `${prismShape} · ${prismFinish} · ${prismPerChannel ? 'channel planes' : 'shared plane'}` : formula.description}
             </div>
           </div>
 
           {/* 3D Indicator */}
           <div className="absolute top-4 right-4 bg-black/40 border border-white/10 backdrop-blur p-3 rounded-lg text-[9px] font-mono text-white/50 space-y-1">
-            <div className="flex justify-between gap-4"><span>RENDER_MODE:</span> <span className="text-indigo-400">{show3D ? (formula.parametric ? 'SURFACE(P,Q)' : geometryMode.toUpperCase()) : 'LINEAR'}</span></div>
+            <div className="flex justify-between gap-4"><span>RENDER_MODE:</span> <span className="text-indigo-400">{noteSource === 'prism' && show3D ? 'PRISM FLIGHT' : show3D ? (formula.parametric ? 'SURFACE(P,Q)' : geometryMode.toUpperCase()) : 'LINEAR'}</span></div>
             <div className="flex justify-between gap-4"><span>COORDS:</span> <span className="text-indigo-400">CARTESIAN_3D</span></div>
             <div className="flex justify-between gap-4"><span>SAMPLING:</span> <span className="text-indigo-400">HIGH_RES</span></div>
           </div>

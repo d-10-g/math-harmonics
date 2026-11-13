@@ -97,6 +97,7 @@ interface ControlsProps {
   meshChannelMap: string[];
   setMeshChannelMap: (map: string[]) => void;
   noteDisplay: 'sounding' | 'all';
+  prismFlightControls?: ReactNode;
   prismColor: PrismColorMode;
   setPrismColor: (mode: PrismColorMode) => void;
   prismSlice: number;
@@ -440,6 +441,7 @@ export default function Controls({
   setMeshChannelMap,
   noteDisplay,
   setNoteDisplay,
+  prismFlightControls,
   prismColor,
   setPrismColor,
   prismSlice,
@@ -484,6 +486,8 @@ export default function Controls({
   // OBJ/GLB stages carry their own background + channel mappings; formula
   // and prism stages share the cosmos backdrop and mirror dome.
   const modelStage = noteSource === 'mesh' || noteSource === 'glb';
+  const webglStage = noteSource !== 'formula' || pageMode === 'letters';
+  const activeRenderer = webglStage ? 'webgl' : rendererMode;
   const [isArSupported, setIsArSupported] = useState<boolean | null>(null);
   const [isVrSupported, setIsVrSupported] = useState<boolean | null>(null);
   const [xrActionMessage, setXrActionMessage] = useState<string | null>(null);
@@ -635,7 +639,11 @@ export default function Controls({
     { value: 'chrome', label: 'Chrome' },
     { value: 'ruby', label: 'Ruby' },
     { value: 'ice', label: 'Ice' },
-    { value: 'neon', label: 'Neon' }
+    { value: 'neon', label: 'Neon' },
+    { value: 'ornament', label: 'Ornament Enamel' },
+    { value: 'gold', label: 'Champagne Gold' },
+    { value: 'stained-glass', label: 'Stained Glass' },
+    { value: 'dichroic', label: 'Dichroic Crystal' }
   ];
 
   return (
@@ -799,20 +807,20 @@ export default function Controls({
               <div>
                 <div className="text-xs font-semibold text-white/80">Renderer Path</div>
                 <div className="text-[9px] text-white/30 font-mono">
-                  {rendererMode === 'webgpu' ? 'Full WebGPU + TSL Nodes' : 'Stable WebGL ShaderMaterial'}
+                  {activeRenderer === 'webgpu' ? 'Full WebGPU + TSL Nodes' : 'WebGL · physical materials + GLSL'}
                 </div>
               </div>
               <div className="text-[9px] font-mono uppercase text-cyan-300">
-                {rendererMode}
+                {activeRenderer}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-black/30 p-1">
               <button
                 onClick={() => setRendererMode('webgl')}
-                aria-pressed={rendererMode === 'webgl'}
+                aria-pressed={activeRenderer === 'webgl'}
                 className={cn(
                   "rounded-md px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors",
-                  rendererMode === 'webgl'
+                  activeRenderer === 'webgl'
                     ? "bg-indigo-500/30 text-indigo-100"
                     : "text-white/35 hover:bg-white/[0.08] hover:text-white/70"
                 )}
@@ -822,12 +830,14 @@ export default function Controls({
               </button>
               <button
                 onClick={() => setRendererMode('webgpu')}
-                aria-pressed={rendererMode === 'webgpu'}
+                aria-pressed={activeRenderer === 'webgpu'}
+                disabled={webglStage}
+                title={webglStage ? 'Flights, models, and letters use the WebGL / XR renderer' : 'Use the WebGPU formula renderer'}
                 className={cn(
                   "rounded-md px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors",
-                  rendererMode === 'webgpu'
+                  activeRenderer === 'webgpu'
                     ? "bg-cyan-500/25 text-cyan-100"
-                    : "text-white/35 hover:bg-white/[0.08] hover:text-white/70"
+                    : "text-white/35 hover:bg-white/[0.08] hover:text-white/70 disabled:opacity-35 disabled:cursor-not-allowed"
                 )}
                 type="button"
               >
@@ -835,6 +845,8 @@ export default function Controls({
               </button>
             </div>
           </div>
+
+          {webglStage && <p className="text-[10px] text-white/45">Flights, models, and letters use WebGL with full XR support. Choose Formulas to use WebGPU.</p>}
 
           <div className="space-y-4 rounded-lg border border-cyan-400/15 bg-cyan-400/[0.04] p-3">
               <div className="space-y-3 group">
@@ -934,6 +946,7 @@ export default function Controls({
                   <div className="text-[9px] text-white/30 font-mono">Auto = Formula's Own Shape</div>
                 </div>
                 <select
+                  aria-label="Geometry profile"
                   value={webgpuGeometry}
                   onChange={(e) => setWebgpuGeometry(e.target.value as WebGPUGeometryProfile)}
                   className="w-full rounded-md border border-white/10 bg-black/45 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-cyan-100 outline-none transition-colors focus:border-cyan-300/50"
@@ -1012,6 +1025,7 @@ export default function Controls({
                   </div>
                 </div>
                 <select
+                  aria-label="Material profile"
                   value={webgpuMaterial}
                   onChange={(e) => setWebgpuMaterial(e.target.value as WebGPUMaterialProfile)}
                   className="w-full rounded-md border border-white/10 bg-black/45 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-cyan-100 outline-none transition-colors focus:border-cyan-300/50"
@@ -1384,7 +1398,7 @@ export default function Controls({
                           {audioFileError}
                         </div>
                       )}
-                      <div className="flex items-center justify-between group">
+                      <div className={cn("flex items-center justify-between group", noteSource === 'prism' && "hidden")}>
                         <div>
                           <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Note Constellation</div>
                           <div className="text-[9px] text-white/30 font-mono">One Mesh Per Sounding Note (3D)</div>
@@ -1459,7 +1473,7 @@ export default function Controls({
                           className="mt-1.5 w-full accent-fuchsia-500"
                         />
                       </div>
-                      {noteLayoutControls}
+                      {noteSource !== 'prism' && noteLayoutControls}
                       <div>
                         <div className="text-xs font-semibold text-white/80">Note Visuals</div>
                         <div className="text-[9px] text-white/30 font-mono">What Each Note Renders As</div>
@@ -1483,6 +1497,7 @@ export default function Controls({
                         {modelStage && <div data-spatial-section="Models and channel mappings">{modelControls}</div>}
                         {noteSource === 'prism' && (
                           <div data-spatial-section="Prism canvas" className="mt-2 space-y-2.5 rounded-lg border border-fuchsia-400/20 p-2">
+                            {prismFlightControls}
                             <div>
                               <div className="text-xs font-semibold text-white/80">Prism Colour</div>
                               <div className="text-[9px] text-white/30 font-mono">Whole Spectrum Per Note, Or A Slice By Note Value</div>
@@ -1549,7 +1564,7 @@ export default function Controls({
                             </div>
                           </div>
                         )}
-                        <div className="mt-1.5 grid grid-cols-2 gap-1">
+                        <div className={cn("mt-1.5 grid grid-cols-2 gap-1", noteSource === 'prism' && "hidden")}>
                           {(['sounding', 'all'] as const).map((mode) => (
                             <button
                               key={mode}

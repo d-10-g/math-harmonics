@@ -74,8 +74,17 @@ class Reader {
   offset = 0;
 
   constructor(buffer: ArrayBuffer, start: number, private end: number) {
+    if (start < 0 || end < start || end > buffer.byteLength) {
+      throw new Error('Truncated MIDI: chunk extends past the end of the file');
+    }
     this.view = new DataView(buffer);
     this.offset = start;
+  }
+
+  private require(count: number) {
+    if (!Number.isInteger(count) || count < 0 || this.offset + count > this.end) {
+      throw new Error('Truncated MIDI: event extends past the end of its chunk');
+    }
   }
 
   get done() {
@@ -83,20 +92,24 @@ class Reader {
   }
 
   u8() {
+    this.require(1);
     return this.view.getUint8(this.offset++);
   }
 
   peek() {
+    this.require(1);
     return this.view.getUint8(this.offset);
   }
 
   u16() {
+    this.require(2);
     const value = this.view.getUint16(this.offset);
     this.offset += 2;
     return value;
   }
 
   u32() {
+    this.require(4);
     const value = this.view.getUint32(this.offset);
     this.offset += 4;
     return value;
@@ -107,13 +120,20 @@ class Reader {
     for (let i = 0; i < 4; i++) {
       const byte = this.u8();
       value = (value << 7) | (byte & 0x7f);
-      if ((byte & 0x80) === 0) break;
+      if ((byte & 0x80) === 0) return value;
     }
-    return value;
+    throw new Error('Corrupt MIDI: variable-length value exceeds four bytes');
   }
 
   skip(count: number) {
+    this.require(count);
     this.offset += count;
+  }
+
+  data() {
+    const value = this.u8();
+    if (value > 127) throw new Error('Corrupt MIDI: expected a channel data byte');
+    return value;
   }
 }
 
@@ -121,11 +141,15 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   const header = new Reader(buffer, 0, buffer.byteLength);
   if (header.u32() !== 0x4d546864) throw new Error('Not a MIDI file (missing MThd)');
   const headerLength = header.u32();
-  header.u16(); // format
+  if (headerLength < 6 || headerLength > buffer.byteLength - 8) throw new Error('Corrupt MIDI: invalid header length');
+  const format = header.u16();
+  if (format > 1) throw new Error('MIDI format 2 (independent sequences) is not supported');
   const trackCount = header.u16();
+  if (!trackCount || (format === 0 && trackCount !== 1)) throw new Error('Corrupt MIDI: invalid track count');
   const division = header.u16();
   if (division & 0x8000) throw new Error('SMPTE time division is not supported');
-  const ticksPerBeat = division || 480;
+  if (!division) throw new Error('Corrupt MIDI: ticks per beat must be greater than zero');
+  const ticksPerBeat = division;
 
   type RawNote = { tick: number; durTick: number; pitch: number; velocity: number; track: number; channel: number };
   const rawNotes: RawNote[] = [];
@@ -139,13 +163,14 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   let maxTick = 0;
 
   let cursor = 8 + headerLength;
-  for (let trackIndex = 0; trackIndex < trackCount; trackIndex++) {
+  for (let trackIndex = 0; trackIndex < trackCount;) {
     const view = new DataView(buffer);
-    if (cursor + 8 > buffer.byteLength) break;
+    if (cursor + 8 > buffer.byteLength) throw new Error('Truncated MIDI: missing track chunk');
     const chunkType = view.getUint32(cursor);
     const chunkLength = view.getUint32(cursor + 4);
     const bodyStart = cursor + 8;
     cursor = bodyStart + chunkLength;
+    if (cursor > buffer.byteLength) throw new Error('Truncated MIDI: track extends past the end of the file');
     if (chunkType !== 0x4d54726b) continue; // not MTrk
 
     const reader = new Reader(buffer, bodyStart, bodyStart + chunkLength);
@@ -154,7 +179,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
 
     while (!reader.done) {
       tick += reader.vlq();
-      if (reader.done) break;
+      if (tick > maxTick) maxTick = tick;
 
       let status = reader.peek();
       if (status & 0x80) {
@@ -170,6 +195,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
         const length = reader.vlq();
         if (metaType === 0x51 && length === 3) {
           const usPerBeat = (reader.u8() << 16) | (reader.u8() << 8) | reader.u8();
+          if (!usPerBeat) throw new Error('Corrupt MIDI: tempo must be greater than zero');
           tempoEvents.push({ tick, usPerBeat });
         } else {
           reader.skip(length);
@@ -178,16 +204,17 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
       } else if (status === 0xf0 || status === 0xf7) {
         reader.skip(reader.vlq());
       } else {
+        if (status >= 0xf0) throw new Error('Corrupt MIDI: unsupported event status');
         const kind = status & 0xf0;
         const channel = status & 0x0f;
         if (kind === 0xc0) {
-          const program = reader.u8();
+          const program = reader.data();
           if (programs[channel] === undefined) programs[channel] = program;
         } else if (kind === 0xd0) {
-          rawControls.push({ tick, channel, kind: 'aftertouch', value: reader.u8() / 127 });
+          rawControls.push({ tick, channel, kind: 'aftertouch', value: reader.data() / 127 });
         } else {
-          const data1 = reader.u8();
-          const data2 = reader.u8();
+          const data1 = reader.data();
+          const data2 = reader.data();
           if (kind === 0xb0) {
             const ccKind = CC_KINDS[data1];
             if (ccKind) rawControls.push({ tick, channel, kind: ccKind, value: data1 === 10 ? (data2 - 64) / 64 : data2 / 127 });
@@ -214,8 +241,8 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
           }
         }
       }
-      if (tick > maxTick) maxTick = tick;
     }
+    trackIndex++;
   }
 
   // Ticks -> seconds via the tempo map (default 120 BPM before first event).
@@ -233,11 +260,16 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   }
 
   const tickToSeconds = (tick: number) => {
-    let segment = segments[0];
-    for (const candidate of segments) {
-      if (candidate.tick <= tick) segment = candidate;
-      else break;
+    // Tempo maps can contain thousands of changes. Binary search keeps score
+    // loading proportional to event count rather than events × tempo changes.
+    let lo = 0;
+    let hi = segments.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (segments[mid].tick <= tick) lo = mid + 1;
+      else hi = mid;
     }
+    const segment = segments[Math.max(0, lo - 1)];
     return segment.time + ((tick - segment.tick) / ticksPerBeat) * (segment.usPerBeat / 1e6);
   };
 
@@ -269,8 +301,15 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     .sort((a, b) => a.time - b.time || a.index - b.index)
     .map(({ time, channel, kind, value }) => ({ time, channel, kind, value }));
 
-  const duration = (notes.length ? notes[notes.length - 1].time : 0) + 2;
-  const bpm = Math.round(60e6 / (tempoEvents[0]?.usPerBeat ?? 500000));
+  // Include long final notes and end-of-track rests. A final onset + 2s cut
+  // off held notes and caused the moving score path to stop too early.
+  const duration = Math.max(2, tickToSeconds(maxTick), notes.reduce((end, note) => Math.max(end, note.time + note.duration), 0));
+  let initialTempo = 500000;
+  for (const event of tempoEvents) {
+    if (event.tick !== 0) break;
+    initialTempo = event.usPerBeat;
+  }
+  const bpm = Math.round(60e6 / initialTempo);
 
   return { notes, controls, beats, duration, bpm, trackCount, programs };
 }
@@ -313,7 +352,10 @@ export class SustainMap {
       if (control.kind !== 'sustain') continue;
       let list = this.byChannel.get(control.channel);
       if (!list) this.byChannel.set(control.channel, (list = []));
-      list.push({ time: control.time, down: control.value >= 0.5 });
+      const down = control.value >= 0.5;
+      // Continuous pedals often send many values without changing the held
+      // state. Keep transitions only so per-note lookahead stays constant work.
+      if (list[list.length - 1]?.down !== down) list.push({ time: control.time, down });
     }
   }
 
@@ -330,9 +372,17 @@ export class SustainMap {
     }
     const current = list[lo - 1];
     if (!current || !current.down) return time;
-    for (let i = lo; i < list.length; i++) {
-      if (!list[i].down) return Math.min(list[i].time, time + maxHold);
-    }
-    return time + maxHold;
+    return Math.min(list[lo]?.time ?? Infinity, time + maxHold);
   }
+}
+
+// Model animations use absolute note end times, so pedal-held notes need the
+// same bounded release extension as the formula and prism stages. Keep the
+// parsed score intact: multiple stages may share it at once.
+export function notesWithSustain(midi: Pick<ParsedMidi, 'notes' | 'controls'>, maxHold = 1.2): MidiNote[] {
+  const sustain = new SustainMap(midi.controls ?? []);
+  return midi.notes.map(note => {
+    const duration = sustain.holdUntil(note.channel, note.time + note.duration, maxHold) - note.time;
+    return duration > note.duration ? { ...note, duration } : note;
+  });
 }

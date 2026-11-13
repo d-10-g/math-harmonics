@@ -1,3 +1,5 @@
+import type { PrismShape, PrismFinish } from './prismTrail';
+import { MESH_LIBRARY } from './meshManifest';
 import { normalizeNoteLayout, type NoteLayoutSettings } from './noteLayout';
 import {
   Formula,
@@ -53,13 +55,18 @@ export type SharedState = {
   prismColor?: PrismColorMode;
   prismSlice?: number; // 0.05..0.5 of the spectrum per note
   prismPerChannel?: boolean;
+  prismShape?: PrismShape;
+  prismFinish?: PrismFinish;
+  prismPathSpread?: number;
+  prismTrailLength?: number;
+  prismMesh?: string;
   // Alphabet Sphere (the Letters page): stereo view, baseline, relief,
   // collimation, point size, tour and rings.
   alphabet?: Partial<AlphabetSettings>;
 };
 
 const GEOMETRY_VALUES: WebGPUGeometryProfile[] = ['auto', 'tube', 'ribbon', 'extrude', 'lathe', 'crystal', 'surface', 'helix', 'shell', 'terrain', 'constellation', 'knot', 'mandala', 'lattice', 'ripple', 'prism', 'vortex'];
-const MATERIAL_VALUES: WebGPUMaterialProfile[] = ['auto', 'plasma', 'liquid-metal', 'pearl', 'glass', 'velvet', 'ceramic', 'hologram', 'obsidian', 'copper', 'jade', 'xray', 'carbon', 'chrome', 'ruby', 'ice', 'neon'];
+const MATERIAL_VALUES: WebGPUMaterialProfile[] = ['auto', 'plasma', 'liquid-metal', 'pearl', 'glass', 'velvet', 'ceramic', 'hologram', 'obsidian', 'copper', 'jade', 'xray', 'carbon', 'chrome', 'ruby', 'ice', 'neon', 'ornament', 'gold', 'stained-glass', 'dichroic'];
 const LIGHTING_VALUES: WebGPULightingPreset[] = ['studio', 'aurora', 'gallery', 'eclipse', 'caustic', 'noir', 'sunset', 'laboratory', 'underlight', 'prism'];
 
 function oneOf<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {
@@ -73,7 +80,7 @@ function parseParams(params: URLSearchParams): SharedState {
   state.formulaId = read('f');
   state.shaderId = read('s');
   state.rendererMode = oneOf(read('r'), ['webgl', 'webgpu'] as const);
-  const flag = (key: string) => (params.has(key) ? params.get(key) === '1' : undefined);
+  const flag = (key: string) => params.get(key) === '1' ? true : params.get(key) === '0' ? false : undefined;
   state.show3D = flag('d3');
   state.showWireframe = flag('wf');
   state.showArtifacts = flag('ax');
@@ -106,6 +113,13 @@ function parseParams(params: URLSearchParams): SharedState {
   const prismSlice = read('psw');
   if (prismSlice !== undefined && Number.isFinite(parseFloat(prismSlice))) state.prismSlice = Math.min(0.5, Math.max(0.05, parseFloat(prismSlice)));
   state.prismPerChannel = flag('ppc');
+  state.prismShape = oneOf(read('psh'), ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh'] as const);
+  state.prismFinish = oneOf(read('pfi'), ['spectrum', 'ornament', 'glass'] as const);
+  const divergence = Number(read('ppd'));
+  if (read('ppd') !== undefined && Number.isFinite(divergence)) state.prismPathSpread = Math.min(2, Math.max(0, divergence));
+  const memory = Number(read('ptl'));
+  if (read('ptl') !== undefined && Number.isFinite(memory)) state.prismTrailLength = Math.min(120, Math.max(0, Math.round(memory / 5) * 5));
+  state.prismMesh = oneOf(read('pms'), MESH_LIBRARY);
   const bounded = (key: string, min: number, max: number) => {
     const raw = read(key);
     if (raw === undefined) return undefined;
@@ -130,11 +144,47 @@ function parseParams(params: URLSearchParams): SharedState {
   return state;
 }
 
+// Saved settings are input too: stale or hand-edited storage must not send
+// unknown material ids or out-of-range numbers into the renderer.
+function sanitizeStoredState(value: unknown): SharedState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const saved = value as Record<string, unknown>;
+  const keys: Record<string, string> = {
+    formulaId: 'f', shaderId: 's', rendererMode: 'r', show3D: 'd3', showWireframe: 'wf',
+    showArtifacts: 'ax', showMirrors: 'mr', speed: 'sp', webgpuGeometry: 'geo', webgpuMaterial: 'mat',
+    webgpuLightingPreset: 'rig', webgpuLighting: 'li', autoStyle: 'as', showEnvironment: 'env',
+    lineWidth: 'lw', cycleFavoritesOnly: 'cf', autoPilotShuffle: 'sh', postFX: 'fx', bloomIntensity: 'bl',
+    audioSource: 'asrc', noteMeshes: 'nm', noteFxAmount: 'nfa', noteFxMode: 'nfm', noteSpread: 'nsp',
+    noteSource: 'nsc', meshUseMtl: 'nml', meshAssign: 'nas', noteDisplay: 'nds', prismColor: 'pcm',
+    prismSlice: 'psw', prismPerChannel: 'ppc', prismShape: 'psh', prismFinish: 'pfi',
+    prismPathSpread: 'ppd', prismTrailLength: 'ptl', prismMesh: 'pms',
+  };
+  const params = new URLSearchParams();
+  for (const [field, key] of Object.entries(keys)) {
+    const v = saved[field];
+    if (typeof v === 'boolean') params.set(key, v ? '1' : '0');
+    else if (typeof v === 'string' || typeof v === 'number') params.set(key, String(v));
+  }
+  for (const [field, fields] of Object.entries({
+    noteLayout: { geometry: 'nlg', copies: 'nlc', offset: 'nlo', rotation: 'nlr' },
+    alphabet: { stereo: 'als', baseline: 'alb', relief: 'alr', collimation: 'alc', pointSize: 'alp', tour: 'alt', rings: 'alg' },
+  })) {
+    const nested = saved[field];
+    if (!nested || typeof nested !== 'object' || Array.isArray(nested)) continue;
+    for (const [name, key] of Object.entries(fields)) {
+      const v = (nested as Record<string, unknown>)[name];
+      if (typeof v === 'boolean') params.set(key, v ? '1' : '0');
+      else if (typeof v === 'string' || typeof v === 'number') params.set(key, String(v));
+    }
+  }
+  return Object.fromEntries(Object.entries(parseParams(params)).filter(([, v]) => v !== undefined));
+}
+
 export function loadSharedState(): SharedState {
   let stored: SharedState = {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) stored = JSON.parse(raw) as SharedState;
+    if (raw) stored = sanitizeStoredState(JSON.parse(raw));
   } catch {
     // Corrupt storage is ignored; defaults apply.
   }
@@ -186,6 +236,11 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('pcm', state.prismColor);
   params.set('psw', state.prismSlice.toFixed(2));
   params.set('ppc', state.prismPerChannel ? '1' : '0');
+  params.set('psh', state.prismShape);
+  params.set('pfi', state.prismFinish);
+  params.set('ppd', state.prismPathSpread.toFixed(2));
+  params.set('ptl', String(state.prismTrailLength));
+  params.set('pms', state.prismMesh);
   const alphabet = { ...DEFAULT_ALPHABET_SETTINGS, ...state.alphabet };
   params.set('als', alphabet.stereo);
   params.set('alb', alphabet.baseline.toFixed(2));

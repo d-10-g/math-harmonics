@@ -19,6 +19,8 @@ import {
 } from '../constants';
 import { getClockTime, reportVerts } from '../lib/clock';
 import { lightingRigSettings } from '../lib/lighting';
+import { physicalProfileSettings } from '../lib/materials';
+import { buildRigEnvironmentScene, disposeEnvironmentScene } from '../lib/environments';
 import { buildParametricGeometry, surfaceMidQ } from '../lib/parametricSurface';
 
 type WebGPUViewProps = {
@@ -54,7 +56,9 @@ type WebGPURefs = {
   mirrors: THREE.Group;
   mirrorCamera: THREE.CubeCamera;
   mirrorTarget: THREE.CubeRenderTarget;
-  material: THREE.MeshStandardNodeMaterial;
+  material: THREE.MeshPhysicalNodeMaterial;
+  environmentTarget: THREE.RenderTarget | null;
+  environmentPreset: WebGPULightingPreset | null;
   geometry: THREE.BufferGeometry;
   ambientLight: THREE.AmbientLight;
   hemiLight: THREE.HemisphereLight;
@@ -115,7 +119,11 @@ const MATERIAL_PROFILES: Exclude<WebGPUMaterialProfile, 'auto'>[] = [
   'chrome',
   'ruby',
   'ice',
-  'neon'
+  'neon',
+  'ornament',
+  'gold',
+  'stained-glass',
+  'dichroic'
 ];
 
 function hashText(text: string) {
@@ -289,7 +297,7 @@ function materialSettings(profile: Exclude<WebGPUMaterialProfile, 'auto'>) {
     case 'pearl':
       return { palette: [0xf8fafc, 0xa5b4fc, 0xf9a8d4], colorGain: 1.34, emissive: 0.14, roughLow: 0.22, roughHigh: 0.58, metalLow: 0.0, metalHigh: 0.08, opacity: 1, hotMix: 0.74, alpha: false, additive: false };
     case 'glass':
-      return { palette: [0x06111f, 0x38bdf8, 0xe0f2fe], colorGain: 1.55, emissive: 0.48, roughLow: 0.01, roughHigh: 0.12, metalLow: 0.0, metalHigh: 0.04, opacity: 0.64, hotMix: 0.86, alpha: true, additive: false };
+      return { palette: [0x06111f, 0x38bdf8, 0xe0f2fe], colorGain: 1.0, emissive: 0.08, roughLow: 0.02, roughHigh: 0.12, metalLow: 0.0, metalHigh: 0.0, opacity: 1, hotMix: 0.4, alpha: false, additive: false };
     case 'velvet':
       return { palette: [0x16051a, 0x7c2d12, 0xf0abfc], colorGain: 1.52, emissive: 0.55, roughLow: 0.86, roughHigh: 1.0, metalLow: 0.0, metalHigh: 0.01, opacity: 1, hotMix: 1.0, alpha: false, additive: false };
     case 'ceramic':
@@ -314,6 +322,14 @@ function materialSettings(profile: Exclude<WebGPUMaterialProfile, 'auto'>) {
       return { palette: [0x082f49, 0x7dd3fc, 0xf0f9ff], colorGain: 1.62, emissive: 0.72, roughLow: 0.03, roughHigh: 0.2, metalLow: 0.0, metalHigh: 0.02, opacity: 0.56, hotMix: 1.08, alpha: true, additive: false };
     case 'neon':
       return { palette: [0x050116, 0x22d3ee, 0xf0abfc], colorGain: 1.9, emissive: 1.32, roughLow: 0.04, roughHigh: 0.24, metalLow: 0.0, metalHigh: 0.18, opacity: 0.72, hotMix: 1.3, alpha: true, additive: true };
+    case 'ornament':
+      return { palette: [0x431026, 0xc71f55, 0xf4bc7a], colorGain: 1.0, emissive: 0.025, roughLow: 0.10, roughHigh: 0.2, metalLow: 0.96, metalHigh: 0.96, opacity: 1, hotMix: 0.12, alpha: false, additive: false };
+    case 'gold':
+      return { palette: [0x916122, 0xe8b84d, 0xffdf8d], colorGain: 1.0, emissive: 0.025, roughLow: 0.12, roughHigh: 0.22, metalLow: 1.0, metalHigh: 1.0, opacity: 1, hotMix: 0.16, alpha: false, additive: false };
+    case 'stained-glass':
+      return { palette: [0x63298c, 0xb765dc, 0xe6b8ff], colorGain: 1.0, emissive: 0.025, roughLow: 0.06, roughHigh: 0.13, metalLow: 0.0, metalHigh: 0.0, opacity: 1, hotMix: 0.24, alpha: false, additive: false };
+    case 'dichroic':
+      return { palette: [0x297c91, 0x9bdedb, 0xdfb9ee], colorGain: 1.0, emissive: 0.025, roughLow: 0.06, roughHigh: 0.14, metalLow: 0.0, metalHigh: 0.0, opacity: 1, hotMix: 0.24, alpha: false, additive: false };
     case 'plasma':
     default:
       return { palette: [0x12041f, 0x8b5cf6, 0x22d3ee], colorGain: 1.62, emissive: 0.88, roughLow: 0.06, roughHigh: 0.34, metalLow: 0.0, metalHigh: 0.24, opacity: 1, hotMix: 1.0, alpha: false, additive: false };
@@ -1028,7 +1044,26 @@ function createNodeMaterial(shader: ShaderPreset, showWireframe: boolean, webgpu
   const [baseHex, accentHex, hotHex] = webgpuMaterial === 'auto'
     ? [shaderBaseHex, shaderAccentHex, shaderHotHex]
     : settings.palette;
-  const material = new THREE.MeshStandardNodeMaterial();
+  const material = new THREE.MeshPhysicalNodeMaterial();
+  // Keep the optical layers identical to WebGL/XR instead of approximating
+  // glass with alpha blending. TSL still drives each profile's color field.
+  const physical = physicalProfileSettings(resolvedProfile);
+  material.clearcoat = physical.clearcoat ?? 0;
+  material.clearcoatRoughness = physical.clearcoatRoughness ?? 0;
+  material.transmission = physical.transmission ?? 0;
+  material.thickness = physical.thickness ?? 0;
+  material.ior = physical.ior ?? 1.5;
+  material.dispersion = physical.dispersion ?? 0;
+  material.iridescence = physical.iridescence ?? 0;
+  material.iridescenceIOR = physical.iridescenceIOR ?? 1.3;
+  if (physical.iridescenceThicknessRange) material.iridescenceThicknessRange = [...physical.iridescenceThicknessRange];
+  material.sheen = physical.sheen ?? 0;
+  material.sheenColor.setHex(physical.sheenColor ?? 0x000000);
+  material.sheenRoughness = physical.sheenRoughness ?? 1;
+  material.attenuationColor.setHex(physical.attenuationColor ?? 0xffffff);
+  material.attenuationDistance = physical.attenuationDistance ?? Infinity;
+  material.specularIntensity = physical.specularIntensity ?? 1;
+  material.envMapIntensity = physical.envMapIntensity ?? 1;
 
   const waveA = positionWorld.x
     .mul(0.24 + seed * 0.28)
@@ -1092,9 +1127,10 @@ function createNodeMaterial(shader: ShaderPreset, showWireframe: boolean, webgpu
   material.emissiveNode = mix(color(accentHex), color(hotHex), glow).mul(field.mul(settings.emissive));
   material.roughnessNode = mix(float(settings.roughHigh), float(settings.roughLow), glow);
   material.metalnessNode = mix(float(settings.metalLow), float(settings.metalHigh), waveB);
-  material.opacity = settings.opacity;
-  material.transparent = settings.alpha;
-  material.depthWrite = !settings.alpha;
+  const transmitting = material.transmission > 0;
+  material.opacity = transmitting ? 1 : settings.opacity;
+  material.transparent = transmitting ? false : settings.alpha;
+  material.depthWrite = !material.transparent;
   material.blending = settings.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
   material.side = THREE.DoubleSide;
   material.wireframe = showWireframe;
@@ -1108,7 +1144,12 @@ function applyLighting(current: WebGPURefs, webgpuLighting: number, webgpuLighti
 
   current.scene.background = new THREE.Color(rig.background);
   current.renderer.setClearColor(rig.background, 1);
-  current.renderer.toneMappingExposure = lighting;
+  // The reflective environment now supplies indirect illumination, so match
+  // WebGL's restrained exposure and fill instead of washing out coated metal.
+  const xrTone = current.isXRPresenting ? 0.7 : 1;
+  const xrFill = current.isXRPresenting ? 0.78 : 1;
+  const xrKey = current.isXRPresenting ? 0.8 : 1;
+  current.renderer.toneMappingExposure = (0.53 + lighting * 0.35) * xrTone;
   current.ambientLight.color.setHex(rig.ambient);
   current.hemiLight.color.setHex(rig.ambient);
   current.hemiLight.groundColor.setHex(rig.ground);
@@ -1118,11 +1159,47 @@ function applyLighting(current: WebGPURefs, webgpuLighting: number, webgpuLighti
   current.keyLight.position.set(...rig.keyPosition);
   current.rimLight.position.set(...rig.rimPosition);
   current.fillLight.position.set(...rig.fillPosition);
-  current.ambientLight.intensity = 0.42 + lighting * rig.ambientScale;
-  current.hemiLight.intensity = 0.62 + lighting * rig.hemiScale;
-  current.keyLight.intensity = rig.keyScale * lighting;
-  current.rimLight.intensity = rig.rimScale * lighting;
-  current.fillLight.intensity = rig.fillScale * lighting;
+  current.ambientLight.intensity = (0.25 + lighting * rig.ambientScale * 0.5) * xrFill;
+  current.hemiLight.intensity = (0.4 + lighting * rig.hemiScale * 0.55) * xrFill;
+  current.keyLight.intensity = rig.keyScale * lighting * 0.8 * xrKey;
+  current.rimLight.intensity = rig.rimScale * lighting * 0.55 * xrKey;
+  current.fillLight.intensity = rig.fillScale * lighting * 0.6 * xrKey;
+  current.scene.environmentIntensity = (0.45 + lighting * 0.45) * (current.isXRPresenting ? 0.78 : 1);
+
+  // Metal needs a reflected world, not just punctual lights. Bake the same
+  // rig scene as WebGL once per rig, rather than rendering a cube every frame.
+  if (current.environmentPreset !== webgpuLightingPreset) {
+    const generator = new THREE.PMREMGenerator(current.renderer);
+    const environmentScene = buildRigEnvironmentScene(webgpuLightingPreset);
+    const renderer = current.renderer;
+    const previousTarget = renderer.getRenderTarget();
+    const previousFace = renderer.getActiveCubeFace();
+    const previousMip = renderer.getActiveMipmapLevel();
+    const previousAutoClear = renderer.autoClear;
+    const previousXR = renderer.xr.enabled;
+    try {
+      // A rig can be selected from an immersive menu. The bake uses its own
+      // cube camera, so the headset's stereo cameras must stay out of it.
+      renderer.xr.enabled = false;
+      const target = generator.fromScene(environmentScene, 0.025);
+      current.scene.environment = target.texture;
+      current.environmentTarget?.dispose();
+      current.environmentTarget = target;
+      current.environmentPreset = webgpuLightingPreset;
+    } catch (error) {
+      // A driver refusing environment convolution must not blank the stage.
+      // Keep the previous environment until another rig is selected.
+      current.environmentPreset = webgpuLightingPreset;
+      console.warn('Unable to bake WebGPU reflection environment:', error);
+    } finally {
+      // PMREM restores these on success; restore them on driver errors too.
+      renderer.setRenderTarget(previousTarget, previousFace, previousMip);
+      renderer.autoClear = previousAutoClear;
+      renderer.xr.enabled = previousXR;
+      generator.dispose();
+      disposeEnvironmentScene(environmentScene);
+    }
+  }
 }
 
 function createExtras() {
@@ -1577,6 +1654,8 @@ export default function WebGPUView({
         mirrorCamera,
         mirrorTarget,
         material,
+        environmentTarget: null,
+        environmentPreset: null,
         geometry,
         ambientLight,
         hemiLight,
@@ -1690,6 +1769,8 @@ export default function WebGPUView({
         }
       });
       current.mirrorTarget.dispose();
+      current.scene.environment = null;
+      current.environmentTarget?.dispose();
       current.renderer.dispose();
       current.renderer.domElement.remove();
     };

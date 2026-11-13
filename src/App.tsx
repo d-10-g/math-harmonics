@@ -14,6 +14,7 @@ import type { HdriFile } from './components/ModelBackdrop';
 import { ModelScene, PlaybackStatus } from './components/ErnieView';
 import GraphView from './components/GraphView';
 import Controls from './components/Controls';
+import PrismFlightControls, { type PrismFlightSettings, type PrismLook } from './components/PrismFlightControls';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // The WebGPU path (three/webgpu + TSL) is a large chunk; load it only when
@@ -74,7 +75,11 @@ const WEBGPU_MATERIAL_PRESETS: Exclude<WebGPUMaterialProfile, 'auto'>[] = [
   'chrome',
   'ruby',
   'ice',
-  'neon'
+  'neon',
+  'ornament',
+  'gold',
+  'stained-glass',
+  'dichroic'
 ];
 
 const xrStore = createXRStore({
@@ -467,6 +472,7 @@ export default function App() {
     // Browser-offered sessions can begin while a model is displayed, even if
     // a WebGPU preference was saved. Keep the XR canvas for source changes.
     if (xrStore.getState().session) setRendererMode('webgl');
+    if (source !== 'formula') setRendererMode('webgl');
     setNoteSourceState(source);
   }, []);
   const [meshUseMtl, setMeshUseMtl] = useState(initialShared.meshUseMtl ?? false);
@@ -475,7 +481,38 @@ export default function App() {
   // Prism canvas options: spectrum slice per note and one canvas per channel.
   const [prismColor, setPrismColor] = useState<PrismColorMode>(initialShared.prismColor ?? 'full');
   const [prismSlice, setPrismSlice] = useState(initialShared.prismSlice ?? 0.14);
-  const [prismPerChannel, setPrismPerChannel] = useState(initialShared.prismPerChannel ?? false);
+  const [prismPerChannel, setPrismPerChannel] = useState(initialShared.prismPerChannel ?? true);
+  const [prismFlight, setPrismFlight] = useState<PrismFlightSettings>({
+    prismShape: initialShared.prismShape ?? 'spectrum',
+    prismFinish: initialShared.prismFinish ?? 'spectrum',
+    prismPathSpread: initialShared.prismPathSpread ?? 1,
+    prismTrailLength: initialShared.prismTrailLength ?? 0,
+    prismMesh: initialShared.prismMesh ?? 'Star',
+  });
+  const applyPrismLook = (look: PrismLook) => {
+    setNoteSource('prism');
+    setShow3D(true);
+    setShowWireframe(false);
+    setNoteMeshes(true);
+    setPrismPerChannel(true);
+    setPrismColor(look === 'spectral' ? 'full' : 'chroma');
+    setPrismSlice(0.14);
+    setAutoStyle(false);
+    setAutoCycleWebgpuMaterial(false);
+    setAutoCycleWebgpuLighting(false);
+    setWebgpuMaterial('auto');
+    setWebgpuLightingPreset(look === 'glass' ? 'prism' : 'studio');
+    setWebgpuLighting(1.15);
+    setPostFX(true);
+    setBloomIntensity(look === 'spectral' ? 0.8 : 0.25);
+    setPrismFlight({
+      prismShape: look === 'ornaments' ? 'sphere' : look === 'glass' ? 'crystal' : look === 'sculptures' ? 'mesh' : 'spectrum',
+      prismFinish: look === 'spectral' ? 'spectrum' : look === 'glass' ? 'glass' : 'ornament',
+      prismPathSpread: look === 'spectral' ? 1.2 : 0.8,
+      prismTrailLength: look === 'spectral' ? 45 : 25,
+      prismMesh: 'Star',
+    });
+  };
   const [meshChannelMap, setMeshChannelMap] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem('harmonics.meshmap.v1');
@@ -628,7 +665,7 @@ export default function App() {
     const lib = MIDI_LIBRARY[0];
     setCurrentLibraryId(lib.id);
     const audio = midiAudioRef.current;
-    if (audio && !audio.src) audio.src = lib.audio;
+    if (audio && !audio.src) replaceAudioSource(lib.audio);
     void loadMidiSource(lib.mid, undefined, false);
     if (audio) autoStartPlayback(audio);
     // Mount-time staging only; later mode/source changes handle themselves.
@@ -734,11 +771,23 @@ export default function App() {
   // Local file picks can't do that — the browser sandbox has no
   // access to a picked file's folder — so the file dialog accepts a
   // multi-select and pairs the audio from the same selection instead.
+  const localAudioUrl = useRef<string | null>(null);
+  const replaceAudioSource = (source: File | string) => {
+    if (!midiAudioRef.current) return;
+    const previous = localAudioUrl.current;
+    const url = typeof source === 'string' ? source : URL.createObjectURL(source);
+    localAudioUrl.current = typeof source === 'string' ? null : url;
+    midiAudioRef.current.src = url;
+    if (previous) URL.revokeObjectURL(previous);
+  };
+  useEffect(() => () => {
+    if (localAudioUrl.current) URL.revokeObjectURL(localAudioUrl.current);
+  }, []);
   const midiLoadGeneration = useRef(0);
   const loadMidiSource = async (midiSource: File | string, audioSrc?: File | string, probeAudio = true) => {
     const generation = ++midiLoadGeneration.current;
     const buffer = typeof midiSource === 'string'
-      ? await fetch(midiSource).then((r) => r.arrayBuffer())
+      ? await fetch(midiSource).then((r) => { if (!r.ok) throw new Error(`MIDI download failed (${r.status})`); return r.arrayBuffer(); })
       : await midiSource.arrayBuffer();
     if (generation !== midiLoadGeneration.current) return;
     const parsed = parseMidi(buffer);
@@ -747,7 +796,7 @@ export default function App() {
       : midiSource.name;
     setMidiInfo({ ...parsed, name });
     if (audioSrc && midiAudioRef.current) {
-      midiAudioRef.current.src = typeof audioSrc === 'string' ? audioSrc : URL.createObjectURL(audioSrc);
+      replaceAudioSource(audioSrc);
     } else if (probeAudio && typeof midiSource === 'string' && midiAudioRef.current) {
       const base = midiSource.replace(/\.[^./]+$/, '');
       // Probe only formats this browser can actually decode (Chrome, for
@@ -766,7 +815,7 @@ export default function App() {
           const type = head.headers.get('content-type') ?? '';
           if (head.ok && !type.includes('text/html')) {
             if (generation !== midiLoadGeneration.current || !midiAudioRef.current) return;
-            midiAudioRef.current.src = candidate;
+            replaceAudioSource(candidate);
             break;
           }
         } catch {
@@ -1325,7 +1374,7 @@ export default function App() {
       const lib = MIDI_LIBRARY[0];
       setCurrentLibraryId(lib.id);
       const audio = midiAudioRef.current;
-      if (audio) audio.src = lib.audio;
+      if (audio) replaceAudioSource(lib.audio);
       void loadMidiSource(lib.mid, undefined, false);
     }
   };
@@ -1340,7 +1389,7 @@ export default function App() {
     setCurrentLibraryId(lib.id);
     const audio = midiAudioRef.current;
     if (audio) {
-      audio.src = lib.audio;
+      replaceAudioSource(lib.audio);
       void audio.play().catch((error) => console.warn('Autoplay blocked:', error));
     }
     void loadMidiSource(lib.mid, undefined, false);
@@ -1352,7 +1401,7 @@ export default function App() {
     setCurrentLibraryId(id);
     const audio = midiAudioRef.current;
     if (audio) {
-      audio.src = entry.audio;
+      replaceAudioSource(entry.audio);
       // Selecting from the dropdown is a gesture: start playing right away.
       void audio.play().catch(() => {
         // Autoplay refused (e.g. programmatic selection) — transport will start it.
@@ -1474,15 +1523,16 @@ export default function App() {
       prismColor,
       prismSlice,
       prismPerChannel,
+      ...prismFlight,
       alphabet
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteLayout, noteSource, meshUseMtl, meshAssign, noteDisplay, prismColor, prismSlice, prismPerChannel, alphabet]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteLayout, noteSource, meshUseMtl, meshAssign, noteDisplay, prismColor, prismSlice, prismPerChannel, prismFlight, alphabet]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return;
+      if (e.defaultPrevented || e.repeat || target?.closest('input, textarea, select, button, a, [contenteditable="true"], [role="slider"]')) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       switch (e.key) {
@@ -1527,8 +1577,9 @@ export default function App() {
     // Handlers only use functional state updates and document APIs.
   }, []);
 
+  const activeRenderer = rendererMode === 'webgpu' && noteSource === 'formula' && pageMode !== 'letters' ? 'webgpu' : 'webgl';
   const saveSnapshot = () => {
-    if (rendererMode === 'webgpu') {
+    if (activeRenderer === 'webgpu') {
       // The WebGPU canvas must be captured inside its own render loop.
       window.dispatchEvent(new CustomEvent('math-harmonics:webgpu-capture', { detail: { name: selectedFormula.id } }));
       return;
@@ -1609,7 +1660,7 @@ export default function App() {
     setNoteMeshes(true);
     const audio = midiAudioRef.current;
     if (audio) {
-      audio.src = DEMO_AUDIO_URL;
+      replaceAudioSource(DEMO_AUDIO_URL);
       // Called inside the click gesture, so autoplay is permitted.
       void audio.play().catch((error) => console.warn('Demo playback blocked:', error));
     }
@@ -1645,15 +1696,15 @@ export default function App() {
   };
 
   return (
-    <div className="w-full h-screen bg-[#050505] text-[#e0e0e0] font-sans flex flex-col overflow-hidden p-4 lg:p-6 gap-5">
+    <div className="w-full h-dvh min-h-0 bg-[#050505] text-[#e0e0e0] font-sans flex flex-col overflow-hidden p-3 sm:p-4 lg:p-6 gap-3 sm:gap-5">
       {/* Header Section */}
-      <header data-spatial-menu="Application" className="flex justify-between items-center border-b border-white/10 pb-4 shrink-0">
-        <div className="flex items-center gap-3">
+      <header data-spatial-menu="Application" className="flex flex-wrap justify-between items-center gap-3 border-b border-white/10 pb-3 sm:pb-4 shrink-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
           <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center">
             <div className="w-4 h-4 border-2 border-white rounded-sm rotate-45"></div>
           </div>
           <h1 className="text-xl font-medium tracking-tight">Harmonic.OS <span className="text-indigo-300/80 font-mono text-xs ml-2 uppercase tracking-widest">{APP_VERSION}</span></h1>
-          <div className="ml-3 flex rounded-full border border-white/10 bg-white/5 p-0.5">
+          <div className="sm:ml-3 flex rounded-full border border-white/10 bg-white/5 p-0.5">
             {(['audio', 'silent', 'letters'] as const).map((mode) => (
               <button
                 key={mode}
@@ -1668,7 +1719,7 @@ export default function App() {
             ))}
           </div>
         </div>
-        <div className="flex gap-4 items-center">
+        <div className="flex flex-wrap gap-2 lg:gap-4 items-center">
           <button
             onClick={() => setShowHelp(true)}
             className="h-7 w-7 rounded-full border border-white/10 hover:bg-white/5 text-[11px] font-mono text-white/50 hover:text-white transition-colors"
@@ -1678,9 +1729,9 @@ export default function App() {
           </button>
           <button
             data-spatial-browser onClick={() => window.dispatchEvent(new Event('math-harmonics:photo-mode'))}
-            disabled={rendererMode !== 'webgl'}
+            disabled={activeRenderer !== 'webgl' || noteSource !== 'formula' || pageMode === 'letters'}
             className="px-3 py-1 hover:bg-white/5 rounded-full border border-fuchsia-400/25 text-[10px] font-mono text-fuchsia-300/80 hover:text-fuchsia-200 transition-colors uppercase tracking-widest disabled:opacity-35 disabled:cursor-not-allowed"
-            title={rendererMode === 'webgl' ? 'Path-traced still of the current formula' : 'Photo mode needs the WebGL renderer'}
+            title={activeRenderer === 'webgl' && noteSource === 'formula' && pageMode !== 'letters' ? 'Path-traced still of the current formula' : 'Photo mode is available for WebGL formulas; Save PNG captures this view'}
           >
             Photo
           </button>
@@ -1705,15 +1756,15 @@ export default function App() {
           >
             Full Screen
           </button>
-          <div className="px-3 py-1 bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-indigo-400 uppercase">
+          <div className="hidden 2xl:block px-3 py-1 bg-white/5 rounded-full border border-white/10 text-[10px] font-mono text-indigo-400 uppercase">
             Active Signal: Resonance Lock
           </div>
-          <div className="text-[10px] text-white/40 uppercase tracking-widest font-semibold font-mono">Real-Time Engine</div>
+          <div className="hidden 2xl:block text-[10px] text-white/40 uppercase tracking-widest font-semibold font-mono">Real-Time Engine</div>
         </div>
       </header>
 
       {/* Main Workspace */}
-      <main className={`flex-1 grid grid-cols-1 gap-5 overflow-y-auto xl:overflow-hidden custom-scrollbar ${
+      <main className={`flex-1 min-h-0 grid grid-cols-1 gap-5 overflow-y-auto xl:overflow-hidden custom-scrollbar ${
         sidebarCollapsed ? 'lg:grid-cols-[minmax(0,1fr)]' : 'lg:grid-cols-[260px_minmax(0,1fr)]'
       } ${
         sidebarCollapsed
@@ -1833,6 +1884,11 @@ export default function App() {
                 prismColor={prismColor}
                 prismSlice={prismSlice}
                 prismPerChannel={prismPerChannel}
+                prismShape={prismFlight.prismShape}
+                prismFinish={prismFlight.prismFinish}
+                prismPathSpread={prismFlight.prismPathSpread}
+                prismTrailLength={prismFlight.prismTrailLength}
+                prismMesh={prismFlight.prismMesh}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
@@ -2006,6 +2062,7 @@ export default function App() {
           setPrismSlice={setPrismSlice}
           prismPerChannel={prismPerChannel}
           setPrismPerChannel={setPrismPerChannel}
+          prismFlightControls={<PrismFlightControls value={prismFlight} onChange={patch => setPrismFlight(prev => ({ ...prev, ...patch }))} onLook={applyPrismLook} meshLibrary={MESH_LIBRARY} perChannel={prismPerChannel} />}
           collapsed={controlsCollapsed}
           onCollapse={() => setControlsCollapsed(true)}
           pageMode={pageMode}
@@ -2016,7 +2073,7 @@ export default function App() {
           audioFileError={audioFileError}
           onLoadMidiFile={(files) => { void loadMidiFiles(files); }}
           onLoadAudioFile={(file) => {
-            if (midiAudioRef.current) midiAudioRef.current.src = URL.createObjectURL(file);
+            replaceAudioSource(file);
           }}
           midiAudioRef={midiAudioRef}
           speedQuant={speedQuant}
@@ -2045,12 +2102,12 @@ export default function App() {
       </main>
 
       {/* Footer Info */}
-      <footer className="flex justify-between text-[9px] text-white/20 font-mono uppercase tracking-[0.2em] border-t border-white/10 pt-4 shrink-0">
-        <div>Engine: {rendererMode === 'webgpu' ? `Three-r185 WebGPU-TSL / ${webgpuLighting.toFixed(2)}x light` : 'Three-r185 WebGL-Harmonics'}</div>
-        <div className="flex gap-8">
+      <footer className="flex flex-wrap gap-2 justify-between text-[9px] text-white/20 font-mono uppercase tracking-[0.2em] border-t border-white/10 pt-4 shrink-0">
+        <div>Engine: {activeRenderer === 'webgpu' ? `Three-r185 WebGPU-TSL / ${webgpuLighting.toFixed(2)}x light` : 'Three-r185 WebGL-Harmonics'}</div>
+        <div className="hidden md:flex gap-8">
           <span>Phase t: [0, 4π]</span>
           <FooterVerts />
-          <span>Mode: {show3D ? (selectedFormula.parametric ? 'SURFACE(P,Q)' : (webgpuGeometry !== 'auto' ? webgpuGeometry : selectedFormula.geometryMode)?.toUpperCase() || 'VARIED_3D') : 'ORTHO_2D'}</span>
+          <span>Mode: {pageMode === 'letters' ? 'ALPHABET SPHERE' : noteSource === 'prism' ? `PRISM / ${prismFlight.prismShape.toUpperCase()}` : noteSource !== 'formula' ? noteSource.toUpperCase() : show3D ? (selectedFormula.parametric ? 'SURFACE(P,Q)' : (webgpuGeometry !== 'auto' ? webgpuGeometry : selectedFormula.geometryMode)?.toUpperCase() || 'VARIED_3D') : 'ORTHO_2D'}</span>
         </div>
         <FooterStats />
       </footer>

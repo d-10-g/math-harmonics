@@ -2,7 +2,7 @@
   "name": "math-harmonics",
   "productName": "Harmonic.OS",
   "private": true,
-  "version": "2.13.0",
+  "version": "2.14.0",
   "type": "module",
   "main": "electron.js",
   "scripts": {
@@ -19,7 +19,11 @@
     "prebuild": "npm run models:catalog",
     "validate:models": "npm run models:catalog && tsx scripts/Ernie_validate.ts Ernie && tsx scripts/Ernie_validate.ts Kira && tsx scripts/validate-model-channels.ts",
     "validate:menus": "tsx scripts/validate-spatial-menus.ts",
-    "validate:layouts": "tsx scripts/validate-note-layouts.ts"
+    "validate:layouts": "tsx scripts/validate-note-layouts.ts",
+    "validate:prism": "tsx scripts/validate-prism-trails.ts",
+    "validate:midi": "tsx scripts/validate-midi.ts",
+    "validate:materials": "tsx scripts/validate-materials.ts",
+    "validate:state": "tsx scripts/validate-state.ts"
   },
   "build": {
     "appId": "com.d10g.math-harmonics",

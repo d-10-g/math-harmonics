@@ -4,7 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text, useGLTF } from '@react-three/drei';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as THREE from 'three';
-import { MidiControlSampler, DEFAULT_CHANNEL_CONTROLS, type ChannelControls, type ParsedMidi } from '../lib/midi';
+import { MidiControlSampler, notesWithSustain, DEFAULT_CHANNEL_CONTROLS, type ChannelControls, type ParsedMidi } from '../lib/midi';
 import type { NoteFxMode } from '../lib/clock';
 import { ernieCells, erniePose, ernieLayout, sampleErnie, type ErnieCell } from '../lib/ernie';
 import { resolveChannel, type ModelAsset, type ModelKind, type ModelSettings, type BackgroundChoice, type ObjFinish } from '../lib/modelChannels';
@@ -17,7 +17,7 @@ import ModelBackdrop, { type HdriFile } from './ModelBackdrop';
 type SlotProps={yaw?:number;cell:ErnieCell;position:[number,number,number];getTime:()=>number;settings:ModelSettings;display:'sounding'|'all';preview:boolean;asset:ModelAsset;movement?:string;dress?:(model:THREE.Object3D)=>THREE.MeshPhysicalMaterial[];controlsAt:(time:number)=>ChannelControls[];fx:number};
 // App material profiles for OBJ channels while the Output material profile is
 // "auto": one per MIDI channel, the constellation's favourites first.
-const STAGE_PROFILES:Exclude<WebGPUMaterialProfile,'auto'>[]=['pearl','glass','ruby','copper','ice','jade','chrome','obsidian','ceramic','plasma','liquid-metal','velvet','carbon','hologram','neon','xray'];
+const STAGE_PROFILES:Exclude<WebGPUMaterialProfile,'auto'>[]=['ornament','stained-glass','gold','dichroic','pearl','glass','ruby','copper','ice','jade','chrome','obsidian','ceramic','plasma','liquid-metal','velvet','carbon','hologram','neon','xray'];
 const TMP_Q=new THREE.Quaternion(),TMP_V=new THREE.Vector3();
 export const DEFAULT_GESTURE_STRENGTH=2;
 function GlbSlot(props:SlotProps){const gltf=useGLTF(props.asset.url);return <AnimatedSlot {...props} template={gltf.scene} clips={gltf.animations}/>;}
@@ -82,7 +82,7 @@ export function ModelScene({midi,getMusicTime,kind,settings,display,background,h
  const sampler=useMemo(()=>new MidiControlSampler(midi?.controls??[]),[midi]);
  const controlsAt=useCallback((time:number)=>sampler.at(time),[sampler]);
  const fx=noteFxMode==='off'?0:Math.min(3,noteFxAmount)/2;
- const cells=useMemo(()=>ernieCells(midi?.notes.length?midi.notes:Array.from({length:32},(_,i)=>({channel:Math.floor(i/8),pitch:48+i%8,time:1e10,duration:1,velocity:96,track:0}))),[midi]);
+ const cells=useMemo(()=>ernieCells(midi?.notes.length?notesWithSustain(midi):Array.from({length:32},(_,i)=>({channel:Math.floor(i/8),pitch:48+i%8,time:1e10,duration:1,velocity:96,track:0}))),[midi]);
  const layout=useMemo(()=>ernieLayout(cells,spacing,noteLayout),[cells,spacing,noteLayout]);
  const session=useXR(state=>state.session);
  return <>

@@ -58,7 +58,11 @@ export type WebGPUMaterialProfile =
   | 'chrome'
   | 'ruby'
   | 'ice'
-  | 'neon';
+  | 'neon'
+  | 'ornament'
+  | 'gold'
+  | 'stained-glass'
+  | 'dichroic';
 
 export interface ShaderPreset {
   id: string;

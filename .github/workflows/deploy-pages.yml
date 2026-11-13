@@ -25,6 +25,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run validate:midi
+      - run: npm run validate:prism
+      - run: npm run validate:materials
+      - run: npm run validate:state
       - run: npm run validate:menus
       - run: npm run validate:layouts
       - run: npm run validate:models

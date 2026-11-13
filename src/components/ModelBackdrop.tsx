@@ -24,9 +24,9 @@ export default function ModelBackdrop({choice,hdri,onError,center=[0,0,0],lighti
  // environment to reflect. The HDRI choice supplies its own.
  useEffect(()=>{
   if(!environment||choice==='hdri')return;
-  const pmrem=new THREE.PMREMGenerator(gl);const envScene=buildRigEnvironmentScene(lighting);const texture=pmrem.fromScene(envScene,.04).texture;
+  const pmrem=new THREE.PMREMGenerator(gl);const envScene=buildRigEnvironmentScene(lighting);const target=pmrem.fromScene(envScene,.04);const texture=target.texture;
   scene.environment=texture;scene.environmentIntensity=.7;
-  return ()=>{if(scene.environment===texture)scene.environment=null;scene.environmentIntensity=1;texture.dispose();pmrem.dispose();disposeEnvironmentScene(envScene);};
+  return ()=>{if(scene.environment===texture)scene.environment=null;scene.environmentIntensity=1;target.dispose();pmrem.dispose();disposeEnvironmentScene(envScene);};
  },[environment,choice,lighting,scene,gl]);
  if(choice==='cosmos')return <Stars radius={70} depth={30} count={1400} factor={3} fade speed={0}/>;
  // The dome lives inside the stage wrapper, so it follows XR drag/scale; its

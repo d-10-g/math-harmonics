@@ -51,6 +51,20 @@ export function buildRigEnvironmentScene(preset: WebGPULightingPreset): THREE.Sc
   addFormer(rig.rimPosition, rig.rim, 11, [5, 26]); // tall rim strip
   addFormer(rig.fillPosition, rig.fill, 4.5, [15, 9]); // fill card
 
+  // Small round practical lights give lacquer and glass a second scale of
+  // reflection detail alongside the broad softboxes. They exist only during
+  // environment baking: no extra lights or draw calls in the live scene.
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2;
+    const tint = i % 3 === 0 ? rig.key : i % 3 === 1 ? rig.rim : rig.fill;
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.75, 12, 8),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(tint).multiplyScalar(9), toneMapped: false })
+    );
+    bulb.position.set(Math.cos(angle) * 24, 5 + Math.sin(angle * 2) * 9, Math.sin(angle) * 24);
+    scene.add(bulb);
+  }
+
   // Ground bounce disc.
   const bounce = new THREE.Mesh(
     new THREE.CircleGeometry(26, 32),

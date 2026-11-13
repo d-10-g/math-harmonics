@@ -1,8 +1,21 @@
 # Harmonic.OS — Math Harmonics Visualizer
 
-An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **Meta Quest** (WebXR). 271 formulas — parametric curves, true (p,q) surfaces (Klein bottle, supershapes, seashells), attractor-inspired families — rendered through 380+ GLSL shaders, 16 physical material profiles, and 10 light rigs, with audio-reactive visuals driven by live microphone analysis.
+An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **Meta Quest** (WebXR). 271 formulas — parametric curves, true (p,q) surfaces (Klein bottle, supershapes, seashells), attractor-inspired families — rendered through 380+ GLSL shaders, 20 physical material profiles, and 10 light rigs, with audio-reactive visuals driven by live microphone analysis.
 
 **Live:** https://d-10-g.github.io/math-harmonics/
+
+## v2.14.0 — Flight studio: spectra, ornaments, and colored glass
+
+- **Prism → Flight studio** adds four one-click looks: Spectral ribbons, Ornament parade, Glass constellations, and Sculpture flight. Mix six trail shapes (prism fan, sphere, crystal, torus, knot, any of the **132 OBJ sculptures**) with luminous-spectrum, polished-metal, or colored-glass surfaces. Existing classic prism settings remain compatible.
+- **One plane per MIDI channel**, up to all 16 channels, now integrates its own steering path and heading. Flight divergence (0–2×) controls the weave; seeking restores the exact same geometry. Shared-plane mode remains available. Trail memory runs from 5–120 seconds or zero for the whole score; older strokes fade out. Detailed meshes keep the most recent notes within a geometry-dependent GPU budget.
+- Four new global physical profiles: **Ornament Enamel, Champagne Gold, Stained Glass, Dichroic Crystal**. Metals get clearcoat highlights; glass gets transmission, dispersion, and volume absorption. Both renderers use the same physical optical settings. WebGPU now has the baked rig-reflection environment it previously lacked, with colored pin-light details across all ten rigs. Explicit Output materials apply to the flight shapes too.
+- The spectrum shader now works on all trail shapes, with correct color-space output and defined smoothstep edges. Physical trail normals follow the growing strokes; future notes never draw, history uploads are bounded, and expired notes leave the draw window.
+- All flight settings and presets appear in **VR → All 2D Menus → Controls · Prism canvas**, with the exact desktop ranges; all settings survive reloads and Copy Link. Flight/model/letter stages identify their WebGL renderer correctly. Browser snapshots work for these stages even with a stored WebGPU preference; Photo mode is limited to the formulas it actually renders.
+- MIDI now preserves long final notes, trailing rests, and the initial tempo, validates malformed track boundaries, and searches tempo maps efficiently. OBJ/GLB gestures now honor pedal-extended note lengths. Audio-file replacements release their blob URLs; reflection render targets and pending thumbnail work release their resources.
+- Keyboard shortcuts preserve native button/select behavior; search has a clear action and accessible name; focus outlines and a wrapping header improve keyboard and small-screen use. Invalid saved materials, mesh names, and numeric values are sanitized before rendering.
+- Added MIDI, path/seek/window, physical-material/environment, and share-state/VR-control regressions to the Pages workflow. Run `npm run validate:midi`, `validate:prism`, `validate:materials`, and `validate:state` locally.
+
+Choose **Audio → MIDI File → Note Visuals → Prism**, then try **Ornament parade**. Refraction is real-time screen-space transmission, so overlapping glass does not reproduce multi-bounce path tracing. Animated GLB rigs remain on the model stage; sculpture trails use the OBJ library. Desktop browser validation covers the rendered shaders; headset behavior still requires hardware testing.
 
 ## v2.13.0 — Letters: the Alphabet Sphere
 

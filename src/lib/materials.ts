@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { WebGPUMaterialProfile } from '../constants';
+import type { WebGPUMaterialProfile } from '../constants';
 
 // Physically-based material profiles for the WebGL path (the only path that
 // currently reaches XR headsets). Mirrors the WebGPU node-material profiles
-// so picking "Glass" or "Velvet" looks equivalent on either backend, and uses
-// MeshPhysicalMaterial features the node path doesn't have yet: transmission,
-// iridescence, sheen, clearcoat.
+// so both backends use the same transmission, clearcoat, thin-film and
+// volume-absorption settings. The WebGPU path adds its animated TSL colors.
 
 type PhysicalProfile = {
   color: number;
@@ -27,6 +26,11 @@ type PhysicalProfile = {
   clearcoat?: number;
   clearcoatRoughness?: number;
   envMapIntensity?: number;
+  dispersion?: number;
+  attenuationColor?: number;
+  attenuationDistance?: number;
+  iridescenceThicknessRange?: [number, number];
+  specularIntensity?: number;
 };
 
 const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, PhysicalProfile> = {
@@ -49,8 +53,10 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
   },
   glass: {
     color: 0x9fd8ff, emissive: 0x0a2438, emissiveIntensity: 0.1,
-    metalness: 0.0, roughness: 0.05, opacity: 1, transparent: true,
-    transmission: 1.0, thickness: 1.2, ior: 1.45, envMapIntensity: 1.4
+    metalness: 0.0, roughness: 0.05, opacity: 1, transparent: false,
+    transmission: 1.0, thickness: 1.2, ior: 1.45, envMapIntensity: 1.4,
+    dispersion: 0.35, attenuationColor: 0xb8e4ff, attenuationDistance: 3.5,
+    clearcoat: 0.7, clearcoatRoughness: 0.04
   },
   velvet: {
     color: 0x7c2d12, emissive: 0x30061a, emissiveIntensity: 0.25,
@@ -78,8 +84,9 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
   },
   jade: {
     color: 0x10b981, emissive: 0x052e1c, emissiveIntensity: 0.2,
-    metalness: 0.0, roughness: 0.4, opacity: 1, transparent: true,
-    transmission: 0.55, thickness: 1.5, ior: 1.6, envMapIntensity: 0.9
+    metalness: 0.0, roughness: 0.4, opacity: 1, transparent: false,
+    transmission: 0.55, thickness: 1.5, ior: 1.6, envMapIntensity: 0.9,
+    attenuationColor: 0x2ca76d, attenuationDistance: 2.2
   },
   xray: {
     color: 0x1d4ed8, emissive: 0x93c5fd, emissiveIntensity: 0.55,
@@ -97,20 +104,59 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
   },
   ruby: {
     color: 0xbe123c, emissive: 0x2a050b, emissiveIntensity: 0.25,
-    metalness: 0.0, roughness: 0.12, opacity: 1, transparent: true,
-    transmission: 0.7, thickness: 1.6, ior: 1.76, envMapIntensity: 1.3
+    metalness: 0.0, roughness: 0.12, opacity: 1, transparent: false,
+    transmission: 0.7, thickness: 1.6, ior: 1.76, envMapIntensity: 1.3,
+    dispersion: 0.45, attenuationColor: 0xcc2855, attenuationDistance: 1.7,
+    clearcoat: 1.0, clearcoatRoughness: 0.06
   },
   ice: {
     color: 0x92c5e4, emissive: 0x082f49, emissiveIntensity: 0.15,
-    metalness: 0.0, roughness: 0.26, opacity: 1, transparent: true,
-    transmission: 0.95, thickness: 1.0, ior: 1.31, envMapIntensity: 0.85
+    metalness: 0.0, roughness: 0.26, opacity: 1, transparent: false,
+    transmission: 0.95, thickness: 1.0, ior: 1.31, envMapIntensity: 0.85,
+    dispersion: 0.12, attenuationColor: 0xbeeafa, attenuationDistance: 4.0
   },
   neon: {
     color: 0x0e7490, emissive: 0xf0abfc, emissiveIntensity: 0.7,
     metalness: 0.0, roughness: 0.18, opacity: 0.92, transparent: true,
     envMapIntensity: 0.7
+  },
+  ornament: {
+    // A lacquered colored metal: the body tint stays saturated while the
+    // clearcoat contributes a separate white studio-light reflection.
+    color: 0xc71f55, emissive: 0x260510, emissiveIntensity: 0.025,
+    metalness: 0.96, roughness: 0.14, opacity: 1, transparent: false,
+    clearcoat: 1.0, clearcoatRoughness: 0.045, envMapIntensity: 1.25,
+    iridescence: 0.16, iridescenceIOR: 1.4, iridescenceThicknessRange: [180, 300]
+  },
+  gold: {
+    color: 0xe8b84d, emissive: 0x2a1603, emissiveIntensity: 0.025,
+    metalness: 1.0, roughness: 0.16, opacity: 1, transparent: false,
+    clearcoat: 0.8, clearcoatRoughness: 0.055, envMapIntensity: 1.2
+  },
+  'stained-glass': {
+    color: 0xe4c4ff, emissive: 0x130820, emissiveIntensity: 0.025,
+    metalness: 0.0, roughness: 0.09, opacity: 1, transparent: false,
+    transmission: 0.94, thickness: 1.1, ior: 1.52, dispersion: 0.55,
+    attenuationColor: 0x9b46dd, attenuationDistance: 2.3,
+    clearcoat: 1.0, clearcoatRoughness: 0.035, envMapIntensity: 1.05
+  },
+  dichroic: {
+    color: 0xc4edf1, emissive: 0x071a20, emissiveIntensity: 0.025,
+    metalness: 0.0, roughness: 0.1, opacity: 1, transparent: false,
+    transmission: 0.82, thickness: 0.8, ior: 1.48, dispersion: 0.65,
+    iridescence: 1.0, iridescenceIOR: 1.45, iridescenceThicknessRange: [140, 650],
+    attenuationColor: 0x83d8d4, attenuationDistance: 3.0,
+    clearcoat: 1.0, clearcoatRoughness: 0.045, envMapIntensity: 1.1
   }
 };
+
+export const PHYSICAL_MATERIAL_PROFILES: readonly Exclude<WebGPUMaterialProfile, 'auto'>[] = Object.freeze(
+  Object.keys(PHYSICAL_PROFILES) as Exclude<WebGPUMaterialProfile, 'auto'>[]
+);
+
+export function physicalProfileSettings(profile: Exclude<WebGPUMaterialProfile, 'auto'>): Readonly<PhysicalProfile> {
+  return PHYSICAL_PROFILES[profile];
+}
 
 export function createPhysicalMaterial(
   profile: Exclude<WebGPUMaterialProfile, 'auto'>,
@@ -140,6 +186,11 @@ export function createPhysicalMaterial(
   if (settings.clearcoat !== undefined) material.clearcoat = settings.clearcoat;
   if (settings.clearcoatRoughness !== undefined) material.clearcoatRoughness = settings.clearcoatRoughness;
   if (settings.envMapIntensity !== undefined) material.envMapIntensity = settings.envMapIntensity;
+  if (settings.dispersion !== undefined) material.dispersion = settings.dispersion;
+  if (settings.attenuationColor !== undefined) material.attenuationColor = new THREE.Color(settings.attenuationColor);
+  if (settings.attenuationDistance !== undefined) material.attenuationDistance = settings.attenuationDistance;
+  if (settings.iridescenceThicknessRange !== undefined) material.iridescenceThicknessRange = [...settings.iridescenceThicknessRange];
+  if (settings.specularIntensity !== undefined) material.specularIntensity = settings.specularIntensity;
   if (settings.additive) {
     material.blending = THREE.AdditiveBlending;
     material.depthWrite = false;

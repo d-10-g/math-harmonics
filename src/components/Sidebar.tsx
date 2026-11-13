@@ -41,7 +41,10 @@ const FAVORITES_CATEGORY = '★ Favs';
 function loadFavorites(): Set<string> {
   try {
     const raw = localStorage.getItem(FAVORITES_KEY);
-    if (raw) return new Set(JSON.parse(raw) as string[]);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.filter((key): key is string => typeof key === 'string'));
+    }
   } catch {
     // Corrupt storage falls through to an empty set.
   }
@@ -90,6 +93,8 @@ function PresetThumb({ item }: { item: LibraryItem }) {
     if (!holder) return;
 
     let cancelled = false;
+    let idleId: number | undefined;
+    let timeoutId: number | undefined;
     const generate = () => {
       if (cancelled) return;
       const url = item.kind === 'formula'
@@ -98,19 +103,27 @@ function PresetThumb({ item }: { item: LibraryItem }) {
       if (!cancelled) setSrc(url || null);
     };
 
-    const observer = new IntersectionObserver((entries) => {
+    const schedule = () => {
+      if (typeof window.requestIdleCallback === 'function') {
+        idleId = window.requestIdleCallback(generate, { timeout: 800 });
+      } else {
+        timeoutId = window.setTimeout(generate, 30);
+      }
+    };
+    const observer = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
-        observer.disconnect();
-        const idle = (window as any).requestIdleCallback as ((cb: () => void) => number) | undefined;
-        if (idle) idle(generate);
-        else window.setTimeout(generate, 30);
+        observer?.disconnect();
+        schedule();
       }
     }, { rootMargin: '160px' });
 
-    observer.observe(holder);
+    if (observer) observer.observe(holder);
+    else schedule();
     return () => {
       cancelled = true;
-      observer.disconnect();
+      observer?.disconnect();
+      if (idleId !== undefined) window.cancelIdleCallback?.(idleId);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
   }, [item.kind, item.id, item.index]);
 
@@ -120,7 +133,7 @@ function PresetThumb({ item }: { item: LibraryItem }) {
       className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40"
       aria-hidden="true"
     >
-      {src && <img src={src} alt="" className="h-full w-full object-cover" draggable={false} />}
+      {src && <img src={src} alt="" className="h-full w-full object-cover" draggable={false} decoding="async" />}
     </div>
   );
 }
@@ -284,6 +297,7 @@ export default function Sidebar({
           <div className="flex gap-2 rounded-lg bg-black/30 border border-white/10 p-1">
             <button
               onClick={() => setActiveTab('formulas')}
+              aria-pressed={activeTab === 'formulas'}
               className={cn(
                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-[0.16em] transition-colors",
                 activeTab === 'formulas' ? "bg-indigo-500/25 text-indigo-100" : "text-white/35 hover:text-white/70"
@@ -293,6 +307,7 @@ export default function Sidebar({
             </button>
             <button
               onClick={() => setActiveTab('shaders')}
+              aria-pressed={activeTab === 'shaders'}
               className={cn(
                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-[0.16em] transition-colors",
                 activeTab === 'shaders' ? "bg-indigo-500/25 text-indigo-100" : "text-white/35 hover:text-white/70"
@@ -306,6 +321,7 @@ export default function Sidebar({
               onClick={selectRandom}
               className="h-8 w-8 rounded-md border border-white/10 bg-white/5 text-white/45 hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center"
               title="Random preset from the current filter"
+              aria-label="Random preset from the current filter"
               type="button"
             >
               <Shuffle size={14} />
@@ -315,6 +331,7 @@ export default function Sidebar({
                 data-spatial-skip onClick={onCollapse}
                 className="h-8 w-8 rounded-md border border-white/10 bg-white/5 text-white/45 hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center text-[12px]"
                 title="Collapse this panel"
+                aria-label="Collapse library panel"
                 type="button"
               >
                 ⟨
@@ -414,10 +431,13 @@ export default function Sidebar({
           <Search size={14} className="text-white/30 shrink-0" />
           <input
             value={query}
+            aria-label={`Search ${activeTab}`}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Escape') setQuery(''); }}
             placeholder={`Search ${activeTab}`}
             className="min-w-0 flex-1 bg-transparent text-xs text-white/80 placeholder:text-white/25 outline-none"
           />
+          {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear preset search" className="h-6 w-6 shrink-0 rounded text-white/50 hover:bg-white/10 hover:text-white" title="Clear search">×</button>}
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
