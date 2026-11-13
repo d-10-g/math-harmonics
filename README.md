@@ -4,6 +4,16 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.19.0 — Flight cinema: plasma storms, spectral flowers, and soap films
+
+- **Camera follow** adds an optional camera operator to every prism, OBJ, GLB, or mixed flight. It follows channel-balanced recent action, eases its aim and distance, and adjusts framing for the viewport. Drag or zoom to take over; automatic framing resumes after a short grace period. Turning follow off eases back to your previous view, or retains your active manual framing. The default is Off, preserving the existing camera behavior, and scene presets keep your preference.
+- In VR, the same toggle gently centers and fits the virtual flight sculpture while leaving headset tracking in control. No forced head rotation is added. Camera follow has its own shared `pcf` setting and survives reloads and **Copy Link** independently of FX; **Clear flight FX** leaves it alone.
+- Three new complete scenes under **Prism → Flight FX laboratory**: **Electric Tempest** sends branching plasma between chrome and neon sculptures; **Prism Bloom** unfurls folded spectral flowers around ruby crystals and gold Kira; **Bubble Ballet** floats iridescent soap films among glass, pearls, and icy rings. All ten scenes remain editable and combine animated GLBs, OBJ sculptures, and built-in shapes.
+- Independent **Plasma lightning**, **Prismatic flowers**, and **Thin-film bubbles** dials (0–200%) mix with every earlier effect. Lightning branches follow the score, prismatic petals fold in three dimensions, and translucent spherical shells use view-dependent interference colors. New effects use bounded recent pools, smaller XR budgets, and at most three additional draw batches; disabled layers allocate no GPU buffers.
+- New controls share the exact desktop/VR state and ranges. Score-time effects remain repeatable on pause/seek, and older links leave the new layers disabled. Added regressions cover camera framing and interaction, dense-score bounds, deterministic topology, resource cleanup, scene assets, and menu/share-state parity. Headset hardware still needs testing.
+
+Try **Bubble Ballet** with **Camera follow** switched on, or combine **Electric Tempest** with **Prismatic flowers** for an electric garden.
+
 ## v2.18.0 — Light sculptures: aurora silk, constellations, and clockwork
 
 - Three new complete scenes in **Prism → Flight FX laboratory**: **Aurora Dream** drapes rippling silk light over holographic knots and icy drops; **Quantum Garden** weaves nearby notes into constellations around holographic atoms and jade crystals; **Clockwork Nebula** surrounds copper gears, golden rings, and animated Kira with nested orbital gyroscopes. Each mixes GLB, OBJ, and built-in forms with its own materials and light rig. The previous four scenes remain available.

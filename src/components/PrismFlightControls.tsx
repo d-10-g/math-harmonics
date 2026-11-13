@@ -13,6 +13,7 @@ export type PrismFlightSettings = {
   prismMesh: string;
   prismChannels: PrismChannelMap;
   prismEffects: FlightEffectsSettings;
+  prismCameraFollow: boolean;
 };
 
 export type PrismLook = 'spectral' | 'ornaments' | 'glass' | 'sculptures' | 'animated' | 'mixed';
@@ -53,6 +54,17 @@ export default function PrismFlightControls({ value, onChange, onLook, meshLibra
           {name}
         </button>)}
       </div>
+    </div>
+    <div data-spatial-section="Flight camera" className="rounded-lg border border-cyan-300/20 bg-cyan-400/[0.03] p-2.5">
+      <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-cyan-100">
+        <span>Camera follow</span>
+        <input aria-label="Camera follow" type="checkbox" checked={value.prismCameraFollow}
+          onChange={event => onChange({ prismCameraFollow: event.target.checked })}
+          className="h-4 w-4 accent-cyan-300" />
+      </label>
+      <p className="mt-2 text-[10px] leading-relaxed text-white/45">{value.prismCameraFollow
+        ? 'A smooth camera operator frames the active notes. Drag or zoom to take over briefly. In VR, the sculpture follows while your head stays in control.'
+        : 'Keep the current view, or switch on a camera operator that gently follows the action.'}</p>
     </div>
     <FlightEffectsControls value={normalizeFlightEffects(value.prismEffects)} onChange={prismEffects => onChange({ prismEffects })} onShowcase={onShowcase} />
     <div className="grid grid-cols-2 gap-2">

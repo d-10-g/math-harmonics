@@ -997,6 +997,7 @@ interface GraphViewProps {
   prismMesh?: string;
   prismChannels?: PrismChannelMap;
   prismEffects?: FlightEffectsSettings;
+  prismCameraFollow?: boolean;
   setNoteDisplay?: (mode: 'sounding' | 'all') => void;
   meshLibrary?: string[];
 }
@@ -2029,7 +2030,7 @@ function XREnvironment({ preset, desktopVisible }: { preset: WebGPULightingPrese
   return (
     <group>
       <mesh>
-        <sphereGeometry args={[50, 32, 16]} />
+        <sphereGeometry args={[isPresenting ? 50 : 400, 32, 16]} />
         <meshBasicMaterial color={rig.background} side={THREE.BackSide} depthWrite={false} />
       </mesh>
       <points geometry={stars}>
@@ -2073,13 +2074,15 @@ function SpatialWrapper({
   modelMode = false,
   xrVisualTransform,
   setXrVisualTransform,
-  dragOffsetRef
+  dragOffsetRef,
+  flightManualUntilRef,
 }: {
   children: React.ReactNode;
   modelMode?: boolean;
   xrVisualTransform: XRVisualTransform;
   setXrVisualTransform?: XRVisualTransformSetter;
   dragOffsetRef: React.MutableRefObject<THREE.Vector3>;
+  flightManualUntilRef?: React.MutableRefObject<number>;
 }) {
   const session = useXR((state) => state.session);
   const isPresenting = !!session;
@@ -2091,6 +2094,12 @@ function SpatialWrapper({
   // owned by GraphView so the VIEW tab's RESET ALL can clear it.
   const activePointersRef = useRef(new Map<number, SpatialPointer>());
   const gestureRef = useRef<SpatialGesture | null>(null);
+
+  useEffect(() => {
+    activePointersRef.current.clear(); gestureRef.current = null;
+    if (flightManualUntilRef) flightManualUntilRef.current = 0;
+    return () => { if (flightManualUntilRef) flightManualUntilRef.current = 0; };
+  }, [session, flightManualUntilRef]);
 
   useEffect(() => {
     autoYawRef.current = xrVisualTransform.yaw;
@@ -2153,6 +2162,7 @@ function SpatialWrapper({
     if (!pointer) return;
     e.stopPropagation();
     activePointersRef.current.set(e.pointerId, pointer);
+    if (flightManualUntilRef) flightManualUntilRef.current = Infinity;
     e.target?.setPointerCapture?.(e.pointerId);
     beginGesture();
   };
@@ -2193,6 +2203,7 @@ function SpatialWrapper({
   const handlePointerUp = (e: any) => {
     if (!activePointersRef.current.has(e.pointerId)) return;
     activePointersRef.current.delete(e.pointerId);
+    if (flightManualUntilRef && activePointersRef.current.size === 0) flightManualUntilRef.current = performance.now() / 1000 + 3;
     e.target?.releasePointerCapture?.(e.pointerId);
     // Re-anchor so a remaining pointer continues smoothly as a move gesture.
     beginGesture();
@@ -2704,7 +2715,8 @@ export default function GraphView({
   prismTrailLength = 0,
   prismMesh = 'Star',
   prismChannels,
-  prismEffects
+  prismEffects,
+  prismCameraFollow = false,
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [prismStatus, setPrismStatus] = useState('');
@@ -2736,6 +2748,7 @@ export default function GraphView({
   // the dome (mounted at the root, in metres) tracks the visual in XR.
   const mirrorAnchorRef = useRef<THREE.Group>(null);
   const xrDragOffsetRef = useRef(new THREE.Vector3());
+  const flightManualUntilRef = useRef(0);
   const readoutRef = useRef<HTMLDivElement>(null);
   const [photoOpen, setPhotoOpen] = useState(false);
 
@@ -2783,7 +2796,7 @@ export default function GraphView({
           {showMirrors && show3D && <MirrorDome radius={80} xrRadius={8} captureOffset={6} xrCaptureOffset={0.35} anchorRef={mirrorAnchorRef} />}
           {noteSource !== 'prism' && <GroundShadows show3D={show3D} />}
           <PostEffects enabled={postFX} bloom={bloomIntensity} />
-          <SpatialWrapper xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>
+          <SpatialWrapper xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef} flightManualUntilRef={flightManualUntilRef}>
             <LightingRig preset={webgpuLightingPreset} intensity={webgpuLighting} />
             
             {showArtifacts && (
@@ -2812,7 +2825,7 @@ export default function GraphView({
 
             <group ref={mirrorAnchorRef} />
             {noteSource === 'prism' && show3D ? (
-              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} effects={prismEffects} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} />
+              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} effects={prismEffects} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} cameraFollow={prismCameraFollow} manualUntilRef={flightManualUntilRef} />
             ) : noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}

@@ -78,6 +78,33 @@ export const FLIGHT_SCENES: Record<FlightShowcase, Scene> = {
     },
     lighting: 'eclipse', finish: 'ornament', spread: 1.2, memory: 30, bloom: 0.4, color: 'length',
   },
+  'electric-tempest': {
+    channels: {
+      0: { kind: 'obj', asset: 'Wireicosahedron.obj', material: 'neon' },
+      1: { kind: 'shape', shape: 'knot', material: 'liquid-metal' },
+      2: { kind: 'glb', asset: 'Ernie_model.glb', material: 'chrome', movement: '11_Ears_perk' },
+      3: { kind: 'shape', shape: 'crystal', material: 'plasma' },
+    },
+    lighting: 'underlight', finish: 'spectrum', spread: 1.1, memory: 25, bloom: 0.4, color: 'pitch',
+  },
+  'prism-bloom': {
+    channels: {
+      0: { kind: 'obj', asset: 'Stellateddodecahedron.obj', material: 'spectrum' },
+      1: { kind: 'shape', shape: 'crystal', material: 'ruby' },
+      2: { kind: 'glb', asset: 'Kira_model.glb', material: 'gold', movement: 'Kira_01_Golden_hello' },
+      3: { kind: 'shape', shape: 'torus', material: 'dichroic' },
+    },
+    lighting: 'prism', finish: 'glass', spread: 1, memory: 30, bloom: 0.35, color: 'chroma',
+  },
+  'bubble-ballet': {
+    channels: {
+      0: { kind: 'shape', shape: 'sphere', material: 'dichroic' },
+      1: { kind: 'obj', asset: 'Dish.obj', material: 'glass' },
+      2: { kind: 'glb', asset: 'Ernie_model.glb', material: 'pearl', movement: '29_Shoulder_sway' },
+      3: { kind: 'shape', shape: 'torus', material: 'ice' },
+    },
+    lighting: 'gallery', finish: 'glass', spread: 0.9, memory: 25, bloom: 0.25, color: 'length',
+  },
 };
 
 export function flightScene(id: FlightShowcase) {

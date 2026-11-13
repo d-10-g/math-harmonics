@@ -37,4 +37,10 @@ for (const id of ['aurora-dream', 'quantum-garden', 'clockwork-nebula'] as const
     'Each new scene demonstrates a new spatial sculpture effect');
   assert(['helix', 'butterfly'].includes(effects.motion), 'New scenes demonstrate the new kinetic paths');
 }
-console.log('PASS: all showcase scenes use valid catalog assets/clips/materials, bounded optical settings, three source types, distinct looks, independent settings, and new spatial FX.');
+for (const [id, layer] of [['electric-tempest', 'lightning'], ['prism-bloom', 'petals'], ['bubble-ballet', 'bubbles']] as const) {
+  const scene = flightScene(id);
+  assert(scene.effects[layer] >= 1, `${id} prominently demonstrates its new shader layer`);
+  assert(scene.bloom <= 0.4, 'New spectacle scenes preserve readable translucent detail');
+  assert.equal(Object.keys(scene.channels).sort().join(','), '0,1,2,3', 'New scenes explicitly dress the same first four MIDI channels');
+}
+console.log('PASS: all ten showcase scenes use valid catalog assets/clips/materials, bounded optical settings, three source types, distinct looks, independent settings, and new spatial FX.');

@@ -8,6 +8,9 @@ export type FlightEffectsSettings = {
   auroras: number;
   constellations: number;
   gyroscopes: number;
+  lightning: number;
+  petals: number;
+  bubbles: number;
   motion: FlightMotion;
   motionAmount: number;
   morph: number;
@@ -21,6 +24,7 @@ export const FLIGHT_MOTIONS: ReadonlyArray<readonly [FlightMotion, string]> = [
 
 export const DEFAULT_FLIGHT_EFFECTS: Readonly<FlightEffectsSettings> = Object.freeze({
   bursts: 0, shockwaves: 0, lasers: 0, tracers: 0, auroras: 0, constellations: 0, gyroscopes: 0,
+  lightning: 0, petals: 0, bubbles: 0,
   motion: 'none', motionAmount: 1, morph: 0,
 });
 
@@ -37,13 +41,15 @@ export function normalizeFlightEffects(value: unknown): FlightEffectsSettings {
     bursts: bounded('bursts', 2), shockwaves: bounded('shockwaves', 2),
     lasers: bounded('lasers', 2), tracers: bounded('tracers', 2),
     auroras: bounded('auroras', 2), constellations: bounded('constellations', 2), gyroscopes: bounded('gyroscopes', 2),
+    lightning: bounded('lightning', 2), petals: bounded('petals', 2), bubbles: bounded('bubbles', 2),
     motion: FLIGHT_MOTIONS.some(([id]) => id === saved.motion) ? saved.motion as FlightMotion : 'none',
     motionAmount: bounded('motionAmount', 2), morph: bounded('morph', 1),
   };
 }
 
 export type FlightShowcase = 'supernova' | 'neon-highway' | 'cosmic-jelly' | 'stargate'
-  | 'aurora-dream' | 'quantum-garden' | 'clockwork-nebula';
+  | 'aurora-dream' | 'quantum-garden' | 'clockwork-nebula'
+  | 'electric-tempest' | 'prism-bloom' | 'bubble-ballet';
 export type FlightShowcasePreset = {
   id: FlightShowcase;
   label: string;
@@ -79,5 +85,17 @@ export const FLIGHT_SHOWCASES: readonly FlightShowcasePreset[] = [
   {
     id: 'clockwork-nebula', label: 'Clockwork Nebula', description: 'Orbiting gyroscopes and clockwork metals',
     effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, gyroscopes: 1.2, constellations: 0.35, lasers: 0.2, motion: 'helix', motionAmount: 0.75, morph: 0.1 }),
+  },
+  {
+    id: 'electric-tempest', label: 'Electric Tempest', description: 'Branching plasma in a chrome storm',
+    effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, lightning: 1.25, bursts: 0.3, tracers: 0.5, motion: 'vortex', motionAmount: 0.85, morph: 0.2 }),
+  },
+  {
+    id: 'prism-bloom', label: 'Prism Bloom', description: 'Folded spectral flowers open in space',
+    effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, petals: 1.2, auroras: 0.2, constellations: 0.3, motion: 'butterfly', motionAmount: 0.8, morph: 0.4 }),
+  },
+  {
+    id: 'bubble-ballet', label: 'Bubble Ballet', description: 'Iridescent soap films and drifting pearls',
+    effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, bubbles: 1.1, gyroscopes: 0.2, tracers: 0.35, motion: 'helix', motionAmount: 0.7, morph: 0.25 }),
   },
 ];

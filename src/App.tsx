@@ -492,6 +492,7 @@ export default function App() {
     prismMesh: initialShared.prismMesh ?? 'Star',
     prismChannels: initialShared.prismChannels ?? {},
     prismEffects: normalizeFlightEffects(initialShared.prismEffects),
+    prismCameraFollow: initialShared.prismCameraFollow ?? false,
   });
   const applyPrismLook = (look: PrismLook) => {
     setNoteSource('prism');
@@ -517,6 +518,7 @@ export default function App() {
       prismMesh: 'Star',
       prismChannels: prismFlight.prismChannels,
       prismEffects: prismFlight.prismEffects,
+      prismCameraFollow: prismFlight.prismCameraFollow,
     });
   };
   const applyFlightShowcase = (id: FlightShowcase) => {
@@ -546,7 +548,8 @@ export default function App() {
     setPostFX(true);
     setBloomIntensity(scene.bloom);
     setPrismFlight({ prismShape: 'mixed', prismFinish: scene.finish, prismPathSpread: scene.spread,
-      prismTrailLength: scene.memory, prismMesh: 'Star', prismChannels: scene.channels, prismEffects: scene.effects });
+      prismTrailLength: scene.memory, prismMesh: 'Star', prismChannels: scene.channels, prismEffects: scene.effects,
+      prismCameraFollow: prismFlight.prismCameraFollow });
   };
   const [meshChannelMap, setMeshChannelMap] = useState<string[]>(() => {
     try {
@@ -1926,6 +1929,7 @@ export default function App() {
                 prismMesh={prismFlight.prismMesh}
                 prismChannels={prismFlight.prismChannels}
                 prismEffects={prismFlight.prismEffects}
+                prismCameraFollow={prismFlight.prismCameraFollow}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}

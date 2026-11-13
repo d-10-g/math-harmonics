@@ -64,6 +64,7 @@ export type SharedState = {
   prismMesh?: string;
   prismChannels?: PrismChannelMap;
   prismEffects?: FlightEffectsSettings;
+  prismCameraFollow?: boolean;
   // Alphabet Sphere (the Letters page): stereo view, baseline, relief,
   // collimation, point size, tour and rings.
   alphabet?: Partial<AlphabetSettings>;
@@ -117,6 +118,7 @@ function parseParams(params: URLSearchParams): SharedState {
   const prismSlice = read('psw');
   if (prismSlice !== undefined && Number.isFinite(parseFloat(prismSlice))) state.prismSlice = Math.min(0.5, Math.max(0.05, parseFloat(prismSlice)));
   state.prismPerChannel = flag('ppc');
+  state.prismCameraFollow = flag('pcf');
   state.prismShape = oneOf(read('psh'), ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb', 'mixed'] as const);
   state.prismFinish = oneOf(read('pfi'), ['spectrum', 'ornament', 'glass'] as const);
   const divergence = Number(read('ppd'));
@@ -175,7 +177,7 @@ function sanitizeStoredState(value: unknown): SharedState {
     lineWidth: 'lw', cycleFavoritesOnly: 'cf', autoPilotShuffle: 'sh', postFX: 'fx', bloomIntensity: 'bl',
     audioSource: 'asrc', noteMeshes: 'nm', noteFxAmount: 'nfa', noteFxMode: 'nfm', noteSpread: 'nsp',
     noteSource: 'nsc', meshUseMtl: 'nml', meshAssign: 'nas', noteDisplay: 'nds', prismColor: 'pcm',
-    prismSlice: 'psw', prismPerChannel: 'ppc', prismShape: 'psh', prismFinish: 'pfi',
+    prismSlice: 'psw', prismPerChannel: 'ppc', prismCameraFollow: 'pcf', prismShape: 'psh', prismFinish: 'pfi',
     prismPathSpread: 'ppd', prismTrailLength: 'ptl', prismMesh: 'pms',
   };
   const params = new URLSearchParams();
@@ -257,6 +259,7 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('pcm', state.prismColor);
   params.set('psw', state.prismSlice.toFixed(2));
   params.set('ppc', state.prismPerChannel ? '1' : '0');
+  params.set('pcf', state.prismCameraFollow ? '1' : '0');
   params.set('psh', state.prismShape);
   params.set('pfi', state.prismFinish);
   params.set('ppd', state.prismPathSpread.toFixed(2));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WebGPUMaterialProfile } from '../constants';
@@ -11,16 +11,20 @@ import AnimatedGlbFlight from './AnimatedGlbFlight';
 import MixedFlight from './MixedFlight';
 import FlightFireworks from './FlightFireworks';
 import FlightSculptures from './FlightSculptures';
+import FlightSpectacle from './FlightSpectacle';
+import FlightCameraDirector from './FlightCameraDirector';
 import { DEFAULT_FLIGHT_EFFECTS, type FlightEffectsSettings } from '../lib/flightEffects';
 import type { PrismChannelMap } from '../lib/prismChannels';
 import { buildPrismScore, prismInstanceBudget, prismVisibleRange, samplePrismPose, type PrismFinish, type PrismShape } from '../lib/prismTrail';
 
 export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode = 'full', sliceWidth = 0.14,
   perChannel = false, shape = 'spectrum', finish = 'spectrum', pathSpread = 1, trailLength = 0,
-  materialProfile = 'auto', meshId = 'Star', showWireframe = false, channelMap, onStatus, effects = DEFAULT_FLIGHT_EFFECTS }: {
+  materialProfile = 'auto', meshId = 'Star', showWireframe = false, channelMap, onStatus, effects = DEFAULT_FLIGHT_EFFECTS,
+  cameraFollow = false, manualUntilRef }: {
   midi: ParsedMidi | null; getMusicTime?: () => { time: number; duration: number }; noteSpread: number;
   colorMode?: PrismColorMode; sliceWidth?: number; perChannel?: boolean; shape?: PrismShape; finish?: PrismFinish;
   pathSpread?: number; trailLength?: number; materialProfile?: WebGPUMaterialProfile; meshId?: string; showWireframe?: boolean; channelMap?: PrismChannelMap; onStatus?: (status: string) => void; effects?: FlightEffectsSettings;
+  cameraFollow?: boolean; manualUntilRef?: RefObject<number>;
 }) {
   const [sourceGeometry, setSourceGeometry] = useState<{ id: string; geometry: THREE.BufferGeometry } | null>(null);
   useEffect(() => {
@@ -58,6 +62,8 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
     mesh?.geometry.dispose();
   }, [mesh]);
   const trailRef = useRef<THREE.Group>(null);
+  const stageRef = useRef<THREE.Group>(null);
+  const framingRef = useRef<THREE.Group>(null);
   const planePosition = useMemo(() => new THREE.Vector3(), []);
   const planeQuaternion = useMemo(() => new THREE.Quaternion(), []);
   useFrame(() => {
@@ -98,13 +104,14 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
     uniforms.uPrismSliceWidth.value = sliceWidth;
     const clock = clockStore.getState();
     uniforms.uPrismFx.value = clock.noteFxMode === 'off' ? 0 : Math.min(3, clock.noteFxAmount) / 2;
-  });
+  }, -0.5);
   if (!data) return null;
-  return <group rotation={[0.3, 0, 0]} scale={1.15 * data.fit}>
+  return <group ref={framingRef}><group ref={stageRef} rotation={[0.3, 0, 0]} scale={1.15 * data.fit}>
     <group ref={trailRef}>
       {(effects.bursts > 0 || effects.shockwaves > 0 || effects.lasers > 0 || effects.tracers > 0) && <FlightFireworks data={data} getMusicTime={getMusicTime} settings={effects} />}
       {(effects.auroras > 0 || effects.constellations > 0 || effects.gyroscopes > 0) && <FlightSculptures data={data} getMusicTime={getMusicTime} settings={effects} />}
+      {(effects.lightning > 0 || effects.petals > 0 || effects.bubbles > 0) && <FlightSpectacle data={data} getMusicTime={getMusicTime} settings={effects} />}
       {shape === 'mixed' ? <MixedFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} colorMode={colorMode} sliceWidth={sliceWidth} /> : shape === 'glb' ? <AnimatedGlbFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} /> : mesh && <primitive object={mesh.instances} dispose={null} />}
     </group>
-  </group>;
+  </group><FlightCameraDirector enabled={cameraFollow} data={data} trailRef={trailRef} stageRef={stageRef} framingRef={framingRef} getMusicTime={getMusicTime} effects={effects} manualUntilRef={manualUntilRef} /></group>;
 }

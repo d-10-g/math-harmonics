@@ -23,7 +23,8 @@ const state: Required<SharedState> = {
   noteSource: 'prism', meshUseMtl: false, meshAssign: 'random', noteDisplay: 'sounding',
   prismColor: 'chroma', prismSlice: 0.14, prismPerChannel: true, prismShape: 'mesh', prismFinish: 'glass',
   prismPathSpread: 0.8, prismTrailLength: 25, prismMesh: 'Star',
-  prismEffects: { bursts: 0.8, shockwaves: 1.2, lasers: 1.1, tracers: 0.7, auroras: 0.55, constellations: 1.1, gyroscopes: 0.8, motion: 'butterfly', motionAmount: 0.9, morph: 0.6 },
+  prismEffects: { bursts: 0.8, shockwaves: 1.2, lasers: 1.1, tracers: 0.7, auroras: 0.55, constellations: 1.1, gyroscopes: 0.8, lightning: 0.7, petals: 0.4, bubbles: 0.9, motion: 'butterfly', motionAmount: 0.9, morph: 0.6 },
+  prismCameraFollow: true,
   prismChannels: {
     0: { asset: 'Ernie_model.glb', material: 'ornament', movement: '01_Head_nod' },
     1: { asset: 'Kira_model.glb', material: 'glass', movement: 'Kira_08_Little_chirp' },
@@ -44,6 +45,17 @@ persistSharedState(mixedState);
 assert.deepEqual(loadSharedState(), mixedState, 'Mixed source kinds, shape ids, meshes, materials, and GLB movements round-trip');
 window.localStorage.clear();
 assert.deepEqual(loadSharedState(), mixedState, 'Mixed flights reproduce from a link without prior storage');
+persistSharedState(state);
+
+window.location.hash = '#pcf=0';
+assert.equal(loadSharedState().prismCameraFollow, false, 'An explicit Off overrides a saved camera preference');
+window.location.hash = '#pcf=maybe';
+assert.equal(loadSharedState().prismCameraFollow, true, 'Invalid camera flags retain a valid saved preference');
+persistSharedState({ ...state, prismCameraFollow: false });
+window.localStorage.clear();
+assert.equal(loadSharedState().prismCameraFollow, false, 'Camera Off survives Copy Link without storage');
+window.location.hash = '#r=webgl';
+assert.equal(loadSharedState().prismCameraFollow, undefined, 'Old links leave follow to the default Off');
 persistSharedState(state);
 
 window.location.hash = '#pfi=ornament&psh=knot&ppd=999&ptl=13&pms=../../missing&mat=invalid&ppc=maybe';
@@ -90,6 +102,8 @@ assert.equal(item('Prism surface').options.length, 3);
 assert.equal(item('Prism sculpture').options.length, 2);
 assert.equal(item('Prism flight divergence').max, 2);
 assert.equal(item('Prism trail memory').max, 120);
+assert.equal(item('Camera follow').kind, 'toggle');
+assert.equal(item('Camera follow').active, true, 'VR reads the exact desktop camera-follow state');
 for (const label of ['Spectral ribbons', 'Ornament parade', 'Glass constellations', 'Sculpture flight', 'Animated flight', 'Mixed flight']) assert.ok(item(label), `${label} reaches VR`);
 await window.happyDOM.close();
 console.log('PASS: share-link round trip, stored-state validation, precedence, numeric bounds, mesh ids, and flight studio VR controls.');

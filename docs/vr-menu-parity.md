@@ -72,6 +72,12 @@ The seventh trail shape, Animated GLB, and the Animated flight preset are shared
 
 Mixed by channel is the eighth Trail shape; Mixed flight is the sixth look. In `Controls · Flight channels`, each active MIDI channel exposes Source (GLB, OBJ, built-in shape), a source-specific model/shape selector, its own Material, and a Movement selector only for GLB rigs. The shared DOM keeps desktop and VR options and selected values aligned. Original materials apply to imported GLB/OBJ models; built-ins expose Spectrum and the physical profiles. Prism color/slice settings apply to static trails in mixed mode. Existing asset-only GLB mappings remain valid, and mixed mappings add validated `kind` and `shape` fields to the same `pch` share setting. The shared stage remains on WebGL/XR, with the headset history pool reduced for performance.
 
+## Flight cinema (v2.19.0)
+
+`Controls · Flight camera` exposes the native **Camera follow** checkbox with the same `prismCameraFollow` state used on desktop. It defaults to Off and persists in the validated `pcf` share flag; presets and Clear flight FX preserve this independent preference. Desktop follow controls aim/distance smoothly and yields to manual orbit/zoom. In XR it frames the virtual sculpture, leaving the tracked headset camera untouched. Headset hardware testing is still required.
+
+`Controls · Flight FX` adds Electric Tempest, Prism Bloom, and Bubble Ballet plus Plasma lightning (`Flight lightning`), Prismatic flowers (`Flight petals`), and Thin-film bubbles (`Flight bubbles`). All three run 0–2 in 0.05 steps, are saved in `pfx`, and default to zero for old links. They combine with all previous layers. Lower XR density changes only geometry budgets, not controls, values, or behavior.
+
 ## Light sculptures (v2.18.0)
 
 `Controls · Flight FX` also mirrors Aurora Dream, Quantum Garden, and Clockwork Nebula, plus Aurora silk (`Flight auroras`), Chord constellations (`Flight constellations`), and Orbital gyroscopes (`Flight gyroscopes`). All three dials run 0–2 in 0.05 steps. Motion field includes Corkscrew flight (`helix`) and Butterfly figure eight (`butterfly`) with the same existing strength dial. The shared native controls expose identical values, ranges, scene actions, and clear behavior in VR. The validated `pfx` field stores the new settings; previous links leave the new layers disabled. The sculpture overlays use lower density in XR while keeping the same effect and motion options. No camera motion is added.
