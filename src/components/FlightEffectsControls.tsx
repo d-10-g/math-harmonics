@@ -34,6 +34,9 @@ const GRADIENTS: Record<FlightShowcase, string> = {
   'mobius-dream': 'from-fuchsia-400/25 to-cyan-300/20',
   'crystal-galaxy': 'from-sky-300/25 to-violet-400/25',
   'event-horizon': 'from-orange-400/25 to-indigo-500/25',
+  'petrol-nebula': 'from-teal-400/25 to-violet-500/25',
+  'mermaid-lagoon': 'from-emerald-300/25 to-pink-300/20',
+  'solar-forge': 'from-amber-300/25 to-orange-500/25',
 };
 
 export default function FlightEffectsControls({ value, onChange, onShowcase }: {

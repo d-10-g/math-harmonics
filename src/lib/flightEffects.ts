@@ -55,7 +55,8 @@ export function normalizeFlightEffects(value: unknown): FlightEffectsSettings {
 export type FlightShowcase = 'supernova' | 'neon-highway' | 'cosmic-jelly' | 'stargate'
   | 'aurora-dream' | 'quantum-garden' | 'clockwork-nebula'
   | 'electric-tempest' | 'prism-bloom' | 'bubble-ballet'
-  | 'mobius-dream' | 'crystal-galaxy' | 'event-horizon';
+  | 'mobius-dream' | 'crystal-galaxy' | 'event-horizon'
+  | 'petrol-nebula' | 'mermaid-lagoon' | 'solar-forge';
 export type FlightShowcasePreset = {
   id: FlightShowcase;
   label: string;
@@ -115,5 +116,17 @@ export const FLIGHT_SHOWCASES: readonly FlightShowcasePreset[] = [
   {
     id: 'event-horizon', label: 'Event Horizon', description: 'Miniature vortices and accretion disks',
     effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, vortexes: 1.15, lightning: 0.25, gyroscopes: 0.3, motion: 'vortex', motionAmount: 0.85, morph: 0.25 }),
+  },
+  {
+    id: 'petrol-nebula', label: 'Petrol Nebula', description: 'Oxide rainbows ripple across liquid metal',
+    effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, ribbons: 0.85, vortexes: 0.45, constellations: 0.3, motion: 'helix', motionAmount: 0.6, morph: 0.65 }),
+  },
+  {
+    id: 'mermaid-lagoon', label: 'Mermaid Lagoon', description: 'Opalescent glass drifts through luminous silk',
+    effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, bubbles: 0.85, auroras: 0.6, petals: 0.3, tracers: 0.25, motion: 'breathe', motionAmount: 0.75, morph: 0.7 }),
+  },
+  {
+    id: 'solar-forge', label: 'Solar Forge', description: 'Hammered golden suns and crystalline flares',
+    effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, crystals: 0.9, shockwaves: 0.85, lasers: 0.4, bursts: 0.45, motion: 'orbit', motionAmount: 0.75, morph: 0.2 }),
   },
 ];

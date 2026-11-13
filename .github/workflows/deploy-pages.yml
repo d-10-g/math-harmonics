@@ -36,6 +36,8 @@ jobs:
       - run: npm run validate:flight-sculptures
       - run: npm run validate:flight-spectacle
       - run: npm run validate:flight-camera
+      - run: npm run validate:flight-auto-director
+      - run: npm run validate:cat-poses
       - run: npm run validate:flight-phenomena
       - run: npm run validate:flight-landing
       - run: npm run validate:flight-motion

@@ -132,6 +132,33 @@ export const FLIGHT_SCENES: Record<FlightShowcase, Scene> = {
     },
     lighting: 'eclipse', finish: 'ornament', spread: 1.2, memory: 30, bloom: 0.35, color: 'length',
   },
+  'petrol-nebula': {
+    channels: {
+      0: { kind: 'shape', shape: 'knot', material: 'oil-slick' },
+      1: { kind: 'obj', asset: 'Twistytorus.obj', material: 'chrome' },
+      2: { kind: 'glb', asset: 'Kira_model.glb', material: 'oil-slick', movement: 'Kira_29_Tail_ribbon_left' },
+      3: { kind: 'shape', shape: 'torus', material: 'dichroic' },
+    },
+    lighting: 'prism', finish: 'ornament', spread: 0.9, memory: 25, bloom: 0.25, color: 'chroma',
+  },
+  'mermaid-lagoon': {
+    channels: {
+      0: { kind: 'shape', shape: 'sphere', material: 'opal-glass' },
+      1: { kind: 'obj', asset: 'Thaidrop.obj', material: 'dichroic' },
+      2: { kind: 'glb', asset: 'Ernie_model.glb', material: 'opal-glass', movement: '28_Tail_ripple' },
+      3: { kind: 'shape', shape: 'knot', material: 'pearl' },
+    },
+    lighting: 'caustic', finish: 'glass', spread: 0.8, memory: 25, bloom: 0.2, color: 'length',
+  },
+  'solar-forge': {
+    channels: {
+      0: { kind: 'shape', shape: 'sphere', material: 'solar-gold' },
+      1: { kind: 'obj', asset: 'Gear.obj', material: 'copper' },
+      2: { kind: 'glb', asset: 'Kira_model.glb', material: 'solar-gold', movement: 'Kira_27_Question_mark_tail' },
+      3: { kind: 'shape', shape: 'crystal', material: 'ruby' },
+    },
+    lighting: 'sunset', finish: 'ornament', spread: 1.1, memory: 25, bloom: 0.3, color: 'chroma',
+  },
 };
 
 export function flightScene(id: FlightShowcase) {

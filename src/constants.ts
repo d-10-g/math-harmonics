@@ -62,7 +62,10 @@ export type WebGPUMaterialProfile =
   | 'ornament'
   | 'gold'
   | 'stained-glass'
-  | 'dichroic';
+  | 'dichroic'
+  | 'oil-slick'
+  | 'opal-glass'
+  | 'solar-gold';
 
 export interface ShaderPreset {
   id: string;

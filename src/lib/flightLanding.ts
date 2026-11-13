@@ -13,6 +13,7 @@ export function flightLandingState(saved: SharedState): SharedState {
     prismShape: 'mixed', prismFinish: scene.finish, prismPathSpread: scene.spread,
     prismTrailLength: scene.memory, prismMesh: 'Star', prismChannels: scene.channels, prismEffects: scene.effects,
     prismCameraFollow: true, prismCameraStyle: 'balanced', prismCameraEnergy: 1,
+    prismAutoDirector: false,
     ...saved,
   };
 }

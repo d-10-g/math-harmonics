@@ -23,7 +23,7 @@ assert.equal(supplied.bursts, 1.7, 'Normalization never mutates stored settings'
 assert.equal(JSON.stringify(supplied), serialized);
 assert.notEqual(normalizeFlightEffects(undefined), DEFAULT_FLIGHT_EFFECTS, 'Defaults are returned as a private settings object');
 assert(Object.isFrozen(DEFAULT_FLIGHT_EFFECTS));
-assert.equal(new Set(FLIGHT_SHOWCASES.map(preset => preset.id)).size, 13);
+assert.equal(new Set(FLIGHT_SHOWCASES.map(preset => preset.id)).size, 16);
 assert.equal(new Set(FLIGHT_SHOWCASES.map(preset => preset.effects.motion)).size, 6, 'Showcases explore different motion fields');
 for (const preset of FLIGHT_SHOWCASES) {
   assert.deepEqual(normalizeFlightEffects(preset.effects), preset.effects, `${preset.label} is within the supported ranges`);
@@ -69,7 +69,7 @@ assert.equal(showcase, 'stargate');
 assert.equal(changed, undefined, 'The app owns complete scene application when it provides a callback');
 
 const flight: PrismFlightSettings = { prismShape: 'mixed', prismFinish: 'ornament', prismPathSpread: 1,
-  prismTrailLength: 25, prismMesh: 'Star', prismChannels: { 0: { kind: 'glb', asset: 'Ernie_model.glb', material: 'gold' } }, prismEffects: supplied, prismCameraFollow: true, prismCameraStyle: 'chase', prismCameraEnergy: 1.25 };
+  prismTrailLength: 25, prismMesh: 'Star', prismChannels: { 0: { kind: 'glb', asset: 'Ernie_model.glb', material: 'gold' } }, prismEffects: supplied, prismCameraFollow: true, prismCameraStyle: 'chase', prismCameraEnergy: 1.25, prismAutoDirector: false };
 let flightPatch: Partial<PrismFlightSettings> | undefined;
 const flightTree = PrismFlightControls({ value: flight, onChange: patch => { flightPatch = patch; }, onLook() {}, meshLibrary: ['Star'], perChannel: true });
 const child = elements(flightTree).find(element => element.type === FlightEffectsControls)!;
@@ -87,6 +87,14 @@ assert.deepEqual(flightPatch, { prismCameraStyle: 'cinematic' }, 'Style edits re
 const cameraEnergy = elements(flightTree).find(element => element.props['aria-label'] === 'Camera musical energy')!;
 cameraEnergy.props.onChange({ target: { value: '0.8' } });
 assert.deepEqual(flightPatch, { prismCameraEnergy: 0.8 }, 'Camera energy changes leave FX untouched');
+const directorControl = elements(flightTree).find(element => element.props['aria-label'] === 'Flight auto director')!;
+directorControl.props.onChange({ target: { checked: true } });
+assert.deepEqual(flightPatch, { prismAutoDirector: true }, 'Auto direction preserves the chosen channel cast');
+const directedTree = PrismFlightControls({ value: { ...flight, prismAutoDirector: true }, onChange: patch => { flightPatch = patch; }, onLook() {}, meshLibrary: ['Star'], perChannel: true });
+elements(directedTree).find(element => element.type === FlightEffectsControls)!.props.onChange({ ...supplied, lasers: 0.4 });
+assert.deepEqual(flightPatch, { prismEffects: { ...supplied, lasers: 0.4 }, prismAutoDirector: false }, 'Manual FX edits take over from automatic direction');
+elements(directedTree).find(element => element.props['aria-label'] === 'Camera follow style')!.props.onChange({ target: { value: 'orbit' } });
+assert.deepEqual(flightPatch, { prismCameraStyle: 'orbit', prismAutoDirector: false }, 'Manual camera style takes over from automatic direction');
 
 const window = new Window();
 for (const name of ['HTMLButtonElement', 'HTMLInputElement', 'HTMLSelectElement', 'HTMLTextAreaElement',
@@ -119,4 +127,4 @@ assert.equal(item('Clear flight FX').kind, 'action');
 const defaults = render(normalizeFlightEffects(undefined));
 assert.equal(defaults[0].items.find(item => item.label === 'Flight motion amount')!.disabled, true, 'Motion strength is disabled consistently when the motion field is still');
 await window.happyDOM.close();
-console.log('PASS: bounded FX settings, old-link defaults, thirteen showcases, isolated edits, camera independence, clear behavior, and exact shared VR controls.');
+console.log('PASS: bounded FX settings, old-link defaults, sixteen showcases, isolated edits, camera independence, clear behavior, and exact shared VR controls.');

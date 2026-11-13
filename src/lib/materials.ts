@@ -147,8 +147,91 @@ const PHYSICAL_PROFILES: Record<Exclude<WebGPUMaterialProfile, 'auto'>, Physical
     iridescence: 1.0, iridescenceIOR: 1.45, iridescenceThicknessRange: [140, 650],
     attenuationColor: 0x83d8d4, attenuationDistance: 3.0,
     clearcoat: 1.0, clearcoatRoughness: 0.045, envMapIntensity: 1.1
+  },
+  'oil-slick': {
+    // A dark conductor underneath an oxide film: reflections carry the
+    // shifting petrol colors rather than an emissive rainbow painted on top.
+    color: 0x65747d, emissive: 0x020b12, emissiveIntensity: 0.015,
+    metalness: 1, roughness: 0.19, opacity: 1, transparent: false,
+    iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [90, 820],
+    clearcoat: 1, clearcoatRoughness: 0.055, envMapIntensity: 1.3
+  },
+  'opal-glass': {
+    // The softer body lobe and colored absorption keep this distinct from
+    // clear dichroic glass, while a crisp shell retains moving light glints.
+    color: 0xb1d9ce, emissive: 0x062018, emissiveIntensity: 0.018,
+    metalness: 0, roughness: 0.27, opacity: 1, transparent: false,
+    transmission: 0.78, thickness: 1.8, ior: 1.46, dispersion: 0.5,
+    attenuationColor: 0x65c5b9, attenuationDistance: 2.1,
+    iridescence: 0.9, iridescenceIOR: 1.35, iridescenceThicknessRange: [240, 590],
+    sheen: 0.25, sheenColor: 0xf3b6e8, sheenRoughness: 0.6,
+    clearcoat: 1, clearcoatRoughness: 0.035, envMapIntensity: 1.1
+  },
+  'solar-gold': {
+    color: 0xe3a235, emissive: 0x261003, emissiveIntensity: 0.018,
+    metalness: 1, roughness: 0.2, opacity: 1, transparent: false,
+    clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 1.25,
+    iridescence: 0.2, iridescenceIOR: 1.5, iridescenceThicknessRange: [170, 290]
   }
 };
+
+// Tileable micro-dents break the solar gold's reflected softboxes into a
+// hand-hammered surface. CPU pixels are made once; each material owns its GPU
+// texture, so deleting a flight pool cannot damage another pool or cached GLB.
+let hammeredNormalPixels: Uint8Array | undefined;
+function hammeredNormals() {
+  if (hammeredNormalPixels) return hammeredNormalPixels;
+  const side = 64, cells = 8;
+  const height = new Float32Array(side * side);
+  const hash = (x: number, y: number, salt: number) => {
+    const value = Math.sin(x * 127.1 + y * 311.7 + salt) * 43758.5453;
+    return value - Math.floor(value);
+  };
+  for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) {
+    const u = x * cells / side, v = y * cells / side;
+    let nearest = Infinity;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const cx = Math.floor(u) + dx, cy = Math.floor(v) + dy;
+      const wrappedX = (cx + cells) % cells, wrappedY = (cy + cells) % cells;
+      const px = cx + 0.18 + 0.64 * hash(wrappedX, wrappedY, 1);
+      const py = cy + 0.18 + 0.64 * hash(wrappedX, wrappedY, 7);
+      nearest = Math.min(nearest, (u - px) ** 2 + (v - py) ** 2);
+    }
+    height[y * side + x] = Math.exp(-nearest * 3.8);
+  }
+  const pixels = new Uint8Array(side * side * 4);
+  for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) {
+    const dx = height[y * side + (x + 1) % side] - height[y * side + (x + side - 1) % side];
+    const dy = height[((y + 1) % side) * side + x] - height[((y + side - 1) % side) * side + x];
+    const nx = -dx * 2.4, ny = -dy * 2.4, length = Math.hypot(nx, ny, 1);
+    const offset = (y * side + x) * 4;
+    pixels[offset] = Math.round((nx / length * 0.5 + 0.5) * 255);
+    pixels[offset + 1] = Math.round((ny / length * 0.5 + 0.5) * 255);
+    pixels[offset + 2] = Math.round((1 / length * 0.5 + 0.5) * 255);
+    pixels[offset + 3] = 255;
+  }
+  return hammeredNormalPixels = pixels;
+}
+
+/** Shared by WebGL/XR and WebGPU; dispose follows the owning material. */
+export function applyPhysicalSurfaceDetail(material: Pick<THREE.MeshPhysicalMaterial, 'normalMap' | 'normalScale' | 'addEventListener'>,
+  profile: Exclude<WebGPUMaterialProfile, 'auto'>) {
+  if (profile !== 'solar-gold') return;
+  const texture = new THREE.DataTexture(hammeredNormals().slice(), 64, 64, THREE.RGBAFormat);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.repeat.set(3, 3);
+  texture.needsUpdate = true;
+  material.normalMap = texture;
+  material.normalScale.set(0.55, 0.55);
+  // Three can upload a disposed texture again when its material is reused
+  // (including React StrictMode's cleanup/setup cycle). Forward EVERY release
+  // so a later GPU allocation is freed as well. Texture disposal itself is
+  // safe when no GPU allocation exists; a permanent guard would leak reuse.
+  material.addEventListener('dispose', () => texture.dispose());
+}
 
 export const PHYSICAL_MATERIAL_PROFILES: readonly Exclude<WebGPUMaterialProfile, 'auto'>[] = Object.freeze(
   Object.keys(PHYSICAL_PROFILES) as Exclude<WebGPUMaterialProfile, 'auto'>[]
@@ -195,6 +278,8 @@ export function createPhysicalMaterial(
     material.blending = THREE.AdditiveBlending;
     material.depthWrite = false;
   }
+
+  applyPhysicalSurfaceDetail(material, profile);
 
   return material;
 }

@@ -6,8 +6,8 @@ import type { WebGPULightingPreset } from '../src/constants';
 
 // Verify the actual objects consumed by the renderers, including each optical
 // layer. A shared table entry alone cannot prove the material factory uses it.
-assert.equal(PHYSICAL_MATERIAL_PROFILES.length, 20);
-assert.equal(new Set(PHYSICAL_MATERIAL_PROFILES).size, 20);
+assert.equal(PHYSICAL_MATERIAL_PROFILES.length, 23);
+assert.equal(new Set(PHYSICAL_MATERIAL_PROFILES).size, 23);
 const opticalNumbers = [
   'emissiveIntensity', 'metalness', 'roughness', 'opacity', 'transmission',
   'thickness', 'ior', 'iridescence', 'iridescenceIOR', 'sheen',
@@ -69,7 +69,7 @@ for (const profile of PHYSICAL_MATERIAL_PROFILES) {
   wireframe.dispose();
   assert.equal(disposals, 2);
 }
-for (const profile of ['ornament', 'gold'] as const) {
+for (const profile of ['ornament', 'gold', 'solar-gold'] as const) {
   const material = createPhysicalMaterial(profile, false);
   assert(material.metalness >= 0.95, `${profile}: colored metallic reflection`);
   assert(material.clearcoat >= 0.8, `${profile}: lacquered finish`);
@@ -77,6 +77,58 @@ for (const profile of ['ornament', 'gold'] as const) {
   assert(material.emissiveIntensity < 0.05, `${profile}: reflections should remain visible`);
   material.dispose();
 }
+const petrol = createPhysicalMaterial('oil-slick', false);
+assert.equal(petrol.metalness, 1, 'Petrol rainbows reflect as a conductor');
+assert.equal(petrol.iridescence, 1, 'Petrol rainbows use actual thin-film interference');
+assert(petrol.iridescenceThicknessRange[1] - petrol.iridescenceThicknessRange[0] > 600);
+assert(petrol.emissiveIntensity < 0.05, 'Petrol optics retain view-dependent reflections');
+petrol.dispose();
+const opal = createPhysicalMaterial('opal-glass', false);
+const clearGlass = createPhysicalMaterial('dichroic', false);
+assert(opal.transmission > 0.7, 'Opal remains a refractive volume');
+assert(opal.roughness > clearGlass.roughness, 'Opal softens the body reflection');
+assert(opal.clearcoatRoughness < 0.05, 'Opal retains a crisp outer shell');
+assert(opal.iridescence >= 0.9 && opal.sheen > 0, 'Opal has distinct thin-film and pearlescent lobes');
+opal.dispose();
+clearGlass.dispose();
+
+const hammered = createPhysicalMaterial('solar-gold', false);
+const hammeredOther = createPhysicalMaterial('solar-gold', false);
+const hammeredTexture = hammered.normalMap as THREE.DataTexture;
+const otherTexture = hammeredOther.normalMap as THREE.DataTexture;
+assert(hammeredTexture?.isDataTexture, 'Hammered metal has real microfacet surface detail');
+assert.notEqual(hammeredTexture, otherTexture, 'Each material owns its texture');
+assert.notEqual(hammeredTexture.image.data, otherTexture.image.data, 'Pixel buffers are independent');
+assert.deepEqual(hammeredTexture.image.data, otherTexture.image.data, 'Hammering is deterministic');
+assert.equal(hammeredTexture.wrapS, THREE.RepeatWrapping, 'Surface detail tiles seamlessly');
+assert.equal(hammeredTexture.wrapT, THREE.RepeatWrapping);
+assert(hammeredTexture.generateMipmaps, 'Distant metallic detail uses mipmaps');
+const pixels = hammeredTexture.image.data;
+let tiltedNormals = 0;
+for (let i = 0; i < pixels.length; i += 4) {
+  const x = pixels[i] / 255 * 2 - 1, y = pixels[i + 1] / 255 * 2 - 1, z = pixels[i + 2] / 255 * 2 - 1;
+  assert(Math.abs(Math.hypot(x, y, z) - 1) < 0.015, 'Microfacet normal is normalized');
+  assert(z > 0.5, 'Hammering preserves the outward-facing surface');
+  if (Math.abs(x) + Math.abs(y) > 0.1) tiltedNormals++;
+}
+assert(tiltedNormals > pixels.length / 16, 'The normal map contains visible curved dents');
+// Model the renderer's residency contract: disposal frees a resident GPU
+// allocation, repeated disposal is harmless, and rendering after disposal can
+// upload the same material/texture again. StrictMode exercises that reuse.
+let textureResident = true, textureReleases = 0, otherDisposals = 0;
+hammeredTexture.addEventListener('dispose', () => {
+  if (textureResident) { textureReleases++; textureResident = false; }
+});
+otherTexture.addEventListener('dispose', () => otherDisposals++);
+hammered.dispose(); hammered.dispose();
+assert.equal(textureReleases, 1, 'Repeated cleanup safely releases one resident allocation');
+assert.equal(otherDisposals, 0, 'Deleting one flight leaves another flight texture alive');
+hammeredTexture.needsUpdate = true; textureResident = true;
+hammered.dispose();
+assert.equal(textureReleases, 2, 'A reused material releases its texture after re-upload');
+assert.equal(otherDisposals, 0, 'Releasing a reused material still preserves other channel textures');
+hammeredOther.dispose();
+assert.equal(otherDisposals, 1);
 for (const profile of ['glass', 'stained-glass', 'dichroic'] as const) {
   const material = createPhysicalMaterial(profile, false);
   assert(material.transmission >= 0.8, `${profile}: actual glass transmission`);
@@ -132,4 +184,4 @@ for (const rig of rigs) {
   assert.equal(materialDisposals, materialCount, `${rig}: every material is disposed exactly once`);
 }
 assert.equal(rigSignatures.size, rigs.length, 'Light rigs must produce distinct reflections');
-console.log('PASS: 20 physical material profiles, real glass transmission, volume absorption, dispersion, coated metals, independent thin films, deterministic HDR reflections for all 10 rigs and complete resource disposal.');
+console.log('PASS: 23 physical profiles, refractive opal, petrol thin films, deterministic hammered-gold microfacets with independent texture disposal, real glass optics, and HDR reflections for all 10 rigs.');

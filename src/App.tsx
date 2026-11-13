@@ -84,7 +84,10 @@ const WEBGPU_MATERIAL_PRESETS: Exclude<WebGPUMaterialProfile, 'auto'>[] = [
   'ornament',
   'gold',
   'stained-glass',
-  'dichroic'
+  'dichroic',
+  'oil-slick',
+  'opal-glass',
+  'solar-gold'
 ];
 
 const xrStore = createXRStore({
@@ -455,6 +458,7 @@ export default function App() {
     prismCameraFollow: initialShared.prismCameraFollow ?? true,
     prismCameraStyle: normalizeFlightCameraStyle(initialShared.prismCameraStyle),
     prismCameraEnergy: normalizeFlightCameraEnergy(initialShared.prismCameraEnergy),
+    prismAutoDirector: initialShared.prismAutoDirector ?? false,
   });
   const applyPrismLook = (look: PrismLook) => {
     setNoteSource('prism');
@@ -483,6 +487,7 @@ export default function App() {
       prismCameraFollow: prismFlight.prismCameraFollow,
       prismCameraStyle: prismFlight.prismCameraStyle,
       prismCameraEnergy: prismFlight.prismCameraEnergy,
+      prismAutoDirector: false,
     });
   };
   const applyFlightShowcase = (id: FlightShowcase) => {
@@ -513,7 +518,28 @@ export default function App() {
     setPrismFlight({ prismShape: 'mixed', prismFinish: scene.finish, prismPathSpread: scene.spread,
       prismTrailLength: scene.memory, prismMesh: 'Star', prismChannels: scene.channels, prismEffects: scene.effects,
       prismCameraFollow: prismFlight.prismCameraFollow, prismCameraStyle: prismFlight.prismCameraStyle,
-      prismCameraEnergy: prismFlight.prismCameraEnergy });
+      prismCameraEnergy: prismFlight.prismCameraEnergy, prismAutoDirector: false });
+  };
+  const changePrismFlight = (patch: Partial<PrismFlightSettings>) => {
+    if (patch.prismAutoDirector === true) {
+      setPageMode('audio');
+      try { localStorage.setItem(MODE_KEY, 'audio'); } catch { /* Non-fatal. */ }
+      setAudioSync(true);
+      setAudioSource('midi');
+      if (!midiInfo) loadLibraryEntry(DEFAULT_LANDING_SCORE_ID);
+      setNoteSource('prism');
+      setShow3D(true);
+      setNoteMeshes(true);
+      setPostFX(true);
+      setAutoStyle(false);
+      setAutoCycleFormula(false);
+      setAutoCycleShader(false);
+      setAutoCycleWebgpuMaterial(false);
+      setAutoCycleWebgpuLighting(false);
+      setAutoCycleWebgpuGeometry(false);
+    }
+    setPrismFlight(previous => ({ ...previous, ...patch,
+      ...(patch.prismAutoDirector === true ? { prismCameraFollow: true } : {}) }));
   };
   const [meshChannelMap, setMeshChannelMap] = useState<string[]>(() => {
     try {
@@ -1897,6 +1923,7 @@ export default function App() {
                 prismCameraFollow={prismFlight.prismCameraFollow}
                 prismCameraStyle={prismFlight.prismCameraStyle}
                 prismCameraEnergy={prismFlight.prismCameraEnergy}
+                prismAutoDirector={prismFlight.prismAutoDirector}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
@@ -2072,7 +2099,7 @@ export default function App() {
           setPrismSlice={setPrismSlice}
           prismPerChannel={prismPerChannel}
           setPrismPerChannel={setPrismPerChannel}
-          prismFlightControls={<PrismFlightControls value={prismFlight} onChange={patch => setPrismFlight(prev => ({ ...prev, ...patch }))} onLook={applyPrismLook} onShowcase={applyFlightShowcase} meshLibrary={MESH_LIBRARY} perChannel={prismPerChannel} midiChannels={modelChannels} materialProfile={webgpuMaterial} />}
+          prismFlightControls={<PrismFlightControls value={prismFlight} onChange={changePrismFlight} onLook={applyPrismLook} onShowcase={applyFlightShowcase} meshLibrary={MESH_LIBRARY} perChannel={prismPerChannel} midiChannels={modelChannels} materialProfile={webgpuMaterial} midi={midiInfo} getMusicTime={getMusicTime} />}
           collapsed={controlsCollapsed}
           onCollapse={() => setControlsCollapsed(true)}
           pageMode={pageMode}

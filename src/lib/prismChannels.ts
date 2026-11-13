@@ -30,6 +30,7 @@ export const PRISM_MATERIAL_LABELS: Record<PhysicalMaterial, string> = {
   ceramic: 'Ceramic', hologram: 'Hologram', obsidian: 'Obsidian', copper: 'Copper', jade: 'Jade',
   xray: 'X-ray', carbon: 'Carbon', chrome: 'Chrome', ruby: 'Ruby', ice: 'Ice', neon: 'Neon',
   ornament: 'Ornament enamel', gold: 'Champagne gold', 'stained-glass': 'Stained glass', dichroic: 'Dichroic crystal',
+  'oil-slick': 'Oil-slick metal', 'opal-glass': 'Opalescent glass', 'solar-gold': 'Hammered solar gold',
 };
 const MATERIALS = new Set<string>(['auto', 'original', 'spectrum', ...PHYSICAL_MATERIAL_PROFILES]);
 const GLASS_PROFILES: readonly PhysicalMaterial[] = ['glass', 'stained-glass', 'dichroic', 'ruby', 'ice', 'jade'];

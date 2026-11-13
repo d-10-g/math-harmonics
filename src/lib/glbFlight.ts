@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { erniePose } from './ernie';
+import { createCatPoseLayer } from './catPose';
 import { createPhysicalMaterial } from './materials';
 import { prismLowerBound, type PrismScoreData } from './prismTrail';
 import type { WebGPUMaterialProfile } from '../constants';
@@ -119,12 +120,13 @@ export function createGlbFlightActor(template: THREE.Object3D, clips: THREE.Anim
   const root = new THREE.Group(), body = new THREE.Group(), fit = new THREE.Group();
   fit.scale.setScalar(normalization); fit.position.copy(center).multiplyScalar(-normalization); fit.add(model);
   body.add(fit); root.add(body); root.visible = false;
+  const catPose = createCatPoseLayer(model);
   const clip = clips.find(c => c.name === movement) ?? clips[0];
   const mixer = clip ? new THREE.AnimationMixer(model) : null;
   const action = clip && mixer ? mixer.clipAction(clip).play() : null;
   const matrix = new THREE.Matrix4(), scale = new THREE.Vector3();
   const motion = createFlightMotionSample();
-  let previousPhase = NaN, previousWeight = NaN;
+  let previousPhase = NaN, previousWeight = NaN, previousCatTime = NaN, previousCatNote = -1;
   let disposed = false;
   return {
     root, model, materials, skeletons,
@@ -140,11 +142,17 @@ export function createGlbFlightActor(template: THREE.Object3D, clips: THREE.Anim
       root.visible = age >= 0 && (length <= 0 || age < length);
       if (!root.visible) return;
       const pose = glbFlightPose(data, index, time);
-      if (action && mixer && clip && (pose.phase !== previousPhase || pose.weight !== previousWeight)) {
+      const catTime = Math.min(Math.max(time, data.birth[index]), data.birth[index] + data.duration[index]);
+      if (action && mixer && clip && (pose.phase !== previousPhase || pose.weight !== previousWeight
+        || (catPose && (catTime !== previousCatTime || index !== previousCatNote)))) {
+        catPose?.reset();
         action.enabled = true;
         action.time = pose.phase * clip.duration;
         action.setEffectiveWeight(pose.weight);
         mixer.update(0);
+        catPose?.apply({ time: catTime, phase: pose.phase, weight: pose.weight,
+          seed: data.pitches[index] + data.channels[index] * 17, movement: clip.name, strength: 2 });
+        previousCatTime = catTime; previousCatNote = index;
         previousPhase = pose.phase; previousWeight = pose.weight;
       }
       // A small attack pulse follows absolute score time, so pause freezes

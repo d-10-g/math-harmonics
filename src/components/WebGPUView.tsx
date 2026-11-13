@@ -19,7 +19,7 @@ import {
 } from '../constants';
 import { getClockTime, reportVerts } from '../lib/clock';
 import { lightingRigSettings } from '../lib/lighting';
-import { physicalProfileSettings } from '../lib/materials';
+import { applyPhysicalSurfaceDetail, physicalProfileSettings } from '../lib/materials';
 import { buildRigEnvironmentScene, disposeEnvironmentScene } from '../lib/environments';
 import { buildParametricGeometry, surfaceMidQ } from '../lib/parametricSurface';
 
@@ -123,7 +123,10 @@ const MATERIAL_PROFILES: Exclude<WebGPUMaterialProfile, 'auto'>[] = [
   'ornament',
   'gold',
   'stained-glass',
-  'dichroic'
+  'dichroic',
+  'oil-slick',
+  'opal-glass',
+  'solar-gold'
 ];
 
 function hashText(text: string) {
@@ -330,6 +333,12 @@ function materialSettings(profile: Exclude<WebGPUMaterialProfile, 'auto'>) {
       return { palette: [0x63298c, 0xb765dc, 0xe6b8ff], colorGain: 1.0, emissive: 0.025, roughLow: 0.06, roughHigh: 0.13, metalLow: 0.0, metalHigh: 0.0, opacity: 1, hotMix: 0.24, alpha: false, additive: false };
     case 'dichroic':
       return { palette: [0x297c91, 0x9bdedb, 0xdfb9ee], colorGain: 1.0, emissive: 0.025, roughLow: 0.06, roughHigh: 0.14, metalLow: 0.0, metalHigh: 0.0, opacity: 1, hotMix: 0.24, alpha: false, additive: false };
+    case 'oil-slick':
+      return { palette: [0x113b44, 0x71868f, 0xa785d8], colorGain: 1, emissive: 0.015, roughLow: 0.12, roughHigh: 0.25, metalLow: 1, metalHigh: 1, opacity: 1, hotMix: 0.18, alpha: false, additive: false };
+    case 'opal-glass':
+      return { palette: [0x4aada8, 0xb1d9ce, 0xedbedb], colorGain: 1, emissive: 0.018, roughLow: 0.21, roughHigh: 0.33, metalLow: 0, metalHigh: 0, opacity: 1, hotMix: 0.16, alpha: false, additive: false };
+    case 'solar-gold':
+      return { palette: [0xa4601a, 0xe3a235, 0xffd274], colorGain: 1, emissive: 0.018, roughLow: 0.14, roughHigh: 0.25, metalLow: 1, metalHigh: 1, opacity: 1, hotMix: 0.16, alpha: false, additive: false };
     case 'plasma':
     default:
       return { palette: [0x12041f, 0x8b5cf6, 0x22d3ee], colorGain: 1.62, emissive: 0.88, roughLow: 0.06, roughHigh: 0.34, metalLow: 0.0, metalHigh: 0.24, opacity: 1, hotMix: 1.0, alpha: false, additive: false };
@@ -1064,6 +1073,7 @@ function createNodeMaterial(shader: ShaderPreset, showWireframe: boolean, webgpu
   material.attenuationDistance = physical.attenuationDistance ?? Infinity;
   material.specularIntensity = physical.specularIntensity ?? 1;
   material.envMapIntensity = physical.envMapIntensity ?? 1;
+  applyPhysicalSurfaceDetail(material, resolvedProfile);
 
   const waveA = positionWorld.x
     .mul(0.24 + seed * 0.28)

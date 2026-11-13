@@ -649,6 +649,9 @@ export default function Controls({
     { value: 'ice', label: 'Ice' },
     { value: 'neon', label: 'Neon' },
     { value: 'ornament', label: 'Ornament Enamel' },
+    { value: 'oil-slick', label: 'Oil-slick Metal' },
+    { value: 'opal-glass', label: 'Opalescent Glass' },
+    { value: 'solar-gold', label: 'Hammered Solar Gold' },
     { value: 'gold', label: 'Champagne Gold' },
     { value: 'stained-glass', label: 'Stained Glass' },
     { value: 'dichroic', label: 'Dichroic Crystal' }

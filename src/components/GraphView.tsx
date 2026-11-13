@@ -1002,6 +1002,7 @@ interface GraphViewProps {
   prismCameraFollow?: boolean;
   prismCameraStyle?: FlightCameraStyle;
   prismCameraEnergy?: number;
+  prismAutoDirector?: boolean;
   setNoteDisplay?: (mode: 'sounding' | 'all') => void;
   meshLibrary?: string[];
 }
@@ -2726,6 +2727,7 @@ export default function GraphView({
   prismCameraFollow = false,
   prismCameraStyle = 'balanced',
   prismCameraEnergy = 1,
+  prismAutoDirector = false,
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [prismStatus, setPrismStatus] = useState('');
@@ -2834,7 +2836,7 @@ export default function GraphView({
 
             <group ref={mirrorAnchorRef} />
             {noteSource === 'prism' && show3D ? (
-              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} effects={prismEffects} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} cameraFollow={prismCameraFollow} cameraStyle={prismCameraStyle} cameraEnergy={prismCameraEnergy} manualUntilRef={flightManualUntilRef} />
+              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} effects={prismEffects} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} cameraFollow={prismCameraFollow} cameraStyle={prismCameraStyle} cameraEnergy={prismCameraEnergy} autoDirector={prismAutoDirector} manualUntilRef={flightManualUntilRef} />
             ) : noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}

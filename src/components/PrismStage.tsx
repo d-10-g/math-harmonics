@@ -15,20 +15,30 @@ import FlightSpectacle from './FlightSpectacle';
 import FlightPhenomena from './FlightPhenomena';
 import FlightCameraDirector from './FlightCameraDirector';
 import type { FlightCameraStyle } from '../lib/flightCameraStyles';
-import { DEFAULT_FLIGHT_EFFECTS, type FlightEffectsSettings } from '../lib/flightEffects';
+import { DEFAULT_FLIGHT_EFFECTS, FLIGHT_SHOWCASES, type FlightEffectsSettings } from '../lib/flightEffects';
+import { blendFlightAutoEffects } from '../lib/flightAutoDirector';
+import { useFlightAutoDirector } from '../lib/useFlightAutoDirector';
 import type { PrismChannelMap } from '../lib/prismChannels';
 import { buildPrismScore, prismInstanceBudget, prismVisibleRange, samplePrismPose, type PrismFinish, type PrismShape } from '../lib/prismTrail';
 
+const showcaseEffects = new Map(FLIGHT_SHOWCASES.map(scene => [scene.id, scene.effects]));
+
 export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode = 'full', sliceWidth = 0.14,
   perChannel = false, shape = 'spectrum', finish = 'spectrum', pathSpread = 1, trailLength = 0,
-  materialProfile = 'auto', meshId = 'Star', showWireframe = false, channelMap, onStatus, effects = DEFAULT_FLIGHT_EFFECTS,
-  cameraFollow = false, cameraStyle = 'balanced', cameraEnergy = 1, manualUntilRef }: {
+  materialProfile = 'auto', meshId = 'Star', showWireframe = false, channelMap, onStatus, effects: manualEffects = DEFAULT_FLIGHT_EFFECTS,
+  cameraFollow = false, cameraStyle: manualCameraStyle = 'balanced', cameraEnergy = 1, manualUntilRef, autoDirector = false }: {
   midi: ParsedMidi | null; getMusicTime?: () => { time: number; duration: number }; noteSpread: number;
   colorMode?: PrismColorMode; sliceWidth?: number; perChannel?: boolean; shape?: PrismShape; finish?: PrismFinish;
   pathSpread?: number; trailLength?: number; materialProfile?: WebGPUMaterialProfile; meshId?: string; showWireframe?: boolean; channelMap?: PrismChannelMap; onStatus?: (status: string) => void; effects?: FlightEffectsSettings;
   cameraFollow?: boolean; manualUntilRef?: RefObject<number>;
   cameraStyle?: FlightCameraStyle; cameraEnergy?: number;
+  autoDirector?: boolean;
 }) {
+  const auto = useFlightAutoDirector(midi, getMusicTime, autoDirector);
+  const effects = useMemo(() => auto
+    ? blendFlightAutoEffects(showcaseEffects.get(auto.previous.scene)!, showcaseEffects.get(auto.section.scene)!, auto.blend)
+    : manualEffects, [auto, manualEffects]);
+  const cameraStyle = auto?.section.camera ?? manualCameraStyle;
   const [sourceGeometry, setSourceGeometry] = useState<{ id: string; geometry: THREE.BufferGeometry } | null>(null);
   useEffect(() => {
     if (shape !== 'mesh' || !isValidMeshName(meshId)) return;
@@ -117,5 +127,5 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
       {(effects.ribbons > 0 || effects.crystals > 0 || effects.vortexes > 0) && <FlightPhenomena data={data} getMusicTime={getMusicTime} settings={effects} />}
       {shape === 'mixed' ? <MixedFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} colorMode={colorMode} sliceWidth={sliceWidth} /> : shape === 'glb' ? <AnimatedGlbFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} /> : mesh && <primitive object={mesh.instances} dispose={null} />}
     </group>
-  </group><FlightCameraDirector enabled={cameraFollow} style={cameraStyle} energy={cameraEnergy} data={data} trailRef={trailRef} stageRef={stageRef} framingRef={framingRef} getMusicTime={getMusicTime} effects={effects} manualUntilRef={manualUntilRef} /></group>;
+  </group><FlightCameraDirector enabled={autoDirector || cameraFollow} style={cameraStyle} energy={cameraEnergy} data={data} trailRef={trailRef} stageRef={stageRef} framingRef={framingRef} getMusicTime={getMusicTime} effects={effects} manualUntilRef={manualUntilRef} /></group>;
 }

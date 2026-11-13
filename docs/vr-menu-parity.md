@@ -1,5 +1,9 @@
 # VR menus
 
+## Automatic performances and cat expression (v2.21.0)
+
+`Controls · Flight camera` includes the saved **Flight auto director** toggle and current musical phrase/look/shot status. The same control starts score-driven six-second FX dissolves and smoothly eased camera styles on desktop and in VR. Manual camera/FX edits disable auto direction; model/channel/material edits keep it running with the chosen cast. XR transforms only the virtual stage, preserving headset tracking and user placement. The three new physical profiles and Petrol Nebula, Mermaid Lagoon, and Solar Forge showcases appear in the existing shared selectors/buttons. Both cat rendering paths use the same natural stance and expressive bone layer; model-stage Gesture strength retains its range and behavior. Validate with `validate:state`, `validate:flight-effects`, `validate:flight-auto-director`, `validate:cat-poses`, and `validate:menus`; hardware comfort/performance still needs device testing.
+
 The spatial console opens on **All 2D menus**. Choose Application, Library,
 Transport, or a Controls section. Each section has search and six-row pages;
 select controls open paginated choices, numeric controls use the desktop step

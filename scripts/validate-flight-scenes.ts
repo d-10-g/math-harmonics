@@ -46,4 +46,10 @@ for (const [id, layer] of [['electric-tempest', 'lightning'], ['prism-bloom', 'p
 for (const [id, layer] of [['mobius-dream', 'ribbons'], ['crystal-galaxy', 'crystals'], ['event-horizon', 'vortexes']] as const) {
   assert(flightScene(id).effects[layer] >= 1, `${id} prominently demonstrates its new phenomenon`);
 }
-console.log('PASS: all thirteen showcase scenes use valid catalog assets/clips/materials, bounded optical settings, three source types, distinct looks, independent settings, and new spatial FX.');
+for (const [id, profile] of [['petrol-nebula', 'oil-slick'], ['mermaid-lagoon', 'opal-glass'], ['solar-forge', 'solar-gold']] as const) {
+  const scene = flightScene(id);
+  assert(Object.values(scene.channels).filter(channel => channel.material === profile).length >= 2,
+    `${id} shows its new optical material on both a shape and an animated rig`);
+  assert(scene.bloom <= 0.3, 'Material showcases preserve reflected detail');
+}
+console.log('PASS: all sixteen showcase scenes use valid catalog assets/clips/materials, bounded optical settings, three source types, distinct looks, independent settings, and spatial FX.');

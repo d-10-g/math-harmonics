@@ -69,13 +69,14 @@ export type SharedState = {
   prismCameraFollow?: boolean;
   prismCameraStyle?: FlightCameraStyle;
   prismCameraEnergy?: number;
+  prismAutoDirector?: boolean;
   // Alphabet Sphere (the Letters page): stereo view, baseline, relief,
   // collimation, point size, tour and rings.
   alphabet?: Partial<AlphabetSettings>;
 };
 
 const GEOMETRY_VALUES: WebGPUGeometryProfile[] = ['auto', 'tube', 'ribbon', 'extrude', 'lathe', 'crystal', 'surface', 'helix', 'shell', 'terrain', 'constellation', 'knot', 'mandala', 'lattice', 'ripple', 'prism', 'vortex'];
-const MATERIAL_VALUES: WebGPUMaterialProfile[] = ['auto', 'plasma', 'liquid-metal', 'pearl', 'glass', 'velvet', 'ceramic', 'hologram', 'obsidian', 'copper', 'jade', 'xray', 'carbon', 'chrome', 'ruby', 'ice', 'neon', 'ornament', 'gold', 'stained-glass', 'dichroic'];
+const MATERIAL_VALUES: WebGPUMaterialProfile[] = ['auto', 'plasma', 'liquid-metal', 'pearl', 'glass', 'velvet', 'ceramic', 'hologram', 'obsidian', 'copper', 'jade', 'xray', 'carbon', 'chrome', 'ruby', 'ice', 'neon', 'ornament', 'gold', 'stained-glass', 'dichroic', 'oil-slick', 'opal-glass', 'solar-gold'];
 const LIGHTING_VALUES: WebGPULightingPreset[] = ['studio', 'aurora', 'gallery', 'eclipse', 'caustic', 'noir', 'sunset', 'laboratory', 'underlight', 'prism'];
 
 function oneOf<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {
@@ -124,6 +125,7 @@ function parseParams(params: URLSearchParams): SharedState {
   if (prismSlice !== undefined && Number.isFinite(parseFloat(prismSlice))) state.prismSlice = Math.min(0.5, Math.max(0.05, parseFloat(prismSlice)));
   state.prismPerChannel = flag('ppc');
   state.prismCameraFollow = flag('pcf');
+  state.prismAutoDirector = flag('pad');
   state.prismCameraStyle = oneOf(read('pcs'), FLIGHT_CAMERA_STYLES.map(([id]) => id));
   const cameraEnergy = read('pce');
   if (cameraEnergy !== undefined && cameraEnergy.trim() !== '' && Number.isFinite(Number(cameraEnergy))) state.prismCameraEnergy = Math.max(0, Math.min(2, Number(cameraEnergy)));
@@ -185,7 +187,7 @@ function sanitizeStoredState(value: unknown): SharedState {
     lineWidth: 'lw', cycleFavoritesOnly: 'cf', autoPilotShuffle: 'sh', postFX: 'fx', bloomIntensity: 'bl',
     audioSource: 'asrc', noteMeshes: 'nm', noteFxAmount: 'nfa', noteFxMode: 'nfm', noteSpread: 'nsp',
     noteSource: 'nsc', meshUseMtl: 'nml', meshAssign: 'nas', noteDisplay: 'nds', prismColor: 'pcm',
-    prismSlice: 'psw', prismPerChannel: 'ppc', prismCameraFollow: 'pcf', prismCameraStyle: 'pcs', prismCameraEnergy: 'pce', prismShape: 'psh', prismFinish: 'pfi',
+    prismSlice: 'psw', prismPerChannel: 'ppc', prismCameraFollow: 'pcf', prismCameraStyle: 'pcs', prismCameraEnergy: 'pce', prismAutoDirector: 'pad', prismShape: 'psh', prismFinish: 'pfi',
     prismPathSpread: 'ppd', prismTrailLength: 'ptl', prismMesh: 'pms',
   };
   const params = new URLSearchParams();
@@ -269,6 +271,7 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('psw', state.prismSlice.toFixed(2));
   params.set('ppc', state.prismPerChannel ? '1' : '0');
   params.set('pcf', state.prismCameraFollow ? '1' : '0');
+  params.set('pad', state.prismAutoDirector ? '1' : '0');
   params.set('pcs', state.prismCameraStyle);
   params.set('pce', String(state.prismCameraEnergy));
   params.set('psh', state.prismShape);

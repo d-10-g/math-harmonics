@@ -5,6 +5,8 @@ import PrismChannelControls from './PrismChannelControls';
 import FlightEffectsControls from './FlightEffectsControls';
 import { normalizeFlightEffects, type FlightEffectsSettings, type FlightShowcase } from '../lib/flightEffects';
 import { FLIGHT_CAMERA_STYLES, normalizeFlightCameraStyle, normalizeFlightCameraEnergy, type FlightCameraStyle } from '../lib/flightCameraStyles';
+import FlightAutoStatus from './FlightAutoStatus';
+import type { ParsedMidi } from '../lib/midi';
 
 export type PrismFlightSettings = {
   prismShape: PrismShape;
@@ -17,6 +19,7 @@ export type PrismFlightSettings = {
   prismCameraFollow: boolean;
   prismCameraStyle: FlightCameraStyle;
   prismCameraEnergy: number;
+  prismAutoDirector: boolean;
 };
 
 export type PrismLook = 'spectral' | 'ornaments' | 'glass' | 'sculptures' | 'animated' | 'mixed';
@@ -29,7 +32,7 @@ const FINISHES: Array<[PrismFinish, string]> = [
   ['spectrum', 'Luminous spectrum'], ['ornament', 'Polished ornament · PBR'], ['glass', 'Colored glass · PBR'],
 ];
 
-export default function PrismFlightControls({ value, onChange, onLook, meshLibrary, perChannel, midiChannels = [0, 1, 2, 3], materialProfile = 'auto', onShowcase }: {
+export default function PrismFlightControls({ value, onChange, onLook, meshLibrary, perChannel, midiChannels = [0, 1, 2, 3], materialProfile = 'auto', onShowcase, midi, getMusicTime }: {
   value: PrismFlightSettings;
   onChange: (patch: Partial<PrismFlightSettings>) => void;
   onLook: (look: PrismLook) => void;
@@ -38,6 +41,8 @@ export default function PrismFlightControls({ value, onChange, onLook, meshLibra
   midiChannels?: number[];
   materialProfile?: WebGPUMaterialProfile;
   onShowcase?: (id: FlightShowcase) => void;
+  midi?: ParsedMidi | null;
+  getMusicTime?: () => { time: number; duration: number };
 }) {
   const selectClass = 'mt-1 block w-full rounded-md border border-white/15 bg-slate-950 p-2 text-[11px] text-fuchsia-100';
   return <div className="space-y-3 border-b border-fuchsia-300/15 pb-3">
@@ -59,19 +64,27 @@ export default function PrismFlightControls({ value, onChange, onLook, meshLibra
       </div>
     </div>
     <div data-spatial-section="Flight camera" className="rounded-lg border border-cyan-300/20 bg-cyan-400/[0.03] p-2.5">
+      <label className="mb-2 flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-fuchsia-100">
+        <span>Auto director</span>
+        <input aria-label="Flight auto director" type="checkbox" checked={value.prismAutoDirector}
+          onChange={event => onChange({ prismAutoDirector: event.target.checked })}
+          className="h-4 w-4 accent-fuchsia-300" />
+      </label>
+      <p className="mb-3 text-[10px] leading-relaxed text-white/45">Blend visual looks and camera styles in musical phrases. Keeps your channel meshes, materials, and backdrop choices. Manual camera or FX edits take over.</p>
+      {value.prismAutoDirector && <FlightAutoStatus midi={midi ?? null} getMusicTime={getMusicTime} />}
       <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-cyan-100">
         <span>Camera follow</span>
         <input aria-label="Camera follow" type="checkbox" checked={value.prismCameraFollow}
-          onChange={event => onChange({ prismCameraFollow: event.target.checked })}
+          onChange={event => onChange({ prismCameraFollow: event.target.checked, ...(value.prismAutoDirector ? { prismAutoDirector: false } : {}) })}
           className="h-4 w-4 accent-cyan-300" />
       </label>
       <p className="mt-2 text-[10px] leading-relaxed text-white/45">{value.prismCameraFollow
         ? 'A smooth camera operator frames the active notes. Drag or zoom to take over briefly. In VR, the sculpture follows while your head stays in control.'
         : 'Keep the current view, or switch on a camera operator that gently follows the action.'}</p>
-      <label className="mt-3 block text-[10px] text-white/70">Follow style
+      <label className="mt-3 block text-[10px] text-white/70">{value.prismAutoDirector ? 'Manual follow style · change to take over' : 'Follow style'}
         <select aria-label="Camera follow style" value={normalizeFlightCameraStyle(value.prismCameraStyle)}
           disabled={!value.prismCameraFollow}
-          onChange={event => onChange({ prismCameraStyle: normalizeFlightCameraStyle(event.target.value) })}
+          onChange={event => onChange({ prismCameraStyle: normalizeFlightCameraStyle(event.target.value), ...(value.prismAutoDirector ? { prismAutoDirector: false } : {}) })}
           className={`${selectClass} disabled:opacity-35`}>
           {FLIGHT_CAMERA_STYLES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
         </select>
@@ -81,12 +94,13 @@ export default function PrismFlightControls({ value, onChange, onLook, meshLibra
         <input aria-label="Camera musical energy" type="range" min={0} max={2} step={0.05}
           disabled={!value.prismCameraFollow || normalizeFlightCameraStyle(value.prismCameraStyle) === 'balanced'}
           value={normalizeFlightCameraEnergy(value.prismCameraEnergy)}
-          onChange={event => onChange({ prismCameraEnergy: normalizeFlightCameraEnergy(Number(event.target.value)) })}
+          onChange={event => onChange({ prismCameraEnergy: normalizeFlightCameraEnergy(Number(event.target.value)), ...(value.prismAutoDirector ? { prismAutoDirector: false } : {}) })}
           className="mt-2 w-full accent-cyan-300 disabled:opacity-35" />
         <span className="text-white/40">Score dynamics guide the shot without camera shake. Headsets keep natural head tracking.</span>
       </label>
     </div>
-    <FlightEffectsControls value={normalizeFlightEffects(value.prismEffects)} onChange={prismEffects => onChange({ prismEffects })} onShowcase={onShowcase} />
+    {value.prismAutoDirector && <p className="text-[10px] leading-relaxed text-fuchsia-100/65">The phrase above names the live look and shot. The FX dials below hold your manual mix; editing one returns to that mix.</p>}
+    <FlightEffectsControls value={normalizeFlightEffects(value.prismEffects)} onChange={prismEffects => onChange({ prismEffects, ...(value.prismAutoDirector ? { prismAutoDirector: false } : {}) })} onShowcase={onShowcase} />
     <div className="grid grid-cols-2 gap-2">
       <label className="text-[10px] text-white/65">Trail shape
         <select aria-label="Prism trail shape" className={selectClass} value={value.prismShape}

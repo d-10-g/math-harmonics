@@ -10,6 +10,7 @@ import { ernieCells, erniePose, ernieLayout, sampleErnie, type ErnieCell } from 
 import { resolveChannel, type ModelAsset, type ModelKind, type ModelSettings, type BackgroundChoice, type ObjFinish } from '../lib/modelChannels';
 import { loadMeshGroup, dressObjMaterials } from '../lib/meshLibrary';
 import { createPhysicalMaterial } from '../lib/materials';
+import { createCatPoseLayer } from '../lib/catPose';
 import type { WebGPULightingPreset, WebGPUMaterialProfile } from '../constants';
 import { useXR } from '@react-three/xr';
 import ModelBackdrop, { type HdriFile } from './ModelBackdrop';
@@ -41,29 +42,37 @@ function AnimatedSlot({cell,position,yaw=0,getTime,settings,display,preview,temp
  // Rest pose of every rigged node, captured before any clip runs, so gesture
  // strength can push poses PAST the clip by extrapolating from rest.
  const rest=useMemo(()=>{const m=new Map<THREE.Object3D,{q:THREE.Quaternion;p:THREE.Vector3}>();if(clips.length)model.traverse(o=>{if(o!==model)m.set(o,{q:o.quaternion.clone(),p:o.position.clone()});});return m;},[model,clips]);
+ const catPose=useMemo(()=>createCatPoseLayer(model),[model]);
  const gain=Math.max(.5,Math.min(3,settings.gesture??DEFAULT_GESTURE_STRENGTH));
  const fit=useMemo(()=>{const box=new THREE.Box3().setFromObject(model);const size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());const scale=Math.min(.25/Math.max(size.x,.001),.8/Math.max(size.z,.001),.53/Math.max(size.y,.001));return {scale,offset:[-center.x*scale,-box.min.y*scale,-center.z*scale] as [number,number,number]};},[model]);
  const clip=useMemo(()=>clips.find(c=>c.name===(settings.movement==='channel'?movement:settings.movement))??clips[(cell.channel+settings.seed)%Math.max(1,clips.length)],[clips,movement,settings.movement,settings.seed,cell.channel]);
  const player=useRef<{mixer:THREE.AnimationMixer;action:THREE.AnimationAction}|null>(null),slot=useRef<THREE.Group>(null),body=useRef<THREE.Group>(null);
  const audition=useRef<{start:number;off:number|null}|null>(null);
- useEffect(()=>{if(!clip)return;const mixer=new THREE.AnimationMixer(model),action=mixer.clipAction(clip);action.play();player.current={mixer,action};return ()=>{player.current=null;action.stop();mixer.uncacheRoot(model);};},[model,clip]);
+ useEffect(()=>{if(!clip)return;catPose?.reset(true);const mixer=new THREE.AnimationMixer(model),action=mixer.clipAction(clip);action.play();player.current={mixer,action};return ()=>{player.current=null;action.stop();mixer.uncacheRoot(model);};},[model,clip,catPose]);
  useEffect(()=>()=>{model.traverse(o=>{if((o as THREE.SkinnedMesh).isSkinnedMesh)(o as THREE.SkinnedMesh).skeleton.dispose();});},[model]);
  useFrame(()=>{
   const time=getTime();
-  let p=sampleErnie(cell,time);
-  if(audition.current){const now=performance.now()/1000,a=audition.current,end=a.off??now;p=erniePose({time:a.start,duration:3600,velocity:settings.velocity,pitch:cell.pitch,channel:cell.channel,track:0},end);p.weight*=Math.max(0,1-(now-end)/.16);if(a.off!==null&&now-a.off>.16)audition.current=null;}
+  let p=sampleErnie(cell,time),catTime=time;
+  if(audition.current){const now=performance.now()/1000,a=audition.current,end=a.off??now;catTime=end-a.start;p=erniePose({time:a.start,duration:3600,velocity:settings.velocity,pitch:cell.pitch,channel:cell.channel,track:0},end);p.weight*=Math.max(0,1-(now-end)/.16);if(a.off!==null&&now-a.off>.16)audition.current=null;}
   if(slot.current)slot.current.visible=display==='all'||preview||p.weight>0;
   const w=p.weight,c=controlsAt(time)[cell.channel]??DEFAULT_CHANNEL_CONTROLS;
+  catPose?.reset();
   if(player.current){
    const {action,mixer}=player.current;action.enabled=true;action.setEffectiveWeight(w);action.time=p.phase*clip!.duration;mixer.update(0);
-   if(gain!==1)rest.forEach((r,o)=>{TMP_Q.copy(o.quaternion);o.quaternion.copy(r.q).slerp(TMP_Q,gain);TMP_V.copy(o.position);o.position.copy(r.p).lerp(TMP_V,gain);});
+   if(!catPose&&gain!==1)rest.forEach((r,o)=>{TMP_Q.copy(o.quaternion);o.quaternion.copy(r.q).slerp(TMP_Q,gain);TMP_V.copy(o.position);o.position.copy(r.p).lerp(TMP_V,gain);});
   }
+  catPose?.apply({time:catTime,phase:p.phase,weight:w,seed:cell.pitch+cell.channel*17,movement:clip?.name,strength:gain});
   // Velocity lands as a squash-and-stretch hop scaled by the Note FX dial;
   // the channel's controllers shape the whole object: pitch bend leans and
   // slides, the mod wheel wobbles, expression x volume set size and glow,
   // aftertouch presses it larger, the sustain pedal hovers, pan slides.
   const press=1+.3*fx*c.aftertouch,dyn=(.65+.35*c.dynamics)*press;
-  if(body.current){body.current.scale.set((1+.12*fx*w)*dyn,(1+.4*fx*w)*dyn,(1+.12*fx*w)*dyn);body.current.position.y=.06*fx*w;}
+  if(body.current){
+   // The cats' stronger skeletal gestures carry the accent. Keep their torso
+   // nearly proportional instead of stretching them 40% taller on every note.
+   body.current.scale.set((1+(catPose ? .035 : .12)*fx*w)*dyn,(1+(catPose ? .08 : .4)*fx*w)*dyn,(1+(catPose ? -.015 : .12)*fx*w)*dyn);
+   body.current.position.y=(catPose ? .025 : .06)*fx*w;
+  }
   if(slot.current){slot.current.position.set(position[0]+(c.bend*.1+c.pan*.04)*fx,position[1]+c.sustain*.05*fx,position[2]);slot.current.rotation.set(0,yaw+Math.sin(time*22+cell.pitch)*c.mod*.35*fx,-c.bend*.45*fx);}
   // App materials glow with the note; MTL colors are the object's own.
   for(const m of dressed)m.emissiveIntensity=(m.userData.baseEmissiveIntensity as number)*(.6+1.4*w)*(.5+.5*c.dynamics);

@@ -1,8 +1,16 @@
 # Harmonic.OS — Math Harmonics Visualizer
 
-An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **Meta Quest** (WebXR). 271 formulas — parametric curves, true (p,q) surfaces (Klein bottle, supershapes, seashells), attractor-inspired families — rendered through 380+ GLSL shaders, 20 physical material profiles, and 10 light rigs, with audio-reactive visuals driven by live microphone analysis.
+An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **Meta Quest** (WebXR). 271 formulas — parametric curves, true (p,q) surfaces (Klein bottle, supershapes, seashells), attractor-inspired families — rendered through 380+ GLSL shaders, 23 physical material profiles, and 10 light rigs, with audio-reactive visuals driven by live microphone analysis.
 
 **Live:** https://d-10-g.github.io/math-harmonics/
+
+## v2.21.0 — Automatic performances, expressive cats, and molten optics
+
+- **Flight studio → Auto director** stages a repeatable performance from the MIDI score. Musical density, velocity, chords, and quiet beat positions guide roughly half-minute phrases; effects dissolve over six seconds while Chase, Orbit, Cinematic, and Balanced shots ease between views. Motion fields slow to rest before changing direction. Pause freezes the performance and seeking restores its exact musical phrase. Your channel meshes, materials, trail layout, and independent backdrop/starfield preferences stay yours. Manual camera/FX edits or choosing a showcase take over. Auto direction is optional, saved in links, and uses the same toggle in VR; tracked headset cameras remain untouched.
+- **Ernie and Kira have natural resting poses** with raised, curved question-mark tails, softer asymmetric legs, listening head tilts, and occasional slow blinks. All 64 authored clips receive bounded, stronger expression with coordinated head, ears, paws, and tail gestures. Both model stages and GLB flight trails use the shared pose layer; flight history freezes at note release, cached models stay unchanged, and the model-stage Gesture strength dial still controls expression. Standalone cats have less rubbery torso stretching.
+- Three new physical surfaces: **Oil-slick Metal** reflects through a broad iridescent oxide film; **Opalescent Glass** combines tinted transmission, dispersion, a soft body, and crisp lacquer reflections; **Hammered Solar Gold** breaks up reflections with a deterministic tiled micro-dent normal map. All 23 profiles work with shared desktop/VR controls, per-channel flight materials, OBJ sculptures, and animated GLBs; both renderers share their physical optics.
+- Try **Petrol Nebula**, **Mermaid Lagoon**, and **Solar Forge** for three new complete mixed-mesh scenes, bringing the showcase library to sixteen. Auto direction also draws on their effects without replacing your chosen cast.
+- Added music-plan timing/seek/transition checks, real-rig skin and tail deformation tests for both cats, material texture ownership checks, and director share-state/VR menu regressions to the Pages workflow. Headset behavior still requires hardware testing.
 
 ## v2.20.0 — Camera choreography, Möbius worlds, and a Mars landing
 
