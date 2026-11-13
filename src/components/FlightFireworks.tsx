@@ -156,7 +156,8 @@ void main() {
   float lifetime = mix(1.8, 11.0, uTracer);
   if (vAge < 0.0 || vAge > lifetime) discard;
   float edge = pow(max(0.0, 1.0 - abs(vSide)), 1.4);
-  float head = exp(-pow((vAlong - fract(vAge * 0.18 + vSeed)) * 11.0, 2.0));
+  float headDistance = (vAlong - fract(vAge * 0.18 + vSeed)) * 11.0;
+  float head = exp(-headDistance * headDistance);
   float energy = mix(0.85, 0.32 + head * 0.85, uTracer);
   float alpha = edge * effectLife(vAge, lifetime) * energy * uStrength * (0.22 + vEnergy * 0.15);
   if (alpha < 0.005) discard;

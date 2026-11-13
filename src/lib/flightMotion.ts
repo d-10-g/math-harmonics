@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { FlightEffectsSettings, FlightMotion } from './flightEffects';
 
-const MOTIONS: readonly FlightMotion[] = ['none', 'orbit', 'vortex', 'wave', 'breathe'];
+const MOTIONS: readonly FlightMotion[] = ['none', 'orbit', 'vortex', 'wave', 'breathe', 'helix', 'butterfly'];
 export const flightMotionIndex = (motion: FlightMotion | undefined) => Math.max(0, MOTIONS.indexOf(motion ?? 'none'));
 const bounded = (value: number | undefined, maximum: number, fallback = 0) =>
   Number.isFinite(value) ? THREE.MathUtils.clamp(value!, 0, maximum) : fallback;
@@ -42,6 +42,16 @@ export function sampleFlightMotion(birth: number, hue: number, time: number,
   } else if (motion === 4) {
     const breath = Math.sin(phase) * 0.22 * a;
     out.scale.set(1 + breath, 1 - breath * 0.55, 1 + breath);
+  } else if (motion === 5) {
+    // The circle lies in depth, unlike the face-on vortex. Together with
+    // forward score travel this leaves a corkscrew of banked sculptures.
+    out.offset.set(Math.cos(phase) * 0.68, Math.sin(phase * 0.45) * 0.42, Math.sin(phase) * 0.68).multiplyScalar(a);
+    out.rotation.set(Math.cos(phase) * 0.22 * a, Math.sin(phase * 0.5) * 0.35 * a, Math.sin(phase) * 0.32 * a);
+  } else if (motion === 6) {
+    // A 1:2 Lissajous orbit crosses itself like wings, with its bank tied
+    // to the turn. No velocity integration is needed to reverse a seek.
+    out.offset.set(Math.sin(phase) * 0.95, Math.sin(phase * 2) * 0.44, Math.cos(phase) * 0.25).multiplyScalar(a);
+    out.rotation.set(Math.cos(phase * 2) * 0.18 * a, Math.sin(phase) * 0.22 * a, Math.cos(phase) * 0.42 * a);
   }
   const sx = 1 + 0.22 * morph * Math.sin(phase * 1.2) * envelope;
   const sy = 1 + 0.28 * morph * Math.cos(phase) * envelope;
@@ -107,9 +117,15 @@ void flightDeform(inout vec3 p, inout vec3 n, float birth, float hue) {
   } else if (uFlightMotion > 2.5 && uFlightMotion < 3.5) {
     offset = vec3(sin(phase) * 0.6, sin(phase * 1.5) * 0.55, 0.0) * a;
     angles = vec3(cos(phase) * 0.25 * a, 0.0, sin(phase) * 0.25 * a);
-  } else if (uFlightMotion > 3.5) {
+  } else if (uFlightMotion > 3.5 && uFlightMotion < 4.5) {
     float breath = sin(phase) * 0.22 * a;
     stretch = vec3(1.0 + breath, 1.0 - breath * 0.55, 1.0 + breath);
+  } else if (uFlightMotion > 4.5 && uFlightMotion < 5.5) {
+    offset = vec3(cos(phase) * 0.68, sin(phase * 0.45) * 0.42, sin(phase) * 0.68) * a;
+    angles = vec3(cos(phase) * 0.22 * a, sin(phase * 0.5) * 0.35 * a, sin(phase) * 0.32 * a);
+  } else if (uFlightMotion > 5.5 && uFlightMotion < 6.5) {
+    offset = vec3(sin(phase) * 0.95, sin(phase * 2.0) * 0.44, cos(phase) * 0.25) * a;
+    angles = vec3(cos(phase * 2.0) * 0.18 * a, sin(phase) * 0.22 * a, cos(phase) * 0.42 * a);
   }
   float sx = 1.0 + 0.22 * uFlightMorph * sin(phase * 1.2) * envelope;
   float sy = 1.0 + 0.28 * uFlightMorph * cos(phase) * envelope;

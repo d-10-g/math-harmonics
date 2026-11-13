@@ -9,6 +9,9 @@ const DIALS: ReadonlyArray<{ id: NumericEffect; label: string; hint: string; max
   { id: 'shockwaves', label: 'Shockwave rings', hint: 'Expanding halos mark each new note.', max: 2, step: 0.05 },
   { id: 'lasers', label: 'Laser filaments', hint: 'Light beams link notes within a channel.', max: 2, step: 0.05 },
   { id: 'tracers', label: 'Ribbon tracers', hint: 'Flowing traces follow the score through space.', max: 2, step: 0.05 },
+  { id: 'auroras', label: 'Aurora silk', hint: 'Rippling veils of colored light bloom from the notes.', max: 2, step: 0.05 },
+  { id: 'constellations', label: 'Chord constellations', hint: 'Nearby notes from different channels weave luminous webs.', max: 2, step: 0.05 },
+  { id: 'gyroscopes', label: 'Orbital gyroscopes', hint: 'Nested hoops rotate around each note like celestial instruments.', max: 2, step: 0.05 },
   { id: 'morph', label: 'Liquid morph', hint: 'Bend static forms and soften rigged models with squash and stretch.', max: 1, step: 0.01 },
 ];
 const GRADIENTS: Record<FlightShowcase, string> = {
@@ -16,6 +19,9 @@ const GRADIENTS: Record<FlightShowcase, string> = {
   'neon-highway': 'from-cyan-400/20 to-fuchsia-500/25',
   'cosmic-jelly': 'from-violet-400/25 to-emerald-400/15',
   stargate: 'from-indigo-400/25 to-sky-400/20',
+  'aurora-dream': 'from-emerald-400/25 to-violet-400/20',
+  'quantum-garden': 'from-teal-400/20 to-fuchsia-400/25',
+  'clockwork-nebula': 'from-amber-400/25 to-indigo-500/20',
 };
 
 export default function FlightEffectsControls({ value, onChange, onShowcase }: {

@@ -10,6 +10,7 @@ import type { PrismColorMode } from '../lib/urlState';
 import AnimatedGlbFlight from './AnimatedGlbFlight';
 import MixedFlight from './MixedFlight';
 import FlightFireworks from './FlightFireworks';
+import FlightSculptures from './FlightSculptures';
 import { DEFAULT_FLIGHT_EFFECTS, type FlightEffectsSettings } from '../lib/flightEffects';
 import type { PrismChannelMap } from '../lib/prismChannels';
 import { buildPrismScore, prismInstanceBudget, prismVisibleRange, samplePrismPose, type PrismFinish, type PrismShape } from '../lib/prismTrail';
@@ -102,6 +103,7 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
   return <group rotation={[0.3, 0, 0]} scale={1.15 * data.fit}>
     <group ref={trailRef}>
       {(effects.bursts > 0 || effects.shockwaves > 0 || effects.lasers > 0 || effects.tracers > 0) && <FlightFireworks data={data} getMusicTime={getMusicTime} settings={effects} />}
+      {(effects.auroras > 0 || effects.constellations > 0 || effects.gyroscopes > 0) && <FlightSculptures data={data} getMusicTime={getMusicTime} settings={effects} />}
       {shape === 'mixed' ? <MixedFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} colorMode={colorMode} sliceWidth={sliceWidth} /> : shape === 'glb' ? <AnimatedGlbFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} /> : mesh && <primitive object={mesh.instances} dispose={null} />}
     </group>
   </group>;

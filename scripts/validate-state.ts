@@ -23,7 +23,7 @@ const state: Required<SharedState> = {
   noteSource: 'prism', meshUseMtl: false, meshAssign: 'random', noteDisplay: 'sounding',
   prismColor: 'chroma', prismSlice: 0.14, prismPerChannel: true, prismShape: 'mesh', prismFinish: 'glass',
   prismPathSpread: 0.8, prismTrailLength: 25, prismMesh: 'Star',
-  prismEffects: { bursts: 0.8, shockwaves: 1.2, lasers: 1.1, tracers: 0.7, motion: 'vortex', motionAmount: 0.9, morph: 0.6 },
+  prismEffects: { bursts: 0.8, shockwaves: 1.2, lasers: 1.1, tracers: 0.7, auroras: 0.55, constellations: 1.1, gyroscopes: 0.8, motion: 'butterfly', motionAmount: 0.9, morph: 0.6 },
   prismChannels: {
     0: { asset: 'Ernie_model.glb', material: 'ornament', movement: '01_Head_nod' },
     1: { asset: 'Kira_model.glb', material: 'glass', movement: 'Kira_08_Little_chirp' },

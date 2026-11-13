@@ -10,22 +10,24 @@ import { readSpatialMenus } from '../src/lib/spatialMenu';
 for (const absent of [undefined, null, [], true, 7, 'edited', {}]) {
   assert.deepEqual(normalizeFlightEffects(absent), DEFAULT_FLIGHT_EFFECTS, 'Old links and absent effects preserve the original scene');
 }
-const supplied: FlightEffectsSettings = { bursts: 1.7, shockwaves: 0.55, lasers: 0.35, tracers: 1.5, motion: 'vortex', motionAmount: 1.25, morph: 0.66 };
+const supplied: FlightEffectsSettings = { bursts: 1.7, shockwaves: 0.55, lasers: 0.35, tracers: 1.5, auroras: 0.8, constellations: 1.2, gyroscopes: 0.65, motion: 'vortex', motionAmount: 1.25, morph: 0.66 };
 const serialized = JSON.stringify(supplied);
 assert.deepEqual(normalizeFlightEffects(JSON.parse(serialized)), supplied, 'Every setting survives serialization exactly');
-assert.deepEqual(normalizeFlightEffects({ bursts: 99, shockwaves: -1, lasers: '1', tracers: NaN, motion: 'camera-shake', motionAmount: Infinity, morph: 9, injected: 1 }),
-  { bursts: 2, shockwaves: 0, lasers: 0, tracers: 0, motion: 'none', motionAmount: 1, morph: 1 }, 'Invalid values are ignored and numeric bounds apply');
+assert.deepEqual(normalizeFlightEffects({ bursts: 99, shockwaves: -1, lasers: '1', tracers: NaN, auroras: Infinity, constellations: 8, gyroscopes: -1, motion: 'camera-shake', motionAmount: Infinity, morph: 9, injected: 1 }),
+  { ...DEFAULT_FLIGHT_EFFECTS, bursts: 2, constellations: 2, morph: 1 }, 'Invalid values are ignored and numeric bounds apply');
+const oldEffects = { bursts: 1, shockwaves: 0.3, lasers: 0.5, tracers: 0.2, motion: 'wave', motionAmount: 0.7, morph: 0.1 };
+assert.deepEqual(normalizeFlightEffects(oldEffects), { ...DEFAULT_FLIGHT_EFFECTS, ...oldEffects }, 'Existing FX links retain their look and leave new layers disabled');
 const copy = normalizeFlightEffects(supplied);
 copy.bursts = 0;
 assert.equal(supplied.bursts, 1.7, 'Normalization never mutates stored settings');
 assert.equal(JSON.stringify(supplied), serialized);
 assert.notEqual(normalizeFlightEffects(undefined), DEFAULT_FLIGHT_EFFECTS, 'Defaults are returned as a private settings object');
 assert(Object.isFrozen(DEFAULT_FLIGHT_EFFECTS));
-assert.equal(new Set(FLIGHT_SHOWCASES.map(preset => preset.id)).size, 4);
-assert.equal(new Set(FLIGHT_SHOWCASES.map(preset => preset.effects.motion)).size, 4, 'Showcases explore different motion fields');
+assert.equal(new Set(FLIGHT_SHOWCASES.map(preset => preset.id)).size, 7);
+assert.equal(new Set(FLIGHT_SHOWCASES.map(preset => preset.effects.motion)).size, 6, 'Showcases explore different motion fields');
 for (const preset of FLIGHT_SHOWCASES) {
   assert.deepEqual(normalizeFlightEffects(preset.effects), preset.effects, `${preset.label} is within the supported ranges`);
-  assert.ok(preset.effects.bursts + preset.effects.shockwaves + preset.effects.lasers + preset.effects.tracers > 0);
+  assert.ok(preset.effects.bursts + preset.effects.shockwaves + preset.effects.lasers + preset.effects.tracers + preset.effects.auroras + preset.effects.constellations + preset.effects.gyroscopes > 0);
   for (const [key, value] of Object.entries(preset.effects)) {
     if (typeof value === 'number') {
       const step = key === 'morph' ? 0.01 : 0.05;
@@ -42,7 +44,7 @@ function elements(node: ReactNode): any[] {
 let changed: FlightEffectsSettings | undefined;
 const tree = FlightEffectsControls({ value: supplied, onChange: value => { changed = value; } });
 const control = (label: string) => elements(tree).find(element => element.props['aria-label'] === label)!;
-for (const key of ['bursts', 'shockwaves', 'lasers', 'tracers', 'morph'] as const) {
+for (const key of ['bursts', 'shockwaves', 'lasers', 'tracers', 'auroras', 'constellations', 'gyroscopes', 'morph'] as const) {
   control(`Flight ${key}`).props.onChange({ target: { value: '0.4' } });
   assert.deepEqual(changed, { ...supplied, [key]: 0.4 }, `${key} edits preserve the other effects`);
 }
@@ -89,7 +91,7 @@ const render = (value: FlightEffectsSettings) => {
 const sections = render(supplied);
 assert.deepEqual(sections.map(section => section.label), ['Controls · Flight FX']);
 const item = (label: string) => sections[0].items.find(item => item.label === label)!;
-for (const key of ['bursts', 'shockwaves', 'lasers', 'tracers', 'morph'] as const) {
+for (const key of ['bursts', 'shockwaves', 'lasers', 'tracers', 'auroras', 'constellations', 'gyroscopes', 'morph'] as const) {
   const dial = item(`Flight ${key}`);
   assert.equal(dial.min, 0);
   assert.equal(dial.max, key === 'morph' ? 1 : 2);
@@ -106,4 +108,4 @@ assert.equal(item('Clear flight FX').kind, 'action');
 const defaults = render(normalizeFlightEffects(undefined));
 assert.equal(defaults[0].items.find(item => item.label === 'Flight motion amount')!.disabled, true, 'Motion strength is disabled consistently when the motion field is still');
 await window.happyDOM.close();
-console.log('PASS: bounded FX settings, old-link defaults, four distinct showcases, isolated edits, scene callbacks, clear behavior, and exact shared VR controls.');
+console.log('PASS: bounded FX settings, old-link defaults, seven showcases, isolated edits, scene callbacks, clear behavior, and exact shared VR controls.');

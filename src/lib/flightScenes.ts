@@ -51,6 +51,33 @@ export const FLIGHT_SCENES: Record<FlightShowcase, Scene> = {
     },
     lighting: 'prism', finish: 'ornament', spread: 1.2, memory: 30, bloom: 0.45, color: 'chroma',
   },
+  'aurora-dream': {
+    channels: {
+      0: { kind: 'shape', shape: 'knot', material: 'hologram' },
+      1: { kind: 'obj', asset: 'Thaidrop.obj', material: 'ice' },
+      2: { kind: 'glb', asset: 'Kira_model.glb', material: 'pearl', movement: 'Kira_30_Tail_ribbon_right' },
+      3: { kind: 'shape', shape: 'sphere', material: 'jade' },
+    },
+    lighting: 'aurora', finish: 'glass', spread: 1, memory: 30, bloom: 0.35, color: 'pitch',
+  },
+  'quantum-garden': {
+    channels: {
+      0: { kind: 'obj', asset: 'Atom.obj', material: 'hologram' },
+      1: { kind: 'shape', shape: 'crystal', material: 'jade' },
+      2: { kind: 'glb', asset: 'Ernie_model.glb', material: 'dichroic', movement: '28_Tail_ripple' },
+      3: { kind: 'shape', shape: 'sphere', material: 'plasma' },
+    },
+    lighting: 'caustic', finish: 'glass', spread: 1.1, memory: 25, bloom: 0.3, color: 'chroma',
+  },
+  'clockwork-nebula': {
+    channels: {
+      0: { kind: 'obj', asset: 'Gear.obj', material: 'copper' },
+      1: { kind: 'shape', shape: 'torus', material: 'gold' },
+      2: { kind: 'glb', asset: 'Kira_model.glb', material: 'ornament', movement: 'Kira_12_Both_ears_swivel' },
+      3: { kind: 'shape', shape: 'crystal', material: 'chrome' },
+    },
+    lighting: 'eclipse', finish: 'ornament', spread: 1.2, memory: 30, bloom: 0.4, color: 'length',
+  },
 };
 
 export function flightScene(id: FlightShowcase) {

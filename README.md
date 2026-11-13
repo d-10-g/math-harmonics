@@ -4,6 +4,16 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.18.0 — Light sculptures: aurora silk, constellations, and clockwork
+
+- Three new complete scenes in **Prism → Flight FX laboratory**: **Aurora Dream** drapes rippling silk light over holographic knots and icy drops; **Quantum Garden** weaves nearby notes into constellations around holographic atoms and jade crystals; **Clockwork Nebula** surrounds copper gears, golden rings, and animated Kira with nested orbital gyroscopes. Each mixes GLB, OBJ, and built-in forms with its own materials and light rig. The previous four scenes remain available.
+- Three independent 0–200% dials add **Aurora silk**, **Chord constellations**, and **Orbital gyroscopes** to any flight. Curtains ripple in real depth; constellation threads connect nearby notes across channels; gyroscopic hoops bank around recent note positions. These layers combine with all existing sparks, lasers, tracers, shockwaves, and morphs.
+- Two new motion fields: **Corkscrew flight** rolls the forms through a depth spiral; **Butterfly figure eight** banks them through a crossing, winglike path. Both work on static meshes and animated rigs. Their shader and CPU transforms agree, with corrected surface normals on deformed physical materials.
+- New layers use bounded recent pools, lower headset density, and at most three additional GPU batches. Disabled layers allocate no GPU buffers; score time controls every ripple and rotation, so pause and backward seeking remain deterministic. Old links retain their previous appearance with the new layers off.
+- All seven scenes, every dial, and all seven motion choices appear in the shared desktop/VR menus and persist through reloads and **Copy Link**. **Clear flight FX** removes the extras while preserving models, materials, and lighting. Regression checks cover dense-score bounds, constellation identity, seeking, normals, resource cleanup, real catalog references, and menu/state parity. Headset hardware still needs testing.
+
+Try **Aurora Dream**, then turn up **Orbital gyroscopes** for a silk-and-clockwork remix. Choosing a showcase replaces the visual scene while preserving the loaded score; the individual dials preserve your channel assignments.
+
 ## v2.17.0 — Flight FX laboratory: supernovas, lasers, and liquid worlds
 
 - Four complete surprise scenes under **Prism → Flight FX laboratory**: **Supernova** (starbursts and expanding halos), **Neon Highway** (laser filaments and comet ribbons), **Cosmic Jelly** (breathing glass, liquid shapes, and rigged models), and **Stargate** (swirling torus gates and shockwaves). Each scene curates the channel visuals, materials, light rig, bloom, paths, and effect mix together. Existing six flight looks remain available.

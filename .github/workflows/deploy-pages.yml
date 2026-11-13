@@ -33,6 +33,7 @@ jobs:
       - run: npm run validate:mixed-flight
       - run: npm run validate:flight-effects
       - run: npm run validate:flight-fireworks
+      - run: npm run validate:flight-sculptures
       - run: npm run validate:flight-motion
       - run: npm run validate:flight-scenes
       - run: npm run validate:materials
