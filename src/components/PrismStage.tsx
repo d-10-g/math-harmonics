@@ -12,7 +12,9 @@ import MixedFlight from './MixedFlight';
 import FlightFireworks from './FlightFireworks';
 import FlightSculptures from './FlightSculptures';
 import FlightSpectacle from './FlightSpectacle';
+import FlightPhenomena from './FlightPhenomena';
 import FlightCameraDirector from './FlightCameraDirector';
+import type { FlightCameraStyle } from '../lib/flightCameraStyles';
 import { DEFAULT_FLIGHT_EFFECTS, type FlightEffectsSettings } from '../lib/flightEffects';
 import type { PrismChannelMap } from '../lib/prismChannels';
 import { buildPrismScore, prismInstanceBudget, prismVisibleRange, samplePrismPose, type PrismFinish, type PrismShape } from '../lib/prismTrail';
@@ -20,11 +22,12 @@ import { buildPrismScore, prismInstanceBudget, prismVisibleRange, samplePrismPos
 export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode = 'full', sliceWidth = 0.14,
   perChannel = false, shape = 'spectrum', finish = 'spectrum', pathSpread = 1, trailLength = 0,
   materialProfile = 'auto', meshId = 'Star', showWireframe = false, channelMap, onStatus, effects = DEFAULT_FLIGHT_EFFECTS,
-  cameraFollow = false, manualUntilRef }: {
+  cameraFollow = false, cameraStyle = 'balanced', cameraEnergy = 1, manualUntilRef }: {
   midi: ParsedMidi | null; getMusicTime?: () => { time: number; duration: number }; noteSpread: number;
   colorMode?: PrismColorMode; sliceWidth?: number; perChannel?: boolean; shape?: PrismShape; finish?: PrismFinish;
   pathSpread?: number; trailLength?: number; materialProfile?: WebGPUMaterialProfile; meshId?: string; showWireframe?: boolean; channelMap?: PrismChannelMap; onStatus?: (status: string) => void; effects?: FlightEffectsSettings;
   cameraFollow?: boolean; manualUntilRef?: RefObject<number>;
+  cameraStyle?: FlightCameraStyle; cameraEnergy?: number;
 }) {
   const [sourceGeometry, setSourceGeometry] = useState<{ id: string; geometry: THREE.BufferGeometry } | null>(null);
   useEffect(() => {
@@ -111,7 +114,8 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
       {(effects.bursts > 0 || effects.shockwaves > 0 || effects.lasers > 0 || effects.tracers > 0) && <FlightFireworks data={data} getMusicTime={getMusicTime} settings={effects} />}
       {(effects.auroras > 0 || effects.constellations > 0 || effects.gyroscopes > 0) && <FlightSculptures data={data} getMusicTime={getMusicTime} settings={effects} />}
       {(effects.lightning > 0 || effects.petals > 0 || effects.bubbles > 0) && <FlightSpectacle data={data} getMusicTime={getMusicTime} settings={effects} />}
+      {(effects.ribbons > 0 || effects.crystals > 0 || effects.vortexes > 0) && <FlightPhenomena data={data} getMusicTime={getMusicTime} settings={effects} />}
       {shape === 'mixed' ? <MixedFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} colorMode={colorMode} sliceWidth={sliceWidth} /> : shape === 'glb' ? <AnimatedGlbFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} /> : mesh && <primitive object={mesh.instances} dispose={null} />}
     </group>
-  </group><FlightCameraDirector enabled={cameraFollow} data={data} trailRef={trailRef} stageRef={stageRef} framingRef={framingRef} getMusicTime={getMusicTime} effects={effects} manualUntilRef={manualUntilRef} /></group>;
+  </group><FlightCameraDirector enabled={cameraFollow} style={cameraStyle} energy={cameraEnergy} data={data} trailRef={trailRef} stageRef={stageRef} framingRef={framingRef} getMusicTime={getMusicTime} effects={effects} manualUntilRef={manualUntilRef} /></group>;
 }

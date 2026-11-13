@@ -36,6 +36,8 @@ jobs:
       - run: npm run validate:flight-sculptures
       - run: npm run validate:flight-spectacle
       - run: npm run validate:flight-camera
+      - run: npm run validate:flight-phenomena
+      - run: npm run validate:flight-landing
       - run: npm run validate:flight-motion
       - run: npm run validate:flight-scenes
       - run: npm run validate:materials

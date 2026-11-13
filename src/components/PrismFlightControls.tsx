@@ -4,6 +4,7 @@ import type { PrismChannelMap } from '../lib/prismChannels';
 import PrismChannelControls from './PrismChannelControls';
 import FlightEffectsControls from './FlightEffectsControls';
 import { normalizeFlightEffects, type FlightEffectsSettings, type FlightShowcase } from '../lib/flightEffects';
+import { FLIGHT_CAMERA_STYLES, normalizeFlightCameraStyle, normalizeFlightCameraEnergy, type FlightCameraStyle } from '../lib/flightCameraStyles';
 
 export type PrismFlightSettings = {
   prismShape: PrismShape;
@@ -14,6 +15,8 @@ export type PrismFlightSettings = {
   prismChannels: PrismChannelMap;
   prismEffects: FlightEffectsSettings;
   prismCameraFollow: boolean;
+  prismCameraStyle: FlightCameraStyle;
+  prismCameraEnergy: number;
 };
 
 export type PrismLook = 'spectral' | 'ornaments' | 'glass' | 'sculptures' | 'animated' | 'mixed';
@@ -65,6 +68,23 @@ export default function PrismFlightControls({ value, onChange, onLook, meshLibra
       <p className="mt-2 text-[10px] leading-relaxed text-white/45">{value.prismCameraFollow
         ? 'A smooth camera operator frames the active notes. Drag or zoom to take over briefly. In VR, the sculpture follows while your head stays in control.'
         : 'Keep the current view, or switch on a camera operator that gently follows the action.'}</p>
+      <label className="mt-3 block text-[10px] text-white/70">Follow style
+        <select aria-label="Camera follow style" value={normalizeFlightCameraStyle(value.prismCameraStyle)}
+          disabled={!value.prismCameraFollow}
+          onChange={event => onChange({ prismCameraStyle: normalizeFlightCameraStyle(event.target.value) })}
+          className={`${selectClass} disabled:opacity-35`}>
+          {FLIGHT_CAMERA_STYLES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        </select>
+      </label>
+      <label className="mt-3 block text-[10px] text-white/70">
+        <span className="flex items-center justify-between gap-2"><span>Musical camera energy</span><span className="font-mono text-cyan-200">{Math.round(normalizeFlightCameraEnergy(value.prismCameraEnergy) * 100)}%</span></span>
+        <input aria-label="Camera musical energy" type="range" min={0} max={2} step={0.05}
+          disabled={!value.prismCameraFollow || normalizeFlightCameraStyle(value.prismCameraStyle) === 'balanced'}
+          value={normalizeFlightCameraEnergy(value.prismCameraEnergy)}
+          onChange={event => onChange({ prismCameraEnergy: normalizeFlightCameraEnergy(Number(event.target.value)) })}
+          className="mt-2 w-full accent-cyan-300 disabled:opacity-35" />
+        <span className="text-white/40">Score dynamics guide the shot without camera shake. Headsets keep natural head tracking.</span>
+      </label>
     </div>
     <FlightEffectsControls value={normalizeFlightEffects(value.prismEffects)} onChange={prismEffects => onChange({ prismEffects })} onShowcase={onShowcase} />
     <div className="grid grid-cols-2 gap-2">

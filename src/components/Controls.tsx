@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import { ALPHABET_STEREO_MODES, type AlphabetSettings } from '../lib/alphabetSphere';
 import { useClockSnapshot } from '../lib/clock';
 import { glslFragmentError } from '../lib/glsl';
+import SceneBackdropControls from './SceneBackdropControls';
 import {
   Formula,
   ShaderPreset,
@@ -136,6 +137,8 @@ interface ControlsProps {
   onMutateFormula: () => void;
   showEnvironment: boolean;
   setShowEnvironment: (show: boolean) => void;
+  showStarfield: boolean;
+  setShowStarfield: (show: boolean) => void;
   lineWidth: number;
   setLineWidth: (width: number) => void;
   postFX: boolean;
@@ -478,6 +481,8 @@ export default function Controls({
   onMutateFormula,
   showEnvironment,
   setShowEnvironment,
+  showStarfield,
+  setShowStarfield,
   lineWidth,
   setLineWidth,
   postFX,
@@ -1121,29 +1126,9 @@ export default function Controls({
             />
           </div>
 
-          {modelStage ? <div data-spatial-section="Model background">{modelBackgroundControls}</div> : <>
-          {/* Cosmos Backdrop Switch */}
-          <div className="flex items-center justify-between group">
-            <div>
-              <div className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">Cosmos Backdrop</div>
-              <div className="text-[9px] text-white/30 font-mono">Rig-Tinted Dome + Starfield (3D)</div>
-            </div>
-            <button
-              onClick={() => setShowEnvironment(!showEnvironment)}
-              aria-label="Cosmos backdrop"
-              aria-pressed={showEnvironment}
-              className={cn(
-                "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center px-1",
-                showEnvironment ? "bg-indigo-600" : "bg-white/10"
-              )}
-            >
-              <div className={cn(
-                "w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm",
-                showEnvironment ? "translate-x-5" : "translate-x-0"
-              )} />
-            </button>
-          </div>
-          </>}
+          {modelStage ? <div data-spatial-section="Model background">{modelBackgroundControls}</div> : <SceneBackdropControls
+            showEnvironment={showEnvironment} onEnvironmentChange={setShowEnvironment}
+            showStarfield={showStarfield} onStarfieldChange={setShowStarfield} />}
 
           {/* 2D Line Width */}
           <div className="space-y-3 group">

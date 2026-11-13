@@ -15,6 +15,9 @@ const DIALS: ReadonlyArray<{ id: NumericEffect; label: string; hint: string; max
   { id: 'lightning', label: 'Plasma lightning', hint: 'Branching electric discharges leap between notes in each channel.', max: 2, step: 0.05 },
   { id: 'petals', label: 'Prismatic flowers', hint: 'Folded spectral petals unfurl at note attacks.', max: 2, step: 0.05 },
   { id: 'bubbles', label: 'Thin-film bubbles', hint: 'Translucent shells shimmer with shifting soap-film colors.', max: 2, step: 0.05 },
+  { id: 'ribbons', label: 'Möbius silk', hint: 'Half-twisted spectral ribbons curl around the notes.', max: 2, step: 0.05 },
+  { id: 'crystals', label: 'Holographic geodes', hint: 'Branching faceted crystals grow with colored scan highlights.', max: 2, step: 0.05 },
+  { id: 'vortexes', label: 'Accretion vortices', hint: 'Warped luminous disks spiral around dark centers.', max: 2, step: 0.05 },
   { id: 'morph', label: 'Liquid morph', hint: 'Bend static forms and soften rigged models with squash and stretch.', max: 1, step: 0.01 },
 ];
 const GRADIENTS: Record<FlightShowcase, string> = {
@@ -28,6 +31,9 @@ const GRADIENTS: Record<FlightShowcase, string> = {
   'electric-tempest': 'from-cyan-400/25 to-violet-500/25',
   'prism-bloom': 'from-rose-400/25 to-lime-300/15',
   'bubble-ballet': 'from-sky-300/20 to-pink-300/20',
+  'mobius-dream': 'from-fuchsia-400/25 to-cyan-300/20',
+  'crystal-galaxy': 'from-sky-300/25 to-violet-400/25',
+  'event-horizon': 'from-orange-400/25 to-indigo-500/25',
 };
 
 export default function FlightEffectsControls({ value, onChange, onShowcase }: {

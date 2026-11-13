@@ -43,4 +43,7 @@ for (const [id, layer] of [['electric-tempest', 'lightning'], ['prism-bloom', 'p
   assert(scene.bloom <= 0.4, 'New spectacle scenes preserve readable translucent detail');
   assert.equal(Object.keys(scene.channels).sort().join(','), '0,1,2,3', 'New scenes explicitly dress the same first four MIDI channels');
 }
-console.log('PASS: all ten showcase scenes use valid catalog assets/clips/materials, bounded optical settings, three source types, distinct looks, independent settings, and new spatial FX.');
+for (const [id, layer] of [['mobius-dream', 'ribbons'], ['crystal-galaxy', 'crystals'], ['event-horizon', 'vortexes']] as const) {
+  assert(flightScene(id).effects[layer] >= 1, `${id} prominently demonstrates its new phenomenon`);
+}
+console.log('PASS: all thirteen showcase scenes use valid catalog assets/clips/materials, bounded optical settings, three source types, distinct looks, independent settings, and new spatial FX.');

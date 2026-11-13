@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import { prismLowerBound, type PrismScoreData } from './prismTrail';
 import type { FlightEffectsSettings } from './flightEffects';
 import { createFlightMotionSample, sampleFlightMotion } from './flightMotion';
+import type { FlightCameraStyle } from './flightCameraStyles';
 
 export const FLIGHT_CAMERA_NOTES_PER_CHANNEL = 24;
 export const FLIGHT_CAMERA_MEMORY = 6;
 export const FLIGHT_CAMERA_MANUAL_GRACE = 3;
+export const FLIGHT_CAMERA_SETTLE_SECONDS = 12;
 
-export type FlightFocus = { center: THREE.Vector3; radius: number; notes: number; channels: number };
-export const createFlightFocus = (): FlightFocus => ({ center: new THREE.Vector3(), radius: 3.5, notes: 0, channels: 0 });
+export type FlightFocus = { center: THREE.Vector3; radius: number; notes: number; channels: number; energy: number };
+export const createFlightFocus = (): FlightFocus => ({ center: new THREE.Vector3(), radius: 3.5, notes: 0, channels: 0, energy: 0 });
 
 /** Index once; each frame visits at most 24 notes per MIDI channel. A busy
  * accompaniment gets the same framing vote as the solo instrument. */
@@ -29,18 +31,24 @@ export function createFlightFocusIndex(data: PrismScoreData) {
 
 export function sampleFlightFocus(data: PrismScoreData, index: ReturnType<typeof createFlightFocusIndex>,
   time: number, effects: FlightEffectsSettings | undefined, out: FlightFocus): FlightFocus {
-  out.center.set(0, 0, 0); out.radius = 3.5; out.notes = 0; out.channels = 0;
+  out.center.set(0, 0, 0); out.radius = 3.5; out.notes = 0; out.channels = 0; out.energy = 0;
   const now = Number.isFinite(time) ? Math.max(0, time) : 0;
   index.sums.fill(0);
   for (let c = 0; c < index.channels.length; c++) {
     const channel = index.channels[c], end = prismLowerBound(channel.birth, now, true);
     const begin = Math.max(0, end - FLIGHT_CAMERA_NOTES_PER_CHANNEL);
     const base = c * 4;
+    let channelEnergy = 0;
     for (let k = begin; k < end; k++) {
       const note = channel.notes[k], age = now - data.birth[note];
       const held = age <= data.duration[note];
       if (!held && age > FLIGHT_CAMERA_MEMORY) continue;
       const weight = (0.2 + 0.8 * data.velocity[note]) * (held ? 1.7 : Math.exp(-age / 1.4));
+      // A soft score-time attack/release is reproducible when seeking and
+      // does not let a dense accompaniment dictate the camera's energy.
+      const attack = 1 - Math.exp(-age * 12);
+      channelEnergy = Math.max(channelEnergy, THREE.MathUtils.clamp(data.velocity[note], 0, 1) * attack
+        * (0.85 * Math.exp(-age / 0.95) + (held ? 0.15 : 0)));
       const m = note * 16;
       sampleFlightMotion(data.birth[note], data.hue[note], now, effects, index.motion);
       index.point.copy(index.motion.offset);
@@ -65,10 +73,12 @@ export function sampleFlightFocus(data: PrismScoreData, index: ReturnType<typeof
       index.sums[base] /= weight; index.sums[base + 1] /= weight; index.sums[base + 2] /= weight;
       out.center.x += index.sums[base]; out.center.y += index.sums[base + 1]; out.center.z += index.sums[base + 2];
       out.channels++;
+      out.energy += channelEnergy;
     }
   }
   if (!out.channels) return out;
   out.center.divideScalar(out.channels);
+  out.energy /= out.channels;
   // Cover the recent action, including chords within one instrument. The
   // additional margin leaves room for model size, motion and nearby FX.
   let radius = 0;
@@ -148,6 +158,58 @@ export function flightCameraTimeline(lastTime: number, settling: number, rawTime
   const delta = Math.max(0, Math.min(0.05, Number.isFinite(rawDelta) ? rawDelta : 0));
   const moved = !Number.isFinite(lastTime) || Math.abs(time - lastTime) > 1e-6;
   const jump = Number.isFinite(lastTime) && (time < lastTime || time - lastTime > 0.5);
-  const remaining = jump ? 1 : Math.max(0, settling);
+  const remaining = jump ? FLIGHT_CAMERA_SETTLE_SECONDS : Math.max(0, settling);
   return { time, delta, moved, jump, active: moved || remaining > 0, settling: Math.max(0, remaining - delta) };
+}
+
+export type FlightCameraShot = { direction: THREE.Vector3; distance: number; lead: number };
+export const createFlightCameraShot = (): FlightCameraShot => ({ direction: new THREE.Vector3(0, 0, 1), distance: 1, lead: 0 });
+
+/** Absolute score-time choreography. Response changes musical accents,
+ * while zero response retains the chosen camera style's deliberate travel. */
+export function sampleFlightCameraShot(style: FlightCameraStyle, time: number, energy: number, response: number,
+  heading: THREE.Vector3, out: FlightCameraShot): FlightCameraShot {
+  const t = Number.isFinite(time) ? Math.max(0, time) : 0;
+  const music = THREE.MathUtils.clamp(Number.isFinite(energy) ? energy : 0, 0, 1)
+    * THREE.MathUtils.clamp(Number.isFinite(response) ? response : 1, 0, 2);
+  out.direction.set(0, 0, 1); out.distance = 1; out.lead = 0;
+  if (style === 'balanced') return out;
+  if (style === 'chase') {
+    out.direction.copy(heading).negate();
+    if (out.direction.lengthSq() < 0.00001 || !Number.isFinite(out.direction.x)
+      || !Number.isFinite(out.direction.y) || !Number.isFinite(out.direction.z)) out.direction.set(0, 0, -1);
+    out.direction.normalize();
+    const yaw = 0.1 * Math.sin(t * 0.11) * (1 + music * 0.4);
+    const x = out.direction.x, z = out.direction.z;
+    out.direction.x = x * Math.cos(yaw) + z * Math.sin(yaw);
+    out.direction.z = -x * Math.sin(yaw) + z * Math.cos(yaw);
+    out.direction.y += 0.12 + Math.sin(t * 0.07) * 0.035;
+    out.direction.normalize(); out.distance = 0.96 - music * 0.055;
+    out.lead = 1.1 + music * 0.45;
+    return out;
+  }
+  const orbit = style === 'orbit';
+  const yaw = orbit ? t * 0.055 + Math.sin(t * 0.09) * 0.08 * music
+    : Math.sin(t * 0.035) * 0.85 + Math.sin(t * 0.011 + 1.1) * 0.3;
+  const pitch = orbit ? Math.sin(t * 0.037) * 0.17 + Math.sin(t * 0.08) * 0.035 * music
+    : 0.13 + Math.sin(t * 0.043 - 0.8) * 0.18;
+  out.direction.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+  out.distance = orbit ? 1.05 + Math.sin(t * 0.055) * 0.055 - music * 0.04
+    : 1.12 + Math.sin(t * 0.024 + 0.6) * 0.16 - music * 0.065;
+  out.lead = orbit ? 0.25 * music : 0.45 + Math.sin(t * 0.07) * 0.4 + music * 0.3;
+  return out;
+}
+
+export const createFlightDirectionWorkspace = () => ({ rotation: new THREE.Quaternion(), partial: new THREE.Quaternion() });
+
+/** Great-circle easing keeps a Chase transition from cutting through the
+ * action, even when its trailing view is opposite the current camera. */
+export function dampFlightDirection(current: THREE.Vector3, target: THREE.Vector3, dt: number,
+  work: ReturnType<typeof createFlightDirectionWorkspace>) {
+  const step = Math.max(0, Math.min(0.05, Number.isFinite(dt) ? dt : 0));
+  const angle = current.angleTo(target);
+  if (step <= 0 || angle <= 1e-8) return current;
+  work.rotation.setFromUnitVectors(current, target);
+  work.partial.identity().slerp(work.rotation, Math.min(1 - Math.exp(-step * 1.4), step * 0.3 / angle));
+  return current.applyQuaternion(work.partial).normalize();
 }

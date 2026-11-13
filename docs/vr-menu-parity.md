@@ -72,6 +72,14 @@ The seventh trail shape, Animated GLB, and the Animated flight preset are shared
 
 Mixed by channel is the eighth Trail shape; Mixed flight is the sixth look. In `Controls · Flight channels`, each active MIDI channel exposes Source (GLB, OBJ, built-in shape), a source-specific model/shape selector, its own Material, and a Movement selector only for GLB rigs. The shared DOM keeps desktop and VR options and selected values aligned. Original materials apply to imported GLB/OBJ models; built-ins expose Spectrum and the physical profiles. Prism color/slice settings apply to static trails in mixed mode. Existing asset-only GLB mappings remain valid, and mixed mappings add validated `kind` and `shape` fields to the same `pch` share setting. The shared stage remains on WebGL/XR, with the headset history pool reduced for performance.
 
+## Camera choreography and independent stars (v2.20.0)
+
+`Controls · Flight camera` adds Follow style (`Camera follow style`): Balanced, Chase, Orbit, Cinematic. `Camera musical energy` runs 0–2 in 0.05 steps and is disabled when follow is Off or style is Balanced. The same controls, values, and disabled conditions reach VR; XR styles reframe/rotate the virtual sculpture while leaving head tracking intact. `pcs` and `pce` store these settings independently of the follow flag and scene presets.
+
+`Controls · Backdrop` exposes Cosmos backdrop and Starfield as independent toggles. `sf` saves stars, defaulting to Off without borrowing the legacy `env` value. Presets preserve both preferences. Dome/floor visibility now respects Cosmos backdrop in XR too; passthrough still hides virtual surroundings.
+
+`Controls · Flight FX` adds Möbius Dream, Crystal Galaxy, Event Horizon, and Möbius silk (`Flight ribbons`), Holographic geodes (`Flight crystals`), Accretion vortices (`Flight vortexes`), all 0–2 in 0.05 steps. They share `pfx` with the existing layers and use lower geometry budgets in XR. Fresh audio landings use Mars/Cosmic Jelly/follow On, while saved choices and share links take precedence.
+
 ## Flight cinema (v2.19.0)
 
 `Controls · Flight camera` exposes the native **Camera follow** checkbox with the same `prismCameraFollow` state used on desktop. It defaults to Off and persists in the validated `pcf` share flag; presets and Clear flight FX preserve this independent preference. Desktop follow controls aim/distance smoothly and yields to manual orbit/zoom. In XR it frames the virtual sculpture, leaving the tracked headset camera untouched. Headset hardware testing is still required.

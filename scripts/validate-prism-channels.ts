@@ -54,7 +54,7 @@ for (const name of ['HTMLButtonElement', 'HTMLInputElement', 'HTMLSelectElement'
   (globalThis as any)[name] = (window as any)[name];
 }
 window.document.body.innerHTML = `<aside data-spatial-menu="Controls"><div data-spatial-section="Prism canvas">${renderToStaticMarkup(createElement(PrismFlightControls, {
-  value: { prismShape: 'glb', prismFinish: 'ornament', prismPathSpread: 1, prismTrailLength: 25, prismMesh: 'Star', prismChannels: supplied, prismEffects: {...DEFAULT_FLIGHT_EFFECTS}, prismCameraFollow: false },
+  value: { prismShape: 'glb', prismFinish: 'ornament', prismPathSpread: 1, prismTrailLength: 25, prismMesh: 'Star', prismChannels: supplied, prismEffects: {...DEFAULT_FLIGHT_EFFECTS}, prismCameraFollow: false, prismCameraStyle: 'balanced', prismCameraEnergy: 1 },
   onChange() {}, onLook() {}, meshLibrary: ['Star'], perChannel: true, midiChannels: [15, 0, 3],
 }))}</div></aside>`;
 // React sets controlled select values on mount. Happy DOM retains SSR
@@ -133,7 +133,7 @@ assert.deepEqual(normalizePrismChannels({
 }, 'Source type checks reject incompatible assets, shapes, gestures and authored finishes');
 
 window.document.body.innerHTML = `<aside data-spatial-menu="Controls"><div data-spatial-section="Prism canvas">${renderToStaticMarkup(createElement(PrismFlightControls, {
-  value: { prismShape: 'mixed', prismFinish: 'ornament', prismPathSpread: 1, prismTrailLength: 25, prismMesh: 'Star', prismChannels: mixed, prismEffects: {...DEFAULT_FLIGHT_EFFECTS}, prismCameraFollow: false },
+  value: { prismShape: 'mixed', prismFinish: 'ornament', prismPathSpread: 1, prismTrailLength: 25, prismMesh: 'Star', prismChannels: mixed, prismEffects: {...DEFAULT_FLIGHT_EFFECTS}, prismCameraFollow: false, prismCameraStyle: 'balanced', prismCameraEnergy: 1 },
   onChange() {}, onLook() {}, meshLibrary: ['Star'], perChannel: true, midiChannels: [3, 2, 1, 0],
 }))}</div></aside>`;
 for (const select of window.document.querySelectorAll('select')) {
@@ -170,7 +170,7 @@ assert.deepEqual(editObjMovement[1], {kind: 'glb', asset: renderedGlb.asset.file
 const editShapeToGlb = patchPrismChannel(mixed, 2, {asset: first.file}, false);
 assert.deepEqual(editShapeToGlb[2], {kind: 'glb', asset: first.file, material: 'spectrum'}, 'GLB-only source edits clear incompatible shape fields');
 window.document.body.innerHTML = `<aside data-spatial-menu="Controls"><div data-spatial-section="Prism canvas">${renderToStaticMarkup(createElement(PrismFlightControls, {
-  value: { prismShape: 'glb', prismFinish: 'ornament', prismPathSpread: 1, prismTrailLength: 25, prismMesh: 'Star', prismChannels: mixed, prismEffects: {...DEFAULT_FLIGHT_EFFECTS}, prismCameraFollow: false },
+  value: { prismShape: 'glb', prismFinish: 'ornament', prismPathSpread: 1, prismTrailLength: 25, prismMesh: 'Star', prismChannels: mixed, prismEffects: {...DEFAULT_FLIGHT_EFFECTS}, prismCameraFollow: false, prismCameraStyle: 'balanced', prismCameraEnergy: 1 },
   onChange() {}, onLook() {}, meshLibrary: ['Star'], perChannel: true, midiChannels: [1, 2],
 }))}</div></aside>`;
 for (const select of window.document.querySelectorAll('select')) {

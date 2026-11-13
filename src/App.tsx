@@ -18,6 +18,9 @@ import PrismFlightControls, { type PrismFlightSettings, type PrismLook } from '.
 import ErrorBoundary from './components/ErrorBoundary';
 import { normalizeFlightEffects, type FlightShowcase } from './lib/flightEffects';
 import { flightScene } from './lib/flightScenes';
+import { normalizeFlightCameraStyle, normalizeFlightCameraEnergy } from './lib/flightCameraStyles';
+import { flightLandingState } from './lib/flightLanding';
+import { MIDI_LIBRARY, DEFAULT_LANDING_SCORE_ID } from './lib/musicLibrary';
 
 // The WebGPU path (three/webgpu + TSL) is a large chunk; load it only when
 // the WebGPU renderer is actually selected. Headsets default to WebGL.
@@ -187,19 +190,10 @@ function FooterVerts() {
 // Read once at module load: URL hash > localStorage > defaults.
 const initialShared = loadSharedState();
 
-// A truly fresh visit (base URL, nothing saved) opens on the demo scene:
-// Neon Reactor staged with the bundled sonata, ready for one-tap playback.
-// The welcome overlay's Play button provides the autoplay gesture browsers
-// require. Share links and returning visitors are untouched.
+// The explicit sonata demo remains available; ordinary audio landings use
+// Mars + Cosmic Jelly, with saved preferences and share links taking priority.
 const DEMO_MIDI_URL = './demo/martina-sonata.mid';
 const DEMO_AUDIO_URL = './demo/martina-sonata.mp3';
-const FIRST_VISIT = (() => {
-  try {
-    return !location.hash && !localStorage.getItem('harmonics.state.v1');
-  } catch {
-    return false;
-  }
-})();
 
 // The welcome overlay shows once per person (not just per pristine browser):
 // gated by its own flag so users whose saved state predates the demo still
@@ -246,26 +240,6 @@ const INITIAL_MODE: PageMode | null = (() => {
 
 // Every page but the silent studio lands with the music session live.
 const AUDIO_LANDING = (INITIAL_MODE ?? 'audio') !== 'silent';
-
-// Pre-installed score + rendition pairs (bundled with the owner's consent).
-const MIDI_LIBRARY = [
-  { id: 'ravel-pavane', name: 'Ravel — Pavane pour une infante défunte', mid: './demo/library/ravel-pavane.mid', audio: './demo/library/ravel-pavane.mp3' },
-  { id: 'bach-fuga-dm', name: 'Bach — Fuga in D minor', mid: './demo/library/bach-fuga-dm.mid', audio: './demo/library/bach-fuga-dm.mp3' },
-  { id: 'bjspreii', name: 'Bach — Prelude II in C minor', mid: './demo/library/bjspreii.mid', audio: './demo/library/bjspreii.mp3' },
-  { id: 'firebird1', name: 'Stravinsky — The Firebird (I)', mid: './demo/library/firebird1.mid', audio: './demo/library/firebird1.mp3' },
-  { id: 'megalo-endeka', name: 'Megalo Endeka', mid: './demo/library/megalo-endeka.mid', audio: './demo/library/megalo-endeka.m4a' },
-  { id: 'mercury', name: 'Holst — Mercury, the Winged Messenger', mid: './demo/library/mercury.mid', audio: './demo/library/mercury.mp3' },
-  { id: 'jupiter', name: 'Holst — Jupiter, the Bringer of Jollity', mid: './demo/library/jupiter.mid', audio: './demo/library/jupiter.m4a' },
-  { id: 'bach-846', name: 'Bach — Prelude in C (WTC I, 846)', mid: './demo/library/bach-846.mid', audio: './demo/library/bach-846.m4a' },
-  { id: 'bach-lute-suite', name: 'Bach — Lute Suite in E minor (BWV 996, V)', mid: './demo/library/bach-lute-suite.mid', audio: './demo/library/bach-lute-suite.m4a' },
-  { id: 'bumblebee', name: 'Rimsky-Korsakov — Flight of the Bumblebee', mid: './demo/library/bumblebee.mid', audio: './demo/library/bumblebee.m4a' },
-  { id: 'rite-of-spring', name: 'Stravinsky — The Rite of Spring', mid: './demo/library/rite-of-spring.mid', audio: './demo/library/rite-of-spring.m4a' },
-  { id: 'faun', name: 'Debussy — Prélude à l’après-midi d’un faune', mid: './demo/library/faun.mid', audio: './demo/library/faun.m4a' },
-  { id: 'snowflakes', name: 'Debussy — Snowflakes Are Dancing', mid: './demo/library/snowflakes.mid', audio: './demo/library/snowflakes.m4a' },
-  { id: 'janacek-sinfonietta', name: 'Janáček — Sinfonietta (I)', mid: './demo/library/janacek-sinfonietta.mid', audio: './demo/library/janacek-sinfonietta.m4a' },
-  { id: 'martina-sonata', name: "Martina's Sonata (first movement)", mid: './demo/martina-sonata.mid', audio: './demo/martina-sonata.mp3' },
-  { id: 'martina-sonata-2', name: "Martina's Sonata (second movement)", mid: './demo/library/martina-sonata-2.mid', audio: './demo/library/martina-sonata-2.m4a' }
-];
 
 // Saved formula + shader + look combinations from the silent studio.
 export type MyCombo = {
@@ -330,22 +304,7 @@ function MusicTransport({ audioRef, onToggle, playing }: {
   );
 }
 
-if (FIRST_VISIT) {
-  Object.assign(initialShared, {
-    formulaId: 'surf-02', // Klein Bottle (Smoked Sunset Glass combo)
-    // The WebGL path carries the audio-reactive rendering (bloom pulse,
-    // light pulses, scale pulse) — the demo needs it.
-    rendererMode: 'webgl',
-    show3D: true,
-    webgpuMaterial: 'glass',
-    webgpuLightingPreset: 'sunset',
-    postFX: true,
-    bloomIntensity: 1.1,
-    speed: 0.4,
-    audioSource: 'midi',
-    noteMeshes: true
-  } satisfies Partial<typeof initialShared>);
-}
+if (AUDIO_LANDING) Object.assign(initialShared, flightLandingState(initialShared));
 
 // Favorites live in the Sidebar's localStorage set as `formula-<id>` /
 // `shader-<id>` keys; cycling reads them fresh each step so stars toggled
@@ -417,6 +376,7 @@ export default function App() {
   const autoPilotShuffleRef = useRef(autoPilotShuffle);
   useEffect(() => { autoPilotShuffleRef.current = autoPilotShuffle; }, [autoPilotShuffle]);
   const [showEnvironment, setShowEnvironment] = useState(initialShared.showEnvironment ?? true);
+  const [showStarfield, setShowStarfield] = useState(initialShared.showStarfield ?? false);
   const [lineWidth, setLineWidth] = useState(initialShared.lineWidth ?? 0.14);
   const [postFX, setPostFX] = useState(initialShared.postFX ?? true);
   const [bloomIntensity, setBloomIntensity] = useState(initialShared.bloomIntensity ?? 0.9);
@@ -436,7 +396,7 @@ export default function App() {
   const [audioSync, setAudioSync] = useState(AUDIO_LANDING);
   const audioSyncRef = useRef(audioSync);
   useEffect(() => { audioSyncRef.current = audioSync; }, [audioSync]);
-  const [audioSource, setAudioSource] = useState<'mic' | 'midi'>(AUDIO_LANDING ? 'midi' : (initialShared.audioSource ?? 'mic'));
+  const [audioSource, setAudioSource] = useState<'mic' | 'midi'>(initialShared.audioSource ?? (AUDIO_LANDING ? 'midi' : 'mic'));
   // Constellation is the default MIDI experience; the gate below keeps it
   // inert until a MIDI session is actually live, so mic users see no change.
   const [noteMeshes, setNoteMeshes] = useState(initialShared.noteMeshes ?? true);
@@ -492,7 +452,9 @@ export default function App() {
     prismMesh: initialShared.prismMesh ?? 'Star',
     prismChannels: initialShared.prismChannels ?? {},
     prismEffects: normalizeFlightEffects(initialShared.prismEffects),
-    prismCameraFollow: initialShared.prismCameraFollow ?? false,
+    prismCameraFollow: initialShared.prismCameraFollow ?? true,
+    prismCameraStyle: normalizeFlightCameraStyle(initialShared.prismCameraStyle),
+    prismCameraEnergy: normalizeFlightCameraEnergy(initialShared.prismCameraEnergy),
   });
   const applyPrismLook = (look: PrismLook) => {
     setNoteSource('prism');
@@ -519,6 +481,8 @@ export default function App() {
       prismChannels: prismFlight.prismChannels,
       prismEffects: prismFlight.prismEffects,
       prismCameraFollow: prismFlight.prismCameraFollow,
+      prismCameraStyle: prismFlight.prismCameraStyle,
+      prismCameraEnergy: prismFlight.prismCameraEnergy,
     });
   };
   const applyFlightShowcase = (id: FlightShowcase) => {
@@ -527,7 +491,7 @@ export default function App() {
     try { localStorage.setItem(MODE_KEY, 'audio'); } catch { /* Non-fatal. */ }
     setAudioSync(true);
     setAudioSource('midi');
-    if (!midiInfo) loadLibraryEntry('mercury');
+    if (!midiInfo) loadLibraryEntry(DEFAULT_LANDING_SCORE_ID);
     setAutoCycleFormula(false);
     setAutoCycleShader(false);
     setNoteSource('prism');
@@ -544,12 +508,12 @@ export default function App() {
     setWebgpuMaterial('auto');
     setWebgpuLightingPreset(scene.lighting);
     setWebgpuLighting(1.15);
-    setShowEnvironment(true);
     setPostFX(true);
     setBloomIntensity(scene.bloom);
     setPrismFlight({ prismShape: 'mixed', prismFinish: scene.finish, prismPathSpread: scene.spread,
       prismTrailLength: scene.memory, prismMesh: 'Star', prismChannels: scene.channels, prismEffects: scene.effects,
-      prismCameraFollow: prismFlight.prismCameraFollow });
+      prismCameraFollow: prismFlight.prismCameraFollow, prismCameraStyle: prismFlight.prismCameraStyle,
+      prismCameraEnergy: prismFlight.prismCameraEnergy });
   };
   const [meshChannelMap, setMeshChannelMap] = useState<string[]>(() => {
     try {
@@ -1543,6 +1507,7 @@ export default function App() {
       webgpuLighting,
       autoStyle,
       showEnvironment,
+      showStarfield,
       lineWidth,
       cycleFavoritesOnly,
       autoPilotShuffle,
@@ -1564,7 +1529,7 @@ export default function App() {
       ...prismFlight,
       alphabet
     });
-  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteLayout, noteSource, meshUseMtl, meshAssign, noteDisplay, prismColor, prismSlice, prismPerChannel, prismFlight, alphabet]);
+  }, [selectedFormula.id, selectedShader.id, rendererMode, show3D, showWireframe, showArtifacts, showMirrors, speed, webgpuGeometry, webgpuMaterial, webgpuLightingPreset, webgpuLighting, autoStyle, showEnvironment, showStarfield, lineWidth, cycleFavoritesOnly, autoPilotShuffle, postFX, bloomIntensity, audioSource, noteMeshes, noteFxAmount, noteFxMode, noteSpread, noteLayout, noteSource, meshUseMtl, meshAssign, noteDisplay, prismColor, prismSlice, prismPerChannel, prismFlight, alphabet]);
 
   // Keyboard transport: Space play/pause, arrows cycle presets, F fullscreen.
   useEffect(() => {
@@ -1930,11 +1895,14 @@ export default function App() {
                 prismChannels={prismFlight.prismChannels}
                 prismEffects={prismFlight.prismEffects}
                 prismCameraFollow={prismFlight.prismCameraFollow}
+                prismCameraStyle={prismFlight.prismCameraStyle}
+                prismCameraEnergy={prismFlight.prismCameraEnergy}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
                 webgpuGeometry={webgpuGeometry}
                 showEnvironment={showEnvironment}
+                showStarfield={showStarfield}
                 lineWidth={lineWidth}
                 postFX={postFX}
                 bloomIntensity={bloomIntensity}
@@ -2133,6 +2101,8 @@ export default function App() {
           onMutateFormula={handleMutateFormula}
           showEnvironment={showEnvironment}
           setShowEnvironment={setShowEnvironment}
+          showStarfield={showStarfield}
+          setShowStarfield={setShowStarfield}
           lineWidth={lineWidth}
           setLineWidth={setLineWidth}
           postFX={postFX}

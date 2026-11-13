@@ -11,6 +11,9 @@ export type FlightEffectsSettings = {
   lightning: number;
   petals: number;
   bubbles: number;
+  ribbons: number;
+  crystals: number;
+  vortexes: number;
   motion: FlightMotion;
   motionAmount: number;
   morph: number;
@@ -25,6 +28,7 @@ export const FLIGHT_MOTIONS: ReadonlyArray<readonly [FlightMotion, string]> = [
 export const DEFAULT_FLIGHT_EFFECTS: Readonly<FlightEffectsSettings> = Object.freeze({
   bursts: 0, shockwaves: 0, lasers: 0, tracers: 0, auroras: 0, constellations: 0, gyroscopes: 0,
   lightning: 0, petals: 0, bubbles: 0,
+  ribbons: 0, crystals: 0, vortexes: 0,
   motion: 'none', motionAmount: 1, morph: 0,
 });
 
@@ -42,6 +46,7 @@ export function normalizeFlightEffects(value: unknown): FlightEffectsSettings {
     lasers: bounded('lasers', 2), tracers: bounded('tracers', 2),
     auroras: bounded('auroras', 2), constellations: bounded('constellations', 2), gyroscopes: bounded('gyroscopes', 2),
     lightning: bounded('lightning', 2), petals: bounded('petals', 2), bubbles: bounded('bubbles', 2),
+    ribbons: bounded('ribbons', 2), crystals: bounded('crystals', 2), vortexes: bounded('vortexes', 2),
     motion: FLIGHT_MOTIONS.some(([id]) => id === saved.motion) ? saved.motion as FlightMotion : 'none',
     motionAmount: bounded('motionAmount', 2), morph: bounded('morph', 1),
   };
@@ -49,7 +54,8 @@ export function normalizeFlightEffects(value: unknown): FlightEffectsSettings {
 
 export type FlightShowcase = 'supernova' | 'neon-highway' | 'cosmic-jelly' | 'stargate'
   | 'aurora-dream' | 'quantum-garden' | 'clockwork-nebula'
-  | 'electric-tempest' | 'prism-bloom' | 'bubble-ballet';
+  | 'electric-tempest' | 'prism-bloom' | 'bubble-ballet'
+  | 'mobius-dream' | 'crystal-galaxy' | 'event-horizon';
 export type FlightShowcasePreset = {
   id: FlightShowcase;
   label: string;
@@ -97,5 +103,17 @@ export const FLIGHT_SHOWCASES: readonly FlightShowcasePreset[] = [
   {
     id: 'bubble-ballet', label: 'Bubble Ballet', description: 'Iridescent soap films and drifting pearls',
     effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, bubbles: 1.1, gyroscopes: 0.2, tracers: 0.35, motion: 'helix', motionAmount: 0.7, morph: 0.25 }),
+  },
+  {
+    id: 'mobius-dream', label: 'Möbius Dream', description: 'Twisted light silk and liquid chrome',
+    effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, ribbons: 1.15, bubbles: 0.35, tracers: 0.25, motion: 'helix', motionAmount: 0.8, morph: 0.55 }),
+  },
+  {
+    id: 'crystal-galaxy', label: 'Crystal Galaxy', description: 'Faceted geodes grow into spectral stars',
+    effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, crystals: 1.2, bursts: 0.25, constellations: 0.3, motion: 'butterfly', motionAmount: 0.7, morph: 0.15 }),
+  },
+  {
+    id: 'event-horizon', label: 'Event Horizon', description: 'Miniature vortices and accretion disks',
+    effects: Object.freeze({ ...DEFAULT_FLIGHT_EFFECTS, vortexes: 1.15, lightning: 0.25, gyroscopes: 0.3, motion: 'vortex', motionAmount: 0.85, morph: 0.25 }),
   },
 ];

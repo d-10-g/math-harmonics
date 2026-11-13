@@ -1,4 +1,5 @@
 import { normalizeFlightEffects, type FlightEffectsSettings } from './flightEffects';
+import { FLIGHT_CAMERA_STYLES, type FlightCameraStyle } from './flightCameraStyles';
 import { normalizePrismChannels, type PrismChannelMap } from './prismChannels';
 import type { PrismShape, PrismFinish } from './prismTrail';
 import { MESH_LIBRARY } from './meshManifest';
@@ -39,6 +40,7 @@ export type SharedState = {
   webgpuLighting?: number;
   autoStyle?: boolean;
   showEnvironment?: boolean;
+  showStarfield?: boolean;
   lineWidth?: number;
   cycleFavoritesOnly?: boolean;
   autoPilotShuffle?: boolean;
@@ -65,6 +67,8 @@ export type SharedState = {
   prismChannels?: PrismChannelMap;
   prismEffects?: FlightEffectsSettings;
   prismCameraFollow?: boolean;
+  prismCameraStyle?: FlightCameraStyle;
+  prismCameraEnergy?: number;
   // Alphabet Sphere (the Letters page): stereo view, baseline, relief,
   // collimation, point size, tour and rings.
   alphabet?: Partial<AlphabetSettings>;
@@ -99,6 +103,7 @@ function parseParams(params: URLSearchParams): SharedState {
   if (lighting !== undefined && Number.isFinite(parseFloat(lighting))) state.webgpuLighting = Math.min(3.5, Math.max(0.45, parseFloat(lighting)));
   state.autoStyle = flag('as');
   state.showEnvironment = flag('env');
+  state.showStarfield = flag('sf');
   state.cycleFavoritesOnly = flag('cf');
   state.autoPilotShuffle = flag('sh');
   state.postFX = flag('fx');
@@ -119,6 +124,9 @@ function parseParams(params: URLSearchParams): SharedState {
   if (prismSlice !== undefined && Number.isFinite(parseFloat(prismSlice))) state.prismSlice = Math.min(0.5, Math.max(0.05, parseFloat(prismSlice)));
   state.prismPerChannel = flag('ppc');
   state.prismCameraFollow = flag('pcf');
+  state.prismCameraStyle = oneOf(read('pcs'), FLIGHT_CAMERA_STYLES.map(([id]) => id));
+  const cameraEnergy = read('pce');
+  if (cameraEnergy !== undefined && cameraEnergy.trim() !== '' && Number.isFinite(Number(cameraEnergy))) state.prismCameraEnergy = Math.max(0, Math.min(2, Number(cameraEnergy)));
   state.prismShape = oneOf(read('psh'), ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb', 'mixed'] as const);
   state.prismFinish = oneOf(read('pfi'), ['spectrum', 'ornament', 'glass'] as const);
   const divergence = Number(read('ppd'));
@@ -173,11 +181,11 @@ function sanitizeStoredState(value: unknown): SharedState {
   const keys: Record<string, string> = {
     formulaId: 'f', shaderId: 's', rendererMode: 'r', show3D: 'd3', showWireframe: 'wf',
     showArtifacts: 'ax', showMirrors: 'mr', speed: 'sp', webgpuGeometry: 'geo', webgpuMaterial: 'mat',
-    webgpuLightingPreset: 'rig', webgpuLighting: 'li', autoStyle: 'as', showEnvironment: 'env',
+    webgpuLightingPreset: 'rig', webgpuLighting: 'li', autoStyle: 'as', showEnvironment: 'env', showStarfield: 'sf',
     lineWidth: 'lw', cycleFavoritesOnly: 'cf', autoPilotShuffle: 'sh', postFX: 'fx', bloomIntensity: 'bl',
     audioSource: 'asrc', noteMeshes: 'nm', noteFxAmount: 'nfa', noteFxMode: 'nfm', noteSpread: 'nsp',
     noteSource: 'nsc', meshUseMtl: 'nml', meshAssign: 'nas', noteDisplay: 'nds', prismColor: 'pcm',
-    prismSlice: 'psw', prismPerChannel: 'ppc', prismCameraFollow: 'pcf', prismShape: 'psh', prismFinish: 'pfi',
+    prismSlice: 'psw', prismPerChannel: 'ppc', prismCameraFollow: 'pcf', prismCameraStyle: 'pcs', prismCameraEnergy: 'pce', prismShape: 'psh', prismFinish: 'pfi',
     prismPathSpread: 'ppd', prismTrailLength: 'ptl', prismMesh: 'pms',
   };
   const params = new URLSearchParams();
@@ -237,6 +245,7 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('li', state.webgpuLighting.toFixed(2));
   params.set('as', state.autoStyle ? '1' : '0');
   params.set('env', state.showEnvironment ? '1' : '0');
+  params.set('sf', state.showStarfield ? '1' : '0');
   params.set('lw', state.lineWidth.toFixed(2));
   params.set('cf', state.cycleFavoritesOnly ? '1' : '0');
   params.set('sh', state.autoPilotShuffle ? '1' : '0');
@@ -260,6 +269,8 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('psw', state.prismSlice.toFixed(2));
   params.set('ppc', state.prismPerChannel ? '1' : '0');
   params.set('pcf', state.prismCameraFollow ? '1' : '0');
+  params.set('pcs', state.prismCameraStyle);
+  params.set('pce', String(state.prismCameraEnergy));
   params.set('psh', state.prismShape);
   params.set('pfi', state.prismFinish);
   params.set('ppd', state.prismPathSpread.toFixed(2));

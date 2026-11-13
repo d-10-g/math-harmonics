@@ -4,7 +4,10 @@ import { DEFAULT_FLIGHT_EFFECTS } from '../src/lib/flightEffects';
 import { beginFlightCameraGesture, createFlightCameraGate, createFlightFocus, createFlightFocusIndex,
   createFlightFitWorkspace, projectedFlightFitDistance,
   dampFlightVector, endFlightCameraGesture, flightCameraMayMove, flightCameraTimeline,
-  flightFitDistance, FLIGHT_CAMERA_NOTES_PER_CHANNEL, sampleFlightFocus } from '../src/lib/flightCamera';
+  flightFitDistance, FLIGHT_CAMERA_NOTES_PER_CHANNEL, sampleFlightFocus,
+  createFlightCameraShot, sampleFlightCameraShot, createFlightDirectionWorkspace, dampFlightDirection,
+  FLIGHT_CAMERA_SETTLE_SECONDS } from '../src/lib/flightCamera';
+import { FLIGHT_CAMERA_STYLES } from '../src/lib/flightCameraStyles';
 import { buildPrismPath, buildPrismScore, type PrismScoreData } from '../src/lib/prismTrail';
 import type { ParsedMidi } from '../src/lib/midi';
 
@@ -27,6 +30,17 @@ const fair = points([...Array.from({ length: 100 }, () => ({ channel: 0, x: 0 })
 sampleFlightFocus(fair, createFlightFocusIndex(fair), 1, DEFAULT_FLIGHT_EFFECTS, output);
 assert.equal(output.center.x, 10, 'A hundred accompaniment notes do not overpower the solo channel');
 assert.equal(output.channels, 2); assert.equal(output.notes, FLIGHT_CAMERA_NOTES_PER_CHANNEL + 1);
+assert(Number.isFinite(output.energy) && output.energy >= 0 && output.energy <= 1);
+const quiet = points([{ channel: 0, x: 0 }]), loud = points([{ channel: 0, x: 0 }]);
+quiet.velocity[0] = 0.15;
+sampleFlightFocus(quiet, createFlightFocusIndex(quiet), 0.2, DEFAULT_FLIGHT_EFFECTS, output);
+const quietEnergy = output.energy;
+sampleFlightFocus(loud, createFlightFocusIndex(loud), 0.2, DEFAULT_FLIGHT_EFFECTS, output);
+assert(output.energy > quietEnergy * 5, 'The camera follows actual note dynamics');
+const dense = points(Array.from({ length: 200 }, () => ({ channel: 0, x: 0 })));
+const loudEnergy = output.energy;
+sampleFlightFocus(dense, createFlightFocusIndex(dense), 0.2, DEFAULT_FLIGHT_EFFECTS, output);
+assert.equal(output.energy, loudEnergy, 'Dense attacks do not multiply one instrument’s camera influence');
 const chord = points([{ channel: 0, x: -12 }, { channel: 0, x: 12 }]);
 sampleFlightFocus(chord, createFlightFocusIndex(chord), 1, DEFAULT_FLIGHT_EFFECTS, output);
 assert.equal(output.center.x, 0); assert(output.radius >= 16, 'Single-channel chords get a useful framing radius');
@@ -94,4 +108,45 @@ assert(!flightCameraTimeline(20, 0, 20, 1 / 60).active, 'An ordinary paused fram
 assert(flightCameraTimeline(20, 0, 12, 1 / 60).jump, 'Backward seeking requests a bounded reframing transition');
 assert(flightCameraTimeline(20, 0, 50, 1 / 60).active);
 assert.equal(flightCameraTimeline(0, 0, NaN, NaN).time, 0);
-console.log('PASS: channel-balanced bounded framing, same-channel chords, no future-note leakage, exact pause/seek intent, frame-rate-independent easing, seek speed limits, view-space ensemble/depth/aspect fit, and manual-camera grace.');
+
+const heading = new THREE.Vector3(0, 0, 1), shot = createFlightCameraShot();
+const shotSignature = () => [...shot.direction.toArray(), shot.distance, shot.lead];
+for (const [style] of FLIGHT_CAMERA_STYLES) {
+  for (const time of [-1, 0, 0.2, 15, 120, 10000, NaN]) for (const energy of [0, 0.4, 1, NaN]) {
+    sampleFlightCameraShot(style, time, energy, 2, heading, shot);
+    assert(shotSignature().every(Number.isFinite), `${style} shot stays finite`);
+    assert(Math.abs(shot.direction.length() - 1) < 1e-12);
+    assert(shot.distance >= 0.8 && shot.distance <= 1.4);
+    assert(shot.lead >= 0 && shot.lead <= 2.1);
+  }
+  sampleFlightCameraShot(style, 16.25, 0.65, 1.2, heading, shot); const saved = shotSignature();
+  sampleFlightCameraShot(style, 100, 0.4, 2, heading, shot);
+  sampleFlightCameraShot(style, 16.25, 0.65, 1.2, heading, shot);
+  assert.deepEqual(shotSignature(), saved, `${style} rewinds to the exact shot intent`);
+  sampleFlightCameraShot(style, 16.25, 0.65, 1.2, heading, shot);
+  assert.deepEqual(shotSignature(), saved, 'Paused shot intent does not integrate drift');
+  sampleFlightCameraShot(style, 25, 0, 0, heading, shot); const noMusic = shotSignature();
+  sampleFlightCameraShot(style, 25, 1, 0, heading, shot);
+  assert.deepEqual(shotSignature(), noMusic, 'Zero musical response disables only the music accents');
+}
+sampleFlightCameraShot('balanced', 1000, 1, 2, heading, shot);
+assert.deepEqual(shotSignature(), [0, 0, 1, 1, 0], 'Balanced retains the original camera direction and distance');
+sampleFlightCameraShot('chase', 25, 0.5, 1, heading, shot);
+assert(shot.direction.dot(heading) < -0.9, 'Chase places the camera behind the flight heading');
+sampleFlightCameraShot('orbit', 0, 0, 1, heading, shot); const orbitStart = shot.direction.clone();
+sampleFlightCameraShot('orbit', Math.PI / 0.055, 0, 1, heading, shot);
+assert(orbitStart.dot(shot.direction) < -0.9, 'Orbit circles the action rather than oscillating in one direction');
+sampleFlightCameraShot('cinematic', 30, 0, 1, heading, shot); const calmDolly = shot.distance;
+sampleFlightCameraShot('cinematic', 30, 1, 2, heading, shot);
+assert(shot.distance < calmDolly, 'Musical accents gently push the cinematic dolly toward the action');
+for (const fps of [30, 60, 120]) {
+  const direction = new THREE.Vector3(0, 0, 1), target = new THREE.Vector3(0, 0, -1), work = createFlightDirectionWorkspace();
+  for (let frame = 0; frame < fps * FLIGHT_CAMERA_SETTLE_SECONDS; frame++) {
+    const previous = direction.clone(); dampFlightDirection(direction, target, 1 / fps, work);
+    assert(direction.toArray().every(Number.isFinite));
+    assert(Math.abs(direction.length() - 1) < 1e-12);
+    assert(previous.angleTo(direction) <= 0.3 / fps + 1e-7, 'Even opposite views transition around the action at a bounded angular speed');
+  }
+  assert(direction.dot(target) > 0.998, 'A paused Chase/style transition has enough settling time to reach its trailing view');
+}
+console.log('PASS: channel-balanced framing and dynamics, deterministic chase/orbit/cinematic shots, musical-response bounds, safe great-circle transitions, pause/seek intent, projected framing, and manual-camera grace.');

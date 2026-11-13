@@ -105,6 +105,33 @@ export const FLIGHT_SCENES: Record<FlightShowcase, Scene> = {
     },
     lighting: 'gallery', finish: 'glass', spread: 0.9, memory: 25, bloom: 0.25, color: 'length',
   },
+  'mobius-dream': {
+    channels: {
+      0: { kind: 'shape', shape: 'knot', material: 'liquid-metal' },
+      1: { kind: 'obj', asset: 'Twistytorus.obj', material: 'spectrum' },
+      2: { kind: 'glb', asset: 'Kira_model.glb', material: 'hologram', movement: 'Kira_29_Tail_ribbon_left' },
+      3: { kind: 'shape', shape: 'crystal', material: 'stained-glass' },
+    },
+    lighting: 'prism', finish: 'glass', spread: 0.8, memory: 30, bloom: 0.3, color: 'pitch',
+  },
+  'crystal-galaxy': {
+    channels: {
+      0: { kind: 'shape', shape: 'crystal', material: 'dichroic' },
+      1: { kind: 'obj', asset: 'Icosahedron.obj', material: 'ice' },
+      2: { kind: 'glb', asset: 'Ernie_model.glb', material: 'chrome', movement: '09_Left_ear_flick' },
+      3: { kind: 'shape', shape: 'sphere', material: 'pearl' },
+    },
+    lighting: 'laboratory', finish: 'glass', spread: 1.1, memory: 25, bloom: 0.3, color: 'chroma',
+  },
+  'event-horizon': {
+    channels: {
+      0: { kind: 'shape', shape: 'torus', material: 'gold' },
+      1: { kind: 'obj', asset: 'Atom.obj', material: 'obsidian' },
+      2: { kind: 'glb', asset: 'Kira_model.glb', material: 'copper', movement: 'Kira_27_Question_mark_tail' },
+      3: { kind: 'shape', shape: 'sphere', material: 'ruby' },
+    },
+    lighting: 'eclipse', finish: 'ornament', spread: 1.2, memory: 30, bloom: 0.35, color: 'length',
+  },
 };
 
 export function flightScene(id: FlightShowcase) {

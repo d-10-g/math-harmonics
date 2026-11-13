@@ -2,7 +2,7 @@
   "name": "math-harmonics",
   "productName": "Harmonic.OS",
   "private": true,
-  "version": "2.19.0",
+  "version": "2.20.0",
   "type": "module",
   "main": "electron.js",
   "scripts": {
@@ -33,6 +33,8 @@
     "validate:flight-sculptures": "tsx scripts/validate-flight-sculptures.ts",
     "validate:flight-spectacle": "tsx scripts/validate-flight-spectacle.ts",
     "validate:flight-camera": "tsx scripts/validate-flight-camera.ts",
+    "validate:flight-phenomena": "tsx scripts/validate-flight-phenomena.ts",
+    "validate:flight-landing": "tsx scripts/validate-flight-landing.ts",
     "validate:flight-motion": "tsx scripts/validate-flight-motion.ts",
     "validate:flight-scenes": "tsx scripts/validate-flight-scenes.ts"
   },

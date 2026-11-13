@@ -1,4 +1,5 @@
 import type { FlightEffectsSettings } from '../lib/flightEffects';
+import type { FlightCameraStyle } from '../lib/flightCameraStyles';
 import VisualCopies from './VisualCopies';
 import { channelPath, DEFAULT_NOTE_LAYOUT, type NoteLayoutSettings } from '../lib/noteLayout';
 import { useRef, useMemo, useState, useEffect } from 'react';
@@ -914,6 +915,7 @@ interface GraphViewProps {
   webgpuMaterial: WebGPUMaterialProfile;
   webgpuGeometry: WebGPUGeometryProfile;
   showEnvironment: boolean;
+  showStarfield?: boolean;
   lineWidth: number;
   postFX: boolean;
   bloomIntensity: number;
@@ -998,6 +1000,8 @@ interface GraphViewProps {
   prismChannels?: PrismChannelMap;
   prismEffects?: FlightEffectsSettings;
   prismCameraFollow?: boolean;
+  prismCameraStyle?: FlightCameraStyle;
+  prismCameraEnergy?: number;
   setNoteDisplay?: (mode: 'sounding' | 'all') => void;
   meshLibrary?: string[];
 }
@@ -1963,7 +1967,9 @@ function XRMusicButtons({
 // Immersive-VR surroundings: a rig-tinted dome, a sparse starfield and a
 // floor disc + grid so the void has depth and a ground reference. Hidden in
 // passthrough modes (the real room is the environment there).
-function XREnvironment({ preset, desktopVisible }: { preset: WebGPULightingPreset; desktopVisible: boolean }) {
+function XREnvironment({ preset, backdropVisible, showStarfield }: {
+  preset: WebGPULightingPreset; backdropVisible: boolean; showStarfield: boolean;
+}) {
   const session = useXR((state) => state.session);
   const isPresenting = !!session;
   const blend = session?.environmentBlendMode;
@@ -2025,19 +2031,19 @@ function XREnvironment({ preset, desktopVisible }: { preset: WebGPULightingPrese
     (grid.material as THREE.Material).dispose();
   }, [grid]);
 
-  if (isPresenting ? isPassthrough : !desktopVisible) return null;
+  if (isPassthrough || (!backdropVisible && !showStarfield)) return null;
 
   return (
     <group>
-      <mesh>
+      {backdropVisible && <mesh>
         <sphereGeometry args={[isPresenting ? 50 : 400, 32, 16]} />
         <meshBasicMaterial color={rig.background} side={THREE.BackSide} depthWrite={false} />
-      </mesh>
-      <points geometry={stars}>
+      </mesh>}
+      {showStarfield && <points geometry={stars}>
         <pointsMaterial map={starSprite} alphaTest={0.05} size={0.14} sizeAttenuation color="#cdd8ff" transparent opacity={0.8} depthWrite={false} />
-      </points>
+      </points>}
       {/* Ground reference only makes sense with a floor-level origin (XR). */}
-      {isPresenting && (
+      {isPresenting && backdropVisible && (
         <>
           <mesh rotation-x={-Math.PI / 2} position={[0, 0.002, 0]}>
             <circleGeometry args={[7.5, 48]} />
@@ -2639,6 +2645,7 @@ export default function GraphView({
   webgpuMaterial,
   webgpuGeometry,
   showEnvironment,
+  showStarfield = false,
   lineWidth,
   postFX,
   bloomIntensity,
@@ -2717,6 +2724,8 @@ export default function GraphView({
   prismChannels,
   prismEffects,
   prismCameraFollow = false,
+  prismCameraStyle = 'balanced',
+  prismCameraEnergy = 1,
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [prismStatus, setPrismStatus] = useState('');
@@ -2791,7 +2800,7 @@ export default function GraphView({
           <XRMusicButtons midiActive={midiActive} onToggleMusic={onToggleMusic} onCycleLibrary={onCycleLibrary} />
           <XRAlphaController />
           {alphabet ? <SpatialWrapper modelMode xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}><AlphabetSphere settings={alphabet} onTourInterrupted={() => setAlphabetTour?.(false)} /></SpatialWrapper> : modelScene ? <SpatialWrapper modelMode xrVisualTransform={xrVisualTransform} setXrVisualTransform={setXrVisualTransform} dragOffsetRef={xrDragOffsetRef}>{modelScene}</SpatialWrapper> : <>
-          <XREnvironment preset={webgpuLightingPreset} desktopVisible={showEnvironment && show3D} />
+          <XREnvironment preset={webgpuLightingPreset} backdropVisible={showEnvironment && show3D} showStarfield={showStarfield && show3D} />
           <RigEnvironment preset={webgpuLightingPreset} intensity={webgpuLighting} />
           {showMirrors && show3D && <MirrorDome radius={80} xrRadius={8} captureOffset={6} xrCaptureOffset={0.35} anchorRef={mirrorAnchorRef} />}
           {noteSource !== 'prism' && <GroundShadows show3D={show3D} />}
@@ -2825,7 +2834,7 @@ export default function GraphView({
 
             <group ref={mirrorAnchorRef} />
             {noteSource === 'prism' && show3D ? (
-              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} effects={prismEffects} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} cameraFollow={prismCameraFollow} manualUntilRef={flightManualUntilRef} />
+              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} effects={prismEffects} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} cameraFollow={prismCameraFollow} cameraStyle={prismCameraStyle} cameraEnergy={prismCameraEnergy} manualUntilRef={flightManualUntilRef} />
             ) : noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}
