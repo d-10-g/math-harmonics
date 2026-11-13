@@ -4,6 +4,16 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.15.0 — Animated GLB flight trails and channel materials
+
+- **Flight studio → Animated flight** paints animated GLB models along the same independent channel paths as the prism. Notes drive their embedded gestures while held, including sustain; released models keep their sampled pose as the flight moves on. Models keep their proportions instead of stretching into extrusions.
+- **Animated channel models** gives every active MIDI channel its own GLB model, movement, and material. Choose Ernie or Kira, any of that rig’s 32 gestures, the original authored GLB materials, or any of the 20 physical profiles. Auto alternates rigs and finishes by channel; explicit channel choices override the global Output material.
+- Channel mappings persist locally and in **Copy Link** along with all flight settings. Switching the model resets incompatible movement choices; malformed settings are validated against the bundled model and material catalogs. Existing prism and OBJ looks remain available.
+- Animated history uses a bounded pool of recent models, with channel-fair selection: at most 48 on desktop and 24 in XR, further limited by geometry cost. This also applies when Trail memory is zero. Loading failures and history limits appear in Flight status. Cached geometry/textures are shared while cloned skeletons, materials, and animation mixers have separate ownership.
+- All model, movement, and material controls appear in **VR → All 2D Menus → Controls · GLB flight channels**, with the same options and behavior. Desktop browser and rig/seek regressions validate the implementation; headset hardware still needs testing.
+
+Choose **Audio → MIDI File → Note Visuals → Prism → Animated flight**, then select the rig, material, and gesture under each channel. Spectral materials are luminous physical finishes on the GLB rigs; the original prism shader remains available on the other trail shapes.
+
 ## v2.14.0 — Flight studio: spectra, ornaments, and colored glass
 
 - **Prism → Flight studio** adds four one-click looks: Spectral ribbons, Ornament parade, Glass constellations, and Sculpture flight. Mix six trail shapes (prism fan, sphere, crystal, torus, knot, any of the **132 OBJ sculptures**) with luminous-spectrum, polished-metal, or colored-glass surfaces. Existing classic prism settings remain compatible.

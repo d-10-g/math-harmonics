@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { compile } from 'mathjs';
 import type { PrismColorMode } from '../lib/urlState';
+import type { PrismShape } from '../lib/prismTrail';
 import { cn } from '../lib/utils';
 import { ALPHABET_STEREO_MODES, type AlphabetSettings } from '../lib/alphabetSphere';
 import { useClockSnapshot } from '../lib/clock';
@@ -98,6 +99,7 @@ interface ControlsProps {
   setMeshChannelMap: (map: string[]) => void;
   noteDisplay: 'sounding' | 'all';
   prismFlightControls?: ReactNode;
+  prismShape?: PrismShape;
   prismColor: PrismColorMode;
   setPrismColor: (mode: PrismColorMode) => void;
   prismSlice: number;
@@ -442,6 +444,7 @@ export default function Controls({
   noteDisplay,
   setNoteDisplay,
   prismFlightControls,
+  prismShape,
   prismColor,
   setPrismColor,
   prismSlice,
@@ -1498,6 +1501,7 @@ export default function Controls({
                         {noteSource === 'prism' && (
                           <div data-spatial-section="Prism canvas" className="mt-2 space-y-2.5 rounded-lg border border-fuchsia-400/20 p-2">
                             {prismFlightControls}
+                            <div className={cn("space-y-2.5", prismShape === 'glb' && "hidden")}>
                             <div>
                               <div className="text-xs font-semibold text-white/80">Prism Colour</div>
                               <div className="text-[9px] text-white/30 font-mono">Whole Spectrum Per Note, Or A Slice By Note Value</div>
@@ -1539,6 +1543,7 @@ export default function Controls({
                                 aria-label="Prism slice width"
                                 className={cn("mt-1.5 w-full accent-fuchsia-500", prismColor === 'full' && "opacity-35")}
                               />
+                            </div>
                             </div>
                             <div>
                               <div className="text-xs font-semibold text-white/80">Canvas</div>

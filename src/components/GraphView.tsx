@@ -27,6 +27,7 @@ import AlphabetOverlay from './AlphabetOverlay';
 import { requestAlphabetLetter, type AlphabetSettings } from '../lib/alphabetSphere';
 import type { PrismColorMode } from '../lib/urlState';
 import type { PrismShape, PrismFinish } from '../lib/prismTrail';
+import type { PrismChannelMap } from '../lib/prismChannels';
 import type { ParsedMidi } from '../lib/midi';
 import { lightingRigSettings } from '../lib/lighting';
 import { COMBOS } from '../lib/combos';
@@ -993,6 +994,7 @@ interface GraphViewProps {
   prismPathSpread?: number;
   prismTrailLength?: number;
   prismMesh?: string;
+  prismChannels?: PrismChannelMap;
   setNoteDisplay?: (mode: 'sounding' | 'all') => void;
   meshLibrary?: string[];
 }
@@ -2698,9 +2700,11 @@ export default function GraphView({
   prismFinish = 'spectrum',
   prismPathSpread = 1,
   prismTrailLength = 0,
-  prismMesh = 'Star'
+  prismMesh = 'Star',
+  prismChannels
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
+  const [prismStatus, setPrismStatus] = useState('');
   const [xrVisualTransform, setXrVisualTransform] = useState<XRVisualTransform>(() => {
     try {
       const raw = localStorage.getItem('harmonics.xrtransform.v1');
@@ -2805,7 +2809,7 @@ export default function GraphView({
 
             <group ref={mirrorAnchorRef} />
             {noteSource === 'prism' && show3D ? (
-              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} materialProfile={webgpuMaterial} showWireframe={showWireframe} />
+              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} />
             ) : noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}
@@ -2898,6 +2902,8 @@ export default function GraphView({
         </XR>
       </Canvas>
       
+      {noteSource === 'prism' && prismShape === 'glb' && prismStatus && <div data-spatial-menu="Flight status" className="pointer-events-none absolute bottom-3 left-3 right-3 text-[10px] text-cyan-100/75"><span data-spatial-status role="status" className="rounded-md border border-cyan-300/15 bg-black/65 px-2 py-1.5 backdrop-blur">{prismStatus}</span></div>}
+
       {!show3D && !alphabet && (
         <div
           ref={readoutRef}

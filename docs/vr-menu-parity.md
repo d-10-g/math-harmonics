@@ -63,3 +63,7 @@ transitions.
 ## Flight studio (v2.14.0)
 
 `Controls · Prism canvas` mirrors the desktop Flight studio, including four look buttons, six trail shapes, three surface modes, the complete OBJ sculpture selector, Flight divergence (0–2 in 0.1 increments), Trail memory (0–120 seconds in 5-second increments, zero = whole score), spectrum slices and shared/per-channel canvases. Divergence is disabled in shared mode on both surfaces. The same DOM controls drive VR, so selected options, disabled states, numeric bounds, and preset actions match. Flights remain on the WebGL/XR canvas. New physical material profiles are available in the shared Output controls.
+
+## Animated GLB flight channels (v2.15.0)
+
+The seventh trail shape, Animated GLB, and the Animated flight preset are shared desktop/VR controls. `Controls · GLB flight channels` contains each active MIDI channel’s model, material (Auto, Original, all 20 physical profiles), and rig-specific movement selector, plus Reset flight channels. Model changes clear incompatible movements. Per-channel assignments override the global Output material and are saved in the URL’s `pch` field. The finish-family selector affects Auto channels. Prism color/slice controls are hidden for GLB models because the rigs use their selected physical/authored materials. The stage uses the existing WebGL/XR canvas, gestures, and independent plane paths, with a lower animated history cap in XR.

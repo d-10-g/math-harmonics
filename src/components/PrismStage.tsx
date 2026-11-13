@@ -7,6 +7,8 @@ import { clockStore } from '../lib/clock';
 import { createPhysicalMaterial } from '../lib/materials';
 import { isValidMeshName, loadMeshGeometry } from '../lib/meshLibrary';
 import type { PrismColorMode } from '../lib/urlState';
+import AnimatedGlbFlight from './AnimatedGlbFlight';
+import type { PrismChannelMap } from '../lib/prismChannels';
 import { buildPrismScore, prismInstanceBudget, prismVisibleRange, samplePrismPose, type PrismFinish, type PrismShape } from '../lib/prismTrail';
 
 // The score is baked once into world-space instances. The camera rides the
@@ -172,10 +174,10 @@ function makeGeometry(shape: PrismShape, source: THREE.BufferGeometry | null) {
 
 export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode = 'full', sliceWidth = 0.14,
   perChannel = false, shape = 'spectrum', finish = 'spectrum', pathSpread = 1, trailLength = 0,
-  materialProfile = 'auto', meshId = 'Star', showWireframe = false }: {
+  materialProfile = 'auto', meshId = 'Star', showWireframe = false, channelMap, onStatus }: {
   midi: ParsedMidi | null; getMusicTime?: () => { time: number; duration: number }; noteSpread: number;
   colorMode?: PrismColorMode; sliceWidth?: number; perChannel?: boolean; shape?: PrismShape; finish?: PrismFinish;
-  pathSpread?: number; trailLength?: number; materialProfile?: WebGPUMaterialProfile; meshId?: string; showWireframe?: boolean;
+  pathSpread?: number; trailLength?: number; materialProfile?: WebGPUMaterialProfile; meshId?: string; showWireframe?: boolean; channelMap?: PrismChannelMap; onStatus?: (status: string) => void;
 }) {
   const [sourceGeometry, setSourceGeometry] = useState<{ id: string; geometry: THREE.BufferGeometry } | null>(null);
   useEffect(() => {
@@ -194,7 +196,7 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
   const geometry = useMemo(() => makeGeometry(shape, sourceGeometry?.id === meshId ? sourceGeometry.geometry : null), [shape, sourceGeometry, meshId]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   const mesh = useMemo(() => {
-    if (!data) return null;
+    if (!data || shape === 'glb') return null;
     const capacity = Math.min(data.count, prismInstanceBudget(geometry.getAttribute('position').count));
     // Instance attributes belong to this draw, not the reusable shape.
     // Material/data swaps can replace the draw without orphaning GPU buffers.
@@ -207,7 +209,7 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
     instances.count = 0;
     instances.frustumCulled = false;
     return { instances, geometry: ownedGeometry, capacity, start: -1, end: -1 };
-  }, [data, geometry, material]);
+  }, [data, geometry, material, shape]);
   useEffect(() => () => {
     mesh?.instances.dispose();
     mesh?.geometry.dispose();
@@ -217,31 +219,33 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
   const planeQuaternion = useMemo(() => new THREE.Quaternion(), []);
   useFrame(() => {
     const trail = trailRef.current;
-    if (!trail || !data || !mesh) return;
+    if (!trail || !data) return;
     const rawTime = getMusicTime?.().time ?? 0;
     const time = Number.isFinite(rawTime) ? Math.max(0, rawTime) : 0;
     samplePrismPose(data.table, time, planePosition, planeQuaternion);
     trail.quaternion.copy(planeQuaternion).invert();
     trail.position.copy(planePosition).negate().applyQuaternion(trail.quaternion);
     const length = Number.isFinite(trailLength) ? Math.max(0, trailLength) : 0;
-    const range = prismVisibleRange(data.birth, time, length, mesh.capacity);
-    if (range.start !== mesh.start || range.end !== mesh.end) {
-      // Append only new births while the window stays put; shifts/seeks copy
-      // the bounded window in one contiguous upload.
-      const offset = range.start === mesh.start && range.end > mesh.end ? Math.max(0, mesh.end - range.start) : 0;
-      const from = range.start + offset;
-      const count = range.end - range.start;
-      const matrix = mesh.instances.instanceMatrix;
-      (matrix.array as Float32Array).set(data.matrices.subarray(from * 16, range.end * 16), offset * 16);
-      matrix.clearUpdateRanges(); matrix.addUpdateRange(offset * 16, (count - offset) * 16); matrix.needsUpdate = true;
-      const values = [data.birth, data.duration, data.velocity, data.hue, data.crowd];
-      ['aBirth', 'aDuration', 'aVelocity', 'aHue', 'aCrowd'].forEach((name, i) => {
-        const attribute = mesh.geometry.getAttribute(name) as THREE.InstancedBufferAttribute;
-        (attribute.array as Float32Array).set(values[i].subarray(from, range.end), offset);
-        attribute.clearUpdateRanges(); attribute.addUpdateRange(offset, count - offset); attribute.needsUpdate = true;
-      });
-      mesh.instances.count = count;
-      mesh.start = range.start; mesh.end = range.end;
+    if (mesh) {
+      const range = prismVisibleRange(data.birth, time, length, mesh.capacity);
+      if (range.start !== mesh.start || range.end !== mesh.end) {
+        // Append only new births while the window stays put; shifts/seeks copy
+        // the bounded window in one contiguous upload.
+        const offset = range.start === mesh.start && range.end > mesh.end ? Math.max(0, mesh.end - range.start) : 0;
+        const from = range.start + offset;
+        const count = range.end - range.start;
+        const matrix = mesh.instances.instanceMatrix;
+        (matrix.array as Float32Array).set(data.matrices.subarray(from * 16, range.end * 16), offset * 16);
+        matrix.clearUpdateRanges(); matrix.addUpdateRange(offset * 16, (count - offset) * 16); matrix.needsUpdate = true;
+        const values = [data.birth, data.duration, data.velocity, data.hue, data.crowd];
+        ['aBirth', 'aDuration', 'aVelocity', 'aHue', 'aCrowd'].forEach((name, i) => {
+          const attribute = mesh.geometry.getAttribute(name) as THREE.InstancedBufferAttribute;
+          (attribute.array as Float32Array).set(values[i].subarray(from, range.end), offset);
+          attribute.clearUpdateRanges(); attribute.addUpdateRange(offset, count - offset); attribute.needsUpdate = true;
+        });
+        mesh.instances.count = count;
+        mesh.start = range.start; mesh.end = range.end;
+      }
     }
     uniforms.uPrismTime.value = time;
     uniforms.uPrismLength.value = length;
@@ -251,8 +255,10 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
     const clock = clockStore.getState();
     uniforms.uPrismFx.value = clock.noteFxMode === 'off' ? 0 : Math.min(3, clock.noteFxAmount) / 2;
   });
-  if (!mesh || !data) return null;
+  if (!data) return null;
   return <group rotation={[0.3, 0, 0]} scale={1.15 * data.fit}>
-    <group ref={trailRef}><primitive object={mesh.instances} dispose={null} /></group>
+    <group ref={trailRef}>
+      {shape === 'glb' ? <AnimatedGlbFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} onStatus={onStatus} /> : mesh && <primitive object={mesh.instances} dispose={null} />}
+    </group>
   </group>;
 }

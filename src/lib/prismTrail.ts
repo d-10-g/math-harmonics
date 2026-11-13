@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { MidiControlSampler, SustainMap, type ParsedMidi } from './midi';
 
-export type PrismShape = 'spectrum' | 'sphere' | 'crystal' | 'torus' | 'knot' | 'mesh';
+export type PrismShape = 'spectrum' | 'sphere' | 'crystal' | 'torus' | 'knot' | 'mesh' | 'glb';
 export type PrismFinish = 'spectrum' | 'ornament' | 'glass';
-export const PRISM_SHAPES: readonly PrismShape[] = ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh'];
+export const PRISM_SHAPES: readonly PrismShape[] = ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb'];
 export const PRISM_FINISHES: readonly PrismFinish[] = ['spectrum', 'ornament', 'glass'];
 export const PRISM_SPEED = 3.5;
 const Z = new THREE.Vector3(0, 0, 1);
@@ -83,6 +83,7 @@ export function prismLowerBound(list: ArrayLike<number>, value: number, inclusiv
 export type PrismScoreData = {
   matrices: Float32Array; birth: Float32Array; duration: Float32Array;
   velocity: Float32Array; hue: Float32Array; crowd: Float32Array;
+  channels: Uint8Array; pitches: Uint8Array;
   count: number; table: PrismPoseTable; fit: number;
 };
 
@@ -108,6 +109,7 @@ export function buildPrismScore(midi: ParsedMidi, spread: number, perChannel: bo
   const matrices = new Float32Array(count * 16);
   const birth = new Float32Array(count), duration = new Float32Array(count), velocity = new Float32Array(count);
   const hue = new Float32Array(count), crowd = new Float32Array(count);
+  const noteChannels = new Uint8Array(count), pitches = new Uint8Array(count);
   const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), quaternion = new THREE.Quaternion();
   const scale = new THREE.Vector3(), local = new THREE.Vector3();
   for (let i = 0; i < count; i++) {
@@ -126,9 +128,10 @@ export function buildPrismScore(midi: ParsedMidi, spread: number, perChannel: bo
     hue[i] = colorMode === 'pitch' ? pitch : colorMode === 'chroma' ? (note.pitch % 12) / 12 + 1 / 24
       : colorMode === 'length' ? THREE.MathUtils.clamp(Math.log2(held / 0.08) / Math.log2(50), 0, 1) : group / Math.max(1, channels.length);
     birth[i] = note.time; duration[i] = held; velocity[i] = v;
+    noteChannels[i] = note.channel; pitches[i] = note.pitch;
     crowd[i] = Math.max(0, prismLowerBound(times[group], note.time + 0.6) - prismLowerBound(times[group], note.time - 0.6) - 1);
   }
-  return { matrices, birth, duration, velocity, hue, crowd, count, table,
+  return { matrices, birth, duration, velocity, hue, crowd, channels: noteChannels, pitches, count, table,
     fit: perChannel ? Math.min(1, 6 / (Math.sqrt(channels.length) + 4)) : 1 };
 }
 

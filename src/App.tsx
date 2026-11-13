@@ -488,6 +488,7 @@ export default function App() {
     prismPathSpread: initialShared.prismPathSpread ?? 1,
     prismTrailLength: initialShared.prismTrailLength ?? 0,
     prismMesh: initialShared.prismMesh ?? 'Star',
+    prismChannels: initialShared.prismChannels ?? {},
   });
   const applyPrismLook = (look: PrismLook) => {
     setNoteSource('prism');
@@ -506,11 +507,12 @@ export default function App() {
     setPostFX(true);
     setBloomIntensity(look === 'spectral' ? 0.8 : 0.25);
     setPrismFlight({
-      prismShape: look === 'ornaments' ? 'sphere' : look === 'glass' ? 'crystal' : look === 'sculptures' ? 'mesh' : 'spectrum',
+      prismShape: look === 'animated' ? 'glb' : look === 'ornaments' ? 'sphere' : look === 'glass' ? 'crystal' : look === 'sculptures' ? 'mesh' : 'spectrum',
       prismFinish: look === 'spectral' ? 'spectrum' : look === 'glass' ? 'glass' : 'ornament',
       prismPathSpread: look === 'spectral' ? 1.2 : 0.8,
       prismTrailLength: look === 'spectral' ? 45 : 25,
       prismMesh: 'Star',
+      prismChannels: prismFlight.prismChannels,
     });
   };
   const [meshChannelMap, setMeshChannelMap] = useState<string[]>(() => {
@@ -1889,6 +1891,7 @@ export default function App() {
                 prismPathSpread={prismFlight.prismPathSpread}
                 prismTrailLength={prismFlight.prismTrailLength}
                 prismMesh={prismFlight.prismMesh}
+                prismChannels={prismFlight.prismChannels}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
@@ -2058,11 +2061,12 @@ export default function App() {
           meshLibrary={MESH_LIBRARY}
           prismColor={prismColor}
           setPrismColor={setPrismColor}
+          prismShape={prismFlight.prismShape}
           prismSlice={prismSlice}
           setPrismSlice={setPrismSlice}
           prismPerChannel={prismPerChannel}
           setPrismPerChannel={setPrismPerChannel}
-          prismFlightControls={<PrismFlightControls value={prismFlight} onChange={patch => setPrismFlight(prev => ({ ...prev, ...patch }))} onLook={applyPrismLook} meshLibrary={MESH_LIBRARY} perChannel={prismPerChannel} />}
+          prismFlightControls={<PrismFlightControls value={prismFlight} onChange={patch => setPrismFlight(prev => ({ ...prev, ...patch }))} onLook={applyPrismLook} meshLibrary={MESH_LIBRARY} perChannel={prismPerChannel} midiChannels={modelChannels} materialProfile={webgpuMaterial} />}
           collapsed={controlsCollapsed}
           onCollapse={() => setControlsCollapsed(true)}
           pageMode={pageMode}

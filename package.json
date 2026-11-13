@@ -2,7 +2,7 @@
   "name": "math-harmonics",
   "productName": "Harmonic.OS",
   "private": true,
-  "version": "2.14.0",
+  "version": "2.15.0",
   "type": "module",
   "main": "electron.js",
   "scripts": {
@@ -23,7 +23,9 @@
     "validate:prism": "tsx scripts/validate-prism-trails.ts",
     "validate:midi": "tsx scripts/validate-midi.ts",
     "validate:materials": "tsx scripts/validate-materials.ts",
-    "validate:state": "tsx scripts/validate-state.ts"
+    "validate:state": "tsx scripts/validate-state.ts",
+    "validate:prism-channels": "tsx scripts/validate-prism-channels.ts",
+    "validate:glb-flight": "tsx scripts/validate-glb-flight.ts"
   },
   "build": {
     "appId": "com.d10g.math-harmonics",

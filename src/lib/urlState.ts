@@ -1,3 +1,4 @@
+import { normalizePrismChannels, type PrismChannelMap } from './prismChannels';
 import type { PrismShape, PrismFinish } from './prismTrail';
 import { MESH_LIBRARY } from './meshManifest';
 import { normalizeNoteLayout, type NoteLayoutSettings } from './noteLayout';
@@ -60,6 +61,7 @@ export type SharedState = {
   prismPathSpread?: number;
   prismTrailLength?: number;
   prismMesh?: string;
+  prismChannels?: PrismChannelMap;
   // Alphabet Sphere (the Letters page): stereo view, baseline, relief,
   // collimation, point size, tour and rings.
   alphabet?: Partial<AlphabetSettings>;
@@ -113,13 +115,21 @@ function parseParams(params: URLSearchParams): SharedState {
   const prismSlice = read('psw');
   if (prismSlice !== undefined && Number.isFinite(parseFloat(prismSlice))) state.prismSlice = Math.min(0.5, Math.max(0.05, parseFloat(prismSlice)));
   state.prismPerChannel = flag('ppc');
-  state.prismShape = oneOf(read('psh'), ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh'] as const);
+  state.prismShape = oneOf(read('psh'), ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb'] as const);
   state.prismFinish = oneOf(read('pfi'), ['spectrum', 'ornament', 'glass'] as const);
   const divergence = Number(read('ppd'));
   if (read('ppd') !== undefined && Number.isFinite(divergence)) state.prismPathSpread = Math.min(2, Math.max(0, divergence));
   const memory = Number(read('ptl'));
   if (read('ptl') !== undefined && Number.isFinite(memory)) state.prismTrailLength = Math.min(120, Math.max(0, Math.round(memory / 5) * 5));
   state.prismMesh = oneOf(read('pms'), MESH_LIBRARY);
+  const channelSettings = read('pch');
+  if (channelSettings !== undefined && channelSettings.length <= 8192) {
+    try {
+      const parsed: unknown = JSON.parse(channelSettings);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) state.prismChannels = normalizePrismChannels(parsed);
+    }
+    catch { /* A malformed map leaves valid saved settings in place. */ }
+  }
   const bounded = (key: string, min: number, max: number) => {
     const raw = read(key);
     if (raw === undefined) return undefined;
@@ -177,6 +187,7 @@ function sanitizeStoredState(value: unknown): SharedState {
       else if (typeof v === 'string' || typeof v === 'number') params.set(key, String(v));
     }
   }
+  if (saved.prismChannels && typeof saved.prismChannels === 'object') params.set('pch', JSON.stringify(normalizePrismChannels(saved.prismChannels)));
   return Object.fromEntries(Object.entries(parseParams(params)).filter(([, v]) => v !== undefined));
 }
 
@@ -241,6 +252,7 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('ppd', state.prismPathSpread.toFixed(2));
   params.set('ptl', String(state.prismTrailLength));
   params.set('pms', state.prismMesh);
+  params.set('pch', JSON.stringify(normalizePrismChannels(state.prismChannels)));
   const alphabet = { ...DEFAULT_ALPHABET_SETTINGS, ...state.alphabet };
   params.set('als', alphabet.stereo);
   params.set('alb', alphabet.baseline.toFixed(2));

@@ -45,10 +45,12 @@ const midi: ParsedMidi = {
   duration: 3, beats: [], bpm: 120, trackCount: 2, programs: {},
 };
 const originalNotes = [...midi.notes];
-for (const shape of ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh'] as const) {
+for (const shape of ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb'] as const) {
   for (const mode of ['full', 'pitch', 'chroma', 'length'] as const) {
     const score = buildPrismScore(midi, 5, true, mode, 1.3, shape)!;
     assert.equal(score.count, midi.notes.length);
+    assert.deepEqual(Array.from(score.channels), [0, 0, 1, 0], 'Sorted channel identities follow their note matrices');
+    assert.deepEqual(Array.from(score.pitches), [60, 67, 64, 72]);
     assert.deepEqual(Array.from(score.birth), [0, Math.fround(0.3), 1, 2]);
     for (const values of [score.matrices, score.birth, score.duration, score.velocity, score.hue, score.crowd]) {
       assert(values.every(Number.isFinite), `${shape}/${mode} data is finite`);
