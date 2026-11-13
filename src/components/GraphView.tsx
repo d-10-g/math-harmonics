@@ -2902,7 +2902,7 @@ export default function GraphView({
         </XR>
       </Canvas>
       
-      {noteSource === 'prism' && prismShape === 'glb' && prismStatus && <div data-spatial-menu="Flight status" className="pointer-events-none absolute bottom-3 left-3 right-3 text-[10px] text-cyan-100/75"><span data-spatial-status role="status" className="rounded-md border border-cyan-300/15 bg-black/65 px-2 py-1.5 backdrop-blur">{prismStatus}</span></div>}
+      {noteSource === 'prism' && (prismShape === 'glb' || prismShape === 'mixed') && prismStatus && <div data-spatial-menu="Flight status" className="pointer-events-none absolute bottom-3 left-3 right-3 text-[10px] text-cyan-100/75"><span data-spatial-status role="status" className="rounded-md border border-cyan-300/15 bg-black/65 px-2 py-1.5 backdrop-blur">{prismStatus}</span></div>}
 
       {!show3D && !alphabet && (
         <div

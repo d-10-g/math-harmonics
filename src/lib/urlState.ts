@@ -115,7 +115,7 @@ function parseParams(params: URLSearchParams): SharedState {
   const prismSlice = read('psw');
   if (prismSlice !== undefined && Number.isFinite(parseFloat(prismSlice))) state.prismSlice = Math.min(0.5, Math.max(0.05, parseFloat(prismSlice)));
   state.prismPerChannel = flag('ppc');
-  state.prismShape = oneOf(read('psh'), ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb'] as const);
+  state.prismShape = oneOf(read('psh'), ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb', 'mixed'] as const);
   state.prismFinish = oneOf(read('pfi'), ['spectrum', 'ornament', 'glass'] as const);
   const divergence = Number(read('ppd'));
   if (read('ppd') !== undefined && Number.isFinite(divergence)) state.prismPathSpread = Math.min(2, Math.max(0, divergence));

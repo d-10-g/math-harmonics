@@ -4,6 +4,16 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.16.0 — Mixed flights, one source and material per channel
+
+- **Flight studio → Mixed flight** combines animated GLBs, OBJ sculptures, and built-in shapes in the same moving score. Each active MIDI channel has its own **Source**, model or shape, and **Material** controls. Unassigned channels alternate GLB, OBJ, and built-in defaults; existing GLB assignments carry over.
+- GLB channels retain Ernie/Kira and their rig-specific movements. OBJ channels can choose any of the 132 library sculptures. Built-in channels offer prism fans, spheres, crystals, tori, and knots. All channel choices are independent and survive reloads and **Copy Link**.
+- Materials include the 20 physical profiles, luminous Spectrum for static shapes/OBJ geometry, and Original authored materials for imported models. Explicit channel materials override the global Output material; Auto follows the finish family. On GLB rigs, spectral finishes use physical materials that preserve skin animation. Global Prism Colour/Slice Width affect static trails using app materials; Original retains authored colors.
+- Mixed flights share the same deterministic channel paths, sustain timing, trail memory, and backward seeking as the existing modes. A bounded pool and geometry budget keep mixed history manageable, with a smaller pool in XR. Loading or failure of an individual asset leaves markers on that channel while the others continue.
+- The same source, model/shape, movement, and material controls appear in **VR → All 2D Menus → Controls · Flight channels**. New mixed/static regressions cover material isolation, resource ownership, three-source selection, and exact seeking alongside the existing GLB, menu, layout, and share-link checks.
+
+Choose **Audio → MIDI File → Note Visuals → Prism → Mixed flight**, then edit **Flight channels**. Use a multi-channel score such as Firebird or Jupiter to see several assignments together. The original single-source looks remain available.
+
 ## v2.15.0 — Animated GLB flight trails and channel materials
 
 - **Flight studio → Animated flight** paints animated GLB models along the same independent channel paths as the prism. Notes drive their embedded gestures while held, including sustain; released models keep their sampled pose as the flight moves on. Models keep their proportions instead of stretching into extrusions.

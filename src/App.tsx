@@ -507,7 +507,7 @@ export default function App() {
     setPostFX(true);
     setBloomIntensity(look === 'spectral' ? 0.8 : 0.25);
     setPrismFlight({
-      prismShape: look === 'animated' ? 'glb' : look === 'ornaments' ? 'sphere' : look === 'glass' ? 'crystal' : look === 'sculptures' ? 'mesh' : 'spectrum',
+      prismShape: look === 'mixed' ? 'mixed' : look === 'animated' ? 'glb' : look === 'ornaments' ? 'sphere' : look === 'glass' ? 'crystal' : look === 'sculptures' ? 'mesh' : 'spectrum',
       prismFinish: look === 'spectral' ? 'spectrum' : look === 'glass' ? 'glass' : 'ornament',
       prismPathSpread: look === 'spectral' ? 1.2 : 0.8,
       prismTrailLength: look === 'spectral' ? 45 : 25,

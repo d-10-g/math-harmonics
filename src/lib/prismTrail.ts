@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { MidiControlSampler, SustainMap, type ParsedMidi } from './midi';
 
-export type PrismShape = 'spectrum' | 'sphere' | 'crystal' | 'torus' | 'knot' | 'mesh' | 'glb';
+export type PrismShape = 'spectrum' | 'sphere' | 'crystal' | 'torus' | 'knot' | 'mesh' | 'glb' | 'mixed';
 export type PrismFinish = 'spectrum' | 'ornament' | 'glass';
-export const PRISM_SHAPES: readonly PrismShape[] = ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb'];
+export const PRISM_SHAPES: readonly PrismShape[] = ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb', 'mixed'];
 export const PRISM_FINISHES: readonly PrismFinish[] = ['spectrum', 'ornament', 'glass'];
 export const PRISM_SPEED = 3.5;
 const Z = new THREE.Vector3(0, 0, 1);

@@ -45,7 +45,7 @@ const midi: ParsedMidi = {
   duration: 3, beats: [], bpm: 120, trackCount: 2, programs: {},
 };
 const originalNotes = [...midi.notes];
-for (const shape of ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb'] as const) {
+for (const shape of ['spectrum', 'sphere', 'crystal', 'torus', 'knot', 'mesh', 'glb', 'mixed'] as const) {
   for (const mode of ['full', 'pitch', 'chroma', 'length'] as const) {
     const score = buildPrismScore(midi, 5, true, mode, 1.3, shape)!;
     assert.equal(score.count, midi.notes.length);

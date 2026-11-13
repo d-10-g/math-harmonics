@@ -1504,7 +1504,7 @@ export default function Controls({
                             <div className={cn("space-y-2.5", prismShape === 'glb' && "hidden")}>
                             <div>
                               <div className="text-xs font-semibold text-white/80">Prism Colour</div>
-                              <div className="text-[9px] text-white/30 font-mono">Whole Spectrum Per Note, Or A Slice By Note Value</div>
+                              <div className="text-[9px] text-white/30 font-mono">{prismShape === 'mixed' ? 'Shapes / OBJ with app materials: spectrum or note-value slices' : 'Whole Spectrum Per Note, Or A Slice By Note Value'}</div>
                               <div className="mt-1.5 grid grid-cols-4 gap-1">
                                 {(['full', 'pitch', 'chroma', 'length'] as const).map((mode) => (
                                   <button
@@ -1528,7 +1528,7 @@ export default function Controls({
                               <div className="flex items-center justify-between">
                                 <div>
                                   <div className="text-xs font-semibold text-white/80">Slice Width</div>
-                                  <div className="text-[9px] text-white/30 font-mono">How Much Of The Spectrum Each Note Shows</div>
+                                  <div className="text-[9px] text-white/30 font-mono">{prismShape === 'mixed' ? 'Spectrum band for shapes / OBJ using app materials' : 'How Much Of The Spectrum Each Note Shows'}</div>
                                 </div>
                                 <div className="text-[10px] font-mono text-fuchsia-300">{Math.round(prismSlice * 100)}%</div>
                               </div>

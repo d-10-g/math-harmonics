@@ -33,6 +33,17 @@ const roundTrip = loadSharedState();
 assert.deepEqual(roundTrip, state, 'Every shared control survives save/reload');
 window.localStorage.clear();
 assert.deepEqual(loadSharedState(), state, 'A copied link works without prior storage');
+const mixedState: Required<SharedState> = { ...state, prismShape: 'mixed', prismChannels: {
+  0: { kind: 'glb', asset: 'Ernie_model.glb', material: 'gold', movement: '01_Head_nod' },
+  4: { kind: 'obj', asset: 'Star.obj', material: 'spectrum' },
+  15: { kind: 'shape', shape: 'torus', material: 'dichroic' },
+} };
+persistSharedState(mixedState);
+assert.deepEqual(loadSharedState(), mixedState, 'Mixed source kinds, shape ids, meshes, materials, and GLB movements round-trip');
+window.localStorage.clear();
+assert.deepEqual(loadSharedState(), mixedState, 'Mixed flights reproduce from a link without prior storage');
+persistSharedState(state);
+
 window.location.hash = '#pfi=ornament&psh=knot&ppd=999&ptl=13&pms=../../missing&mat=invalid&ppc=maybe';
 window.localStorage.setItem(storageKey, JSON.stringify({ ...state, speed: -99, webgpuMaterial: 'gold', prismMesh: 'Cat' }));
 const merged = loadSharedState();
@@ -66,11 +77,11 @@ window.document.body.innerHTML = `<aside data-spatial-menu="Controls"><div data-
 }))}</div></aside>`;
 const items = readSpatialMenus(window.document as unknown as Document).flatMap(section => section.items);
 const item = (label: string) => items.find(i => i.label === label)!;
-assert.equal(item('Prism trail shape').options.length, 7);
+assert.equal(item('Prism trail shape').options.length, 8);
 assert.equal(item('Prism surface').options.length, 3);
 assert.equal(item('Prism sculpture').options.length, 2);
 assert.equal(item('Prism flight divergence').max, 2);
 assert.equal(item('Prism trail memory').max, 120);
-for (const label of ['Spectral ribbons', 'Ornament parade', 'Glass constellations', 'Sculpture flight', 'Animated flight']) assert.ok(item(label), `${label} reaches VR`);
+for (const label of ['Spectral ribbons', 'Ornament parade', 'Glass constellations', 'Sculpture flight', 'Animated flight', 'Mixed flight']) assert.ok(item(label), `${label} reaches VR`);
 await window.happyDOM.close();
 console.log('PASS: share-link round trip, stored-state validation, precedence, numeric bounds, mesh ids, and flight studio VR controls.');

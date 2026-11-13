@@ -29,6 +29,8 @@ jobs:
       - run: npm run validate:prism
       - run: npm run validate:prism-channels
       - run: npm run validate:glb-flight
+      - run: npm run validate:static-flight
+      - run: npm run validate:mixed-flight
       - run: npm run validate:materials
       - run: npm run validate:state
       - run: npm run validate:menus
