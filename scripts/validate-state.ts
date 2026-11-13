@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { loadSharedState, persistSharedState, type SharedState } from '../src/lib/urlState';
 import PrismFlightControls from '../src/components/PrismFlightControls';
+import { DEFAULT_FLIGHT_EFFECTS } from '../src/lib/flightEffects';
 import { readSpatialMenus } from '../src/lib/spatialMenu';
 
 const window = new Window({ url: 'https://example.test/' });
@@ -22,6 +23,7 @@ const state: Required<SharedState> = {
   noteSource: 'prism', meshUseMtl: false, meshAssign: 'random', noteDisplay: 'sounding',
   prismColor: 'chroma', prismSlice: 0.14, prismPerChannel: true, prismShape: 'mesh', prismFinish: 'glass',
   prismPathSpread: 0.8, prismTrailLength: 25, prismMesh: 'Star',
+  prismEffects: { bursts: 0.8, shockwaves: 1.2, lasers: 1.1, tracers: 0.7, motion: 'vortex', motionAmount: 0.9, morph: 0.6 },
   prismChannels: {
     0: { asset: 'Ernie_model.glb', material: 'ornament', movement: '01_Head_nod' },
     1: { asset: 'Kira_model.glb', material: 'glass', movement: 'Kira_08_Little_chirp' },
@@ -66,6 +68,12 @@ assert.equal(loadSharedState().prismShape, 'glb');
 assert.deepEqual(loadSharedState().prismChannels, {15: { asset: 'Kira_model.glb', material: 'original', movement: 'Kira_08_Little_chirp' }}, 'Channel maps restrict asset ids, materials, movements, and channel bounds');
 window.location.hash = '#pch=' + encodeURIComponent(' '.repeat(8193));
 assert.deepEqual(loadSharedState().prismChannels, state.prismChannels, 'Oversized maps cannot replace valid settings');
+window.location.hash = '#pfx=' + encodeURIComponent('{bad');
+assert.deepEqual(loadSharedState().prismEffects, state.prismEffects, 'Malformed FX JSON preserves saved effects');
+window.location.hash = '#pfx=' + encodeURIComponent(JSON.stringify({bursts: -5, lasers: 99, shockwaves: 'bad', morph: 20, motion: 'unknown'}));
+assert.deepEqual(loadSharedState().prismEffects, {...DEFAULT_FLIGHT_EFFECTS, lasers: 2, morph: 1}, 'FX settings clamp ranges and reject invalid values');
+window.location.hash = '#pfx=' + encodeURIComponent(' '.repeat(1025));
+assert.deepEqual(loadSharedState().prismEffects, state.prismEffects, 'Oversized FX payloads cannot replace saved effects');
 window.location.hash = '';
 for (const corrupt of ['null', '[]', '"wrong type"', '{', '{"webgpuMaterial":"deleted","prismShape":"nope","speed":"NaN"}']) {
   window.localStorage.setItem(storageKey, corrupt);

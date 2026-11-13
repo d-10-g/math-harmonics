@@ -1,0 +1,62 @@
+import type { WebGPULightingPreset } from '../constants';
+import { FLIGHT_SHOWCASES, normalizeFlightEffects, type FlightShowcase } from './flightEffects';
+import { normalizePrismChannels, type PrismChannelMap } from './prismChannels';
+import type { PrismFinish } from './prismTrail';
+import type { PrismColorMode } from './urlState';
+
+type Scene = {
+  channels: PrismChannelMap;
+  lighting: WebGPULightingPreset;
+  finish: PrismFinish;
+  spread: number;
+  memory: number;
+  bloom: number;
+  color: PrismColorMode;
+};
+
+export const FLIGHT_SCENES: Record<FlightShowcase, Scene> = {
+  supernova: {
+    channels: {
+      0: { kind: 'shape', shape: 'crystal', material: 'gold' },
+      1: { kind: 'obj', asset: 'Star.obj', material: 'spectrum' },
+      2: { kind: 'glb', asset: 'Kira_model.glb', material: 'ornament', movement: 'Kira_27_Question_mark_tail' },
+      3: { kind: 'shape', shape: 'sphere', material: 'ruby' },
+    },
+    lighting: 'sunset', finish: 'ornament', spread: 1.1, memory: 25, bloom: 0.5, color: 'chroma',
+  },
+  'neon-highway': {
+    channels: {
+      0: { kind: 'shape', shape: 'torus', material: 'neon' },
+      1: { kind: 'obj', asset: 'Torus.obj', material: 'spectrum' },
+      2: { kind: 'glb', asset: 'Ernie_model.glb', material: 'liquid-metal', movement: '25_Tail_left' },
+      3: { kind: 'shape', shape: 'spectrum', material: 'spectrum' },
+    },
+    lighting: 'prism', finish: 'spectrum', spread: 0.8, memory: 35, bloom: 0.45, color: 'pitch',
+  },
+  'cosmic-jelly': {
+    channels: {
+      0: { kind: 'shape', shape: 'sphere', material: 'dichroic' },
+      1: { kind: 'obj', asset: 'Blob.obj', material: 'stained-glass' },
+      2: { kind: 'glb', asset: 'Kira_model.glb', material: 'glass', movement: 'Kira_29_Tail_ribbon_left' },
+      3: { kind: 'shape', shape: 'knot', material: 'pearl' },
+    },
+    lighting: 'aurora', finish: 'glass', spread: 0.7, memory: 25, bloom: 0.3, color: 'length',
+  },
+  stargate: {
+    channels: {
+      0: { kind: 'shape', shape: 'torus', material: 'gold' },
+      1: { kind: 'obj', asset: 'Twistytorus.obj', material: 'dichroic' },
+      2: { kind: 'glb', asset: 'Ernie_model.glb', material: 'chrome', movement: '09_Left_ear_flick' },
+      3: { kind: 'shape', shape: 'knot', material: 'spectrum' },
+    },
+    lighting: 'prism', finish: 'ornament', spread: 1.2, memory: 30, bloom: 0.45, color: 'chroma',
+  },
+};
+
+export function flightScene(id: FlightShowcase) {
+  return {
+    ...FLIGHT_SCENES[id],
+    channels: normalizePrismChannels(FLIGHT_SCENES[id].channels),
+    effects: normalizeFlightEffects(FLIGHT_SHOWCASES.find(showcase => showcase.id === id)!.effects),
+  };
+}

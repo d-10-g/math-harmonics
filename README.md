@@ -4,6 +4,17 @@ An interactive mathematical visualizer for desktop, **Apple Vision Pro**, and **
 
 **Live:** https://d-10-g.github.io/math-harmonics/
 
+## v2.17.0 — Flight FX laboratory: supernovas, lasers, and liquid worlds
+
+- Four complete surprise scenes under **Prism → Flight FX laboratory**: **Supernova** (starbursts and expanding halos), **Neon Highway** (laser filaments and comet ribbons), **Cosmic Jelly** (breathing glass, liquid shapes, and rigged models), and **Stargate** (swirling torus gates and shockwaves). Each scene curates the channel visuals, materials, light rig, bloom, paths, and effect mix together. Existing six flight looks remain available.
+- Mix the effects yourself: **Starbursts**, **Shockwave rings**, **Laser filaments**, **Ribbon tracers**, and **Liquid morph** each have an independent dial. Lasers and tracers connect consecutive notes only within the same MIDI channel and break across rests. Sparks scatter from note attacks; halos expand in each channel plane. View-facing ribbons remain visible when orbiting and in stereo.
+- **Motion field** adds satellite orbits, vortex spin, sine-wave surfing, or breathing pulses. Static shapes and app-material OBJ meshes deform with corrected surface normals; original OBJ materials retain their authored look while the model moves, breathes, and stretches. GLB bodies gain kinetic squash and motion while their skeletal gestures remain intact.
+- All animation follows absolute score time: pause freezes the effects, and seeking recreates the same seeded sparks, waves, motion, and morphs. Effects are optional; old links default to zero extra FX. **Clear flight FX** restores the base motion and removes the extras while retaining the channel choices and lighting. The dials can combine FX with any existing flight look.
+- Effects use at most four additional draw batches with bounded recent note/link pools and lower headset particle/history budgets. Disabled effects allocate no GPU buffers. No camera shake is added. Scene switches and shader changes release their owned buffers/materials while preserving cached model resources.
+- Every new preset, dial, motion choice, and disabled state has matching desktop/VR controls under **Controls · Flight FX**. FX settings persist in reloads and Copy Link. Added regressions cover 20,000-note effect pools, channel-link identity, exact seeking, analytic normal correction, rig isolation, shared controls, and real catalog references in all four scenes.
+
+Choose **Audio → MIDI File → Note Visuals → Prism**, open **Flight FX laboratory**, and try **Supernova** or **Neon Highway**. A showcase preserves your current score; with no score loaded it stages Mercury. Clear removes only FX, while choosing a showcase replaces the visual scene. Headset hardware still needs testing; desktop production shaders and deployment assets are verified separately.
+
 ## v2.16.0 — Mixed flights, one source and material per channel
 
 - **Flight studio → Mixed flight** combines animated GLBs, OBJ sculptures, and built-in shapes in the same moving score. Each active MIDI channel has its own **Source**, model or shape, and **Material** controls. Unassigned channels alternate GLB, OBJ, and built-in defaults; existing GLB assignments carry over.

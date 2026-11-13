@@ -1,0 +1,65 @@
+export type FlightMotion = 'none' | 'orbit' | 'vortex' | 'wave' | 'breathe';
+
+export type FlightEffectsSettings = {
+  bursts: number;
+  shockwaves: number;
+  lasers: number;
+  tracers: number;
+  motion: FlightMotion;
+  motionAmount: number;
+  morph: number;
+};
+
+export const FLIGHT_MOTIONS: ReadonlyArray<readonly [FlightMotion, string]> = [
+  ['none', 'Still'], ['orbit', 'Satellite orbits'], ['vortex', 'Vortex spin'],
+  ['wave', 'Sine-wave surfing'], ['breathe', 'Breathing pulse'],
+];
+
+export const DEFAULT_FLIGHT_EFFECTS: Readonly<FlightEffectsSettings> = Object.freeze({
+  bursts: 0, shockwaves: 0, lasers: 0, tracers: 0,
+  motion: 'none', motionAmount: 1, morph: 0,
+});
+
+/** Settings from old links or edited storage always produce a complete, bounded scene. */
+export function normalizeFlightEffects(value: unknown): FlightEffectsSettings {
+  const saved = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+  const bounded = (key: Exclude<keyof FlightEffectsSettings, 'motion'>, max: number) => {
+    const v = saved[key];
+    return typeof v === 'number' && Number.isFinite(v)
+      ? Math.max(0, Math.min(max, v)) : DEFAULT_FLIGHT_EFFECTS[key];
+  };
+  return {
+    bursts: bounded('bursts', 2), shockwaves: bounded('shockwaves', 2),
+    lasers: bounded('lasers', 2), tracers: bounded('tracers', 2),
+    motion: FLIGHT_MOTIONS.some(([id]) => id === saved.motion) ? saved.motion as FlightMotion : 'none',
+    motionAmount: bounded('motionAmount', 2), morph: bounded('morph', 1),
+  };
+}
+
+export type FlightShowcase = 'supernova' | 'neon-highway' | 'cosmic-jelly' | 'stargate';
+export type FlightShowcasePreset = {
+  id: FlightShowcase;
+  label: string;
+  description: string;
+  effects: Readonly<FlightEffectsSettings>;
+};
+
+export const FLIGHT_SHOWCASES: readonly FlightShowcasePreset[] = [
+  {
+    id: 'supernova', label: 'Supernova', description: 'Starbursts and expanding halos',
+    effects: Object.freeze({ bursts: 1.3, shockwaves: 1.1, lasers: 0.25, tracers: 0.4, motion: 'orbit', motionAmount: 0.65, morph: 0.2 }),
+  },
+  {
+    id: 'neon-highway', label: 'Neon Highway', description: 'Laser filaments and flowing traces',
+    effects: Object.freeze({ bursts: 0.2, shockwaves: 0.25, lasers: 1.3, tracers: 1.4, motion: 'wave', motionAmount: 0.7, morph: 0.15 }),
+  },
+  {
+    id: 'cosmic-jelly', label: 'Cosmic Jelly', description: 'Liquid shapes and breathing motion',
+    effects: Object.freeze({ bursts: 0.25, shockwaves: 0.4, lasers: 0.15, tracers: 0.65, motion: 'breathe', motionAmount: 1.15, morph: 0.9 }),
+  },
+  {
+    id: 'stargate', label: 'Stargate', description: 'Vortex flight through luminous rings',
+    effects: Object.freeze({ bursts: 0.45, shockwaves: 1.35, lasers: 0.7, tracers: 0.9, motion: 'vortex', motionAmount: 1.05, morph: 0.45 }),
+  },
+];

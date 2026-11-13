@@ -4,6 +4,8 @@ import { erniePose } from './ernie';
 import { createPhysicalMaterial } from './materials';
 import { prismLowerBound, type PrismScoreData } from './prismTrail';
 import type { WebGPUMaterialProfile } from '../constants';
+import type { FlightEffectsSettings } from './flightEffects';
+import { createFlightMotionSample, sampleFlightMotion } from './flightMotion';
 
 export const GLB_FLIGHT_LIMIT = 48;
 export const GLB_FLIGHT_XR_LIMIT = 24;
@@ -75,7 +77,7 @@ export type GlbFlightActor = {
   materials: Set<THREE.Material>;
   skeletons: Set<THREE.Skeleton>;
   assign: (data: PrismScoreData, index: number) => void;
-  update: (data: PrismScoreData, index: number, time: number, length: number, fx: number) => void;
+  update: (data: PrismScoreData, index: number, time: number, length: number, fx: number, effects?: FlightEffectsSettings) => void;
   dispose: () => void;
 };
 
@@ -121,6 +123,7 @@ export function createGlbFlightActor(template: THREE.Object3D, clips: THREE.Anim
   const mixer = clip ? new THREE.AnimationMixer(model) : null;
   const action = clip && mixer ? mixer.clipAction(clip).play() : null;
   const matrix = new THREE.Matrix4(), scale = new THREE.Vector3();
+  const motion = createFlightMotionSample();
   let previousPhase = NaN, previousWeight = NaN;
   let disposed = false;
   return {
@@ -132,7 +135,7 @@ export function createGlbFlightActor(template: THREE.Object3D, clips: THREE.Anim
       root.scale.setScalar(scale.x);
       root.visible = true;
     },
-    update(data, index, time, length, fx) {
+    update(data, index, time, length, fx, effects) {
       const age = time - data.birth[index];
       root.visible = age >= 0 && (length <= 0 || age < length);
       if (!root.visible) return;
@@ -147,8 +150,10 @@ export function createGlbFlightActor(template: THREE.Object3D, clips: THREE.Anim
       // A small attack pulse follows absolute score time, so pause freezes
       // both skin deformation and body motion and a backward seek restores it.
       const attack = Math.exp(-Math.max(0, age) / 0.16) * data.velocity[index] * fx;
-      body.scale.setScalar(1 + attack * 0.2);
-      body.position.y = attack * 0.08;
+      sampleFlightMotion(data.birth[index], data.hue[index], time, effects, motion);
+      body.scale.copy(motion.scale).multiplyScalar(1 + attack * 0.2);
+      body.position.copy(motion.offset); body.position.y += attack * 0.08;
+      body.rotation.set(motion.rotation.x, motion.rotation.y, motion.rotation.z);
       fade.value = length > 0 ? THREE.MathUtils.smoothstep(length - age, 0, Math.min(2, length)) : 1;
     },
     dispose() {

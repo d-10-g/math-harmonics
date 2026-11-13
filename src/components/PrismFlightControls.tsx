@@ -2,6 +2,8 @@ import type { PrismFinish, PrismShape } from '../lib/prismTrail';
 import type { WebGPUMaterialProfile } from '../constants';
 import type { PrismChannelMap } from '../lib/prismChannels';
 import PrismChannelControls from './PrismChannelControls';
+import FlightEffectsControls from './FlightEffectsControls';
+import { normalizeFlightEffects, type FlightEffectsSettings, type FlightShowcase } from '../lib/flightEffects';
 
 export type PrismFlightSettings = {
   prismShape: PrismShape;
@@ -10,6 +12,7 @@ export type PrismFlightSettings = {
   prismTrailLength: number;
   prismMesh: string;
   prismChannels: PrismChannelMap;
+  prismEffects: FlightEffectsSettings;
 };
 
 export type PrismLook = 'spectral' | 'ornaments' | 'glass' | 'sculptures' | 'animated' | 'mixed';
@@ -22,7 +25,7 @@ const FINISHES: Array<[PrismFinish, string]> = [
   ['spectrum', 'Luminous spectrum'], ['ornament', 'Polished ornament · PBR'], ['glass', 'Colored glass · PBR'],
 ];
 
-export default function PrismFlightControls({ value, onChange, onLook, meshLibrary, perChannel, midiChannels = [0, 1, 2, 3], materialProfile = 'auto' }: {
+export default function PrismFlightControls({ value, onChange, onLook, meshLibrary, perChannel, midiChannels = [0, 1, 2, 3], materialProfile = 'auto', onShowcase }: {
   value: PrismFlightSettings;
   onChange: (patch: Partial<PrismFlightSettings>) => void;
   onLook: (look: PrismLook) => void;
@@ -30,6 +33,7 @@ export default function PrismFlightControls({ value, onChange, onLook, meshLibra
   perChannel: boolean;
   midiChannels?: number[];
   materialProfile?: WebGPUMaterialProfile;
+  onShowcase?: (id: FlightShowcase) => void;
 }) {
   const selectClass = 'mt-1 block w-full rounded-md border border-white/15 bg-slate-950 p-2 text-[11px] text-fuchsia-100';
   return <div className="space-y-3 border-b border-fuchsia-300/15 pb-3">
@@ -50,6 +54,7 @@ export default function PrismFlightControls({ value, onChange, onLook, meshLibra
         </button>)}
       </div>
     </div>
+    <FlightEffectsControls value={normalizeFlightEffects(value.prismEffects)} onChange={prismEffects => onChange({ prismEffects })} onShowcase={onShowcase} />
     <div className="grid grid-cols-2 gap-2">
       <label className="text-[10px] text-white/65">Trail shape
         <select aria-label="Prism trail shape" className={selectClass} value={value.prismShape}

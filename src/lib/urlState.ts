@@ -1,3 +1,4 @@
+import { normalizeFlightEffects, type FlightEffectsSettings } from './flightEffects';
 import { normalizePrismChannels, type PrismChannelMap } from './prismChannels';
 import type { PrismShape, PrismFinish } from './prismTrail';
 import { MESH_LIBRARY } from './meshManifest';
@@ -62,6 +63,7 @@ export type SharedState = {
   prismTrailLength?: number;
   prismMesh?: string;
   prismChannels?: PrismChannelMap;
+  prismEffects?: FlightEffectsSettings;
   // Alphabet Sphere (the Letters page): stereo view, baseline, relief,
   // collimation, point size, tour and rings.
   alphabet?: Partial<AlphabetSettings>;
@@ -130,6 +132,13 @@ function parseParams(params: URLSearchParams): SharedState {
     }
     catch { /* A malformed map leaves valid saved settings in place. */ }
   }
+  const effects = read('pfx');
+  if (effects !== undefined && effects.length <= 1024) {
+    try {
+      const parsed: unknown = JSON.parse(effects);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) state.prismEffects = normalizeFlightEffects(parsed);
+    } catch { /* Invalid FX JSON leaves valid saved settings intact. */ }
+  }
   const bounded = (key: string, min: number, max: number) => {
     const raw = read(key);
     if (raw === undefined) return undefined;
@@ -188,6 +197,7 @@ function sanitizeStoredState(value: unknown): SharedState {
     }
   }
   if (saved.prismChannels && typeof saved.prismChannels === 'object') params.set('pch', JSON.stringify(normalizePrismChannels(saved.prismChannels)));
+  if (saved.prismEffects && typeof saved.prismEffects === 'object' && !Array.isArray(saved.prismEffects)) params.set('pfx', JSON.stringify(normalizeFlightEffects(saved.prismEffects)));
   return Object.fromEntries(Object.entries(parseParams(params)).filter(([, v]) => v !== undefined));
 }
 
@@ -253,6 +263,7 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('ptl', String(state.prismTrailLength));
   params.set('pms', state.prismMesh);
   params.set('pch', JSON.stringify(normalizePrismChannels(state.prismChannels)));
+  params.set('pfx', JSON.stringify(normalizeFlightEffects(state.prismEffects)));
   const alphabet = { ...DEFAULT_ALPHABET_SETTINGS, ...state.alphabet };
   params.set('als', alphabet.stereo);
   params.set('alb', alphabet.baseline.toFixed(2));

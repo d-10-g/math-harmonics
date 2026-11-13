@@ -1,3 +1,4 @@
+import type { FlightEffectsSettings } from '../lib/flightEffects';
 import VisualCopies from './VisualCopies';
 import { channelPath, DEFAULT_NOTE_LAYOUT, type NoteLayoutSettings } from '../lib/noteLayout';
 import { useRef, useMemo, useState, useEffect } from 'react';
@@ -995,6 +996,7 @@ interface GraphViewProps {
   prismTrailLength?: number;
   prismMesh?: string;
   prismChannels?: PrismChannelMap;
+  prismEffects?: FlightEffectsSettings;
   setNoteDisplay?: (mode: 'sounding' | 'all') => void;
   meshLibrary?: string[];
 }
@@ -2701,7 +2703,8 @@ export default function GraphView({
   prismPathSpread = 1,
   prismTrailLength = 0,
   prismMesh = 'Star',
-  prismChannels
+  prismChannels,
+  prismEffects
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [prismStatus, setPrismStatus] = useState('');
@@ -2809,7 +2812,7 @@ export default function GraphView({
 
             <group ref={mirrorAnchorRef} />
             {noteSource === 'prism' && show3D ? (
-              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} />
+              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} effects={prismEffects} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} />
             ) : noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}

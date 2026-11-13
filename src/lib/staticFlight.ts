@@ -3,7 +3,9 @@ import type { WebGPUMaterialProfile } from '../constants';
 import type { PrismColorMode } from './urlState';
 import type { PrismStaticShape } from './prismChannels';
 import type { PrismScoreData } from './prismTrail';
-import { createPrismGeometry, createPrismMaterial, makePrismUniforms } from './prismRender';
+import type { FlightEffectsSettings } from './flightEffects';
+import { createFlightMotionSample, sampleFlightMotion } from './flightMotion';
+import { createPrismGeometry, createPrismMaterial, makePrismUniforms, updatePrismEffectsUniforms } from './prismRender';
 
 export type StaticFlightOptions = {
   shape: PrismStaticShape | 'mesh';
@@ -19,7 +21,7 @@ export type StaticFlightActor = {
   root: THREE.Group;
   vertexCount: number;
   assign: (data: PrismScoreData, index: number) => void;
-  update: (data: PrismScoreData, index: number, time: number, length: number, fx: number) => void;
+  update: (data: PrismScoreData, index: number, time: number, length: number, fx: number, effects?: FlightEffectsSettings) => void;
   dispose: () => void;
 };
 
@@ -74,6 +76,7 @@ function createAuthoredActor(template: THREE.Object3D, wireframe: boolean): Stat
   fit.position.z += 0.5;
   fit.add(model); body.add(fit); root.add(body); root.visible = false;
   const matrix = new THREE.Matrix4();
+  const motion = createFlightMotionSample();
   let disposed = false;
   return {
     root, vertexCount: staticFlightVertexCount(model),
@@ -81,13 +84,16 @@ function createAuthoredActor(template: THREE.Object3D, wireframe: boolean): Stat
       matrix.fromArray(data.matrices, index * 16).decompose(root.position, root.quaternion, root.scale);
       root.visible = true;
     },
-    update(data, index, time, length, fx) {
+    update(data, index, time, length, fx, effects) {
       const age = time - data.birth[index];
       root.visible = age >= 0 && (length <= 0 || age < length);
       if (!root.visible) return;
       const pop = 1 + 0.55 * data.velocity[index] * fx * Math.exp(-age / 0.13);
       const growth = THREE.MathUtils.lerp(0.08, 1, THREE.MathUtils.clamp(age / Math.max(data.duration[index], 0.02), 0, 1));
-      body.scale.set(pop, pop, growth);
+      sampleFlightMotion(data.birth[index], data.hue[index], time, effects, motion);
+      body.position.copy(motion.offset);
+      body.rotation.set(motion.rotation.x, motion.rotation.y, motion.rotation.z);
+      body.scale.set(pop * motion.scale.x, pop * motion.scale.y, growth * motion.scale.z);
       fade.value = length > 0 ? THREE.MathUtils.smoothstep(length - age, 0, Math.min(2, length)) : 1;
     },
     dispose() {
@@ -132,12 +138,13 @@ export function createStaticFlightActor(options: StaticFlightOptions): StaticFli
       });
       root.visible = true;
     },
-    update(data, index, time, length, fx) {
+    update(data, index, time, length, fx, effects) {
       const age = time - data.birth[index];
       root.visible = age >= 0 && (length <= 0 || age < length);
       uniforms.uPrismTime.value = time;
       uniforms.uPrismLength.value = length;
       uniforms.uPrismFx.value = fx;
+      updatePrismEffectsUniforms(uniforms, effects);
     },
     dispose() {
       if (disposed) return;

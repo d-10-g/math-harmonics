@@ -4,20 +4,22 @@ import * as THREE from 'three';
 import type { WebGPUMaterialProfile } from '../constants';
 import type { ParsedMidi } from '../lib/midi';
 import { clockStore } from '../lib/clock';
-import { makePrismUniforms, createPrismMaterial, createPrismGeometry } from '../lib/prismRender';
+import { makePrismUniforms, createPrismMaterial, createPrismGeometry, updatePrismEffectsUniforms } from '../lib/prismRender';
 import { isValidMeshName, loadMeshGeometry } from '../lib/meshLibrary';
 import type { PrismColorMode } from '../lib/urlState';
 import AnimatedGlbFlight from './AnimatedGlbFlight';
 import MixedFlight from './MixedFlight';
+import FlightFireworks from './FlightFireworks';
+import { DEFAULT_FLIGHT_EFFECTS, type FlightEffectsSettings } from '../lib/flightEffects';
 import type { PrismChannelMap } from '../lib/prismChannels';
 import { buildPrismScore, prismInstanceBudget, prismVisibleRange, samplePrismPose, type PrismFinish, type PrismShape } from '../lib/prismTrail';
 
 export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode = 'full', sliceWidth = 0.14,
   perChannel = false, shape = 'spectrum', finish = 'spectrum', pathSpread = 1, trailLength = 0,
-  materialProfile = 'auto', meshId = 'Star', showWireframe = false, channelMap, onStatus }: {
+  materialProfile = 'auto', meshId = 'Star', showWireframe = false, channelMap, onStatus, effects = DEFAULT_FLIGHT_EFFECTS }: {
   midi: ParsedMidi | null; getMusicTime?: () => { time: number; duration: number }; noteSpread: number;
   colorMode?: PrismColorMode; sliceWidth?: number; perChannel?: boolean; shape?: PrismShape; finish?: PrismFinish;
-  pathSpread?: number; trailLength?: number; materialProfile?: WebGPUMaterialProfile; meshId?: string; showWireframe?: boolean; channelMap?: PrismChannelMap; onStatus?: (status: string) => void;
+  pathSpread?: number; trailLength?: number; materialProfile?: WebGPUMaterialProfile; meshId?: string; showWireframe?: boolean; channelMap?: PrismChannelMap; onStatus?: (status: string) => void; effects?: FlightEffectsSettings;
 }) {
   const [sourceGeometry, setSourceGeometry] = useState<{ id: string; geometry: THREE.BufferGeometry } | null>(null);
   useEffect(() => {
@@ -87,6 +89,7 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
         mesh.start = range.start; mesh.end = range.end;
       }
     }
+    updatePrismEffectsUniforms(uniforms, effects);
     uniforms.uPrismTime.value = time;
     uniforms.uPrismLength.value = length;
     uniforms.uPrismFan.value = shape === 'spectrum' ? 1 : 0;
@@ -98,7 +101,8 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
   if (!data) return null;
   return <group rotation={[0.3, 0, 0]} scale={1.15 * data.fit}>
     <group ref={trailRef}>
-      {shape === 'mixed' ? <MixedFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} onStatus={onStatus} colorMode={colorMode} sliceWidth={sliceWidth} /> : shape === 'glb' ? <AnimatedGlbFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} onStatus={onStatus} /> : mesh && <primitive object={mesh.instances} dispose={null} />}
+      {(effects.bursts > 0 || effects.shockwaves > 0 || effects.lasers > 0 || effects.tracers > 0) && <FlightFireworks data={data} getMusicTime={getMusicTime} settings={effects} />}
+      {shape === 'mixed' ? <MixedFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} colorMode={colorMode} sliceWidth={sliceWidth} /> : shape === 'glb' ? <AnimatedGlbFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} /> : mesh && <primitive object={mesh.instances} dispose={null} />}
     </group>
   </group>;
 }

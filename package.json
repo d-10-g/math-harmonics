@@ -2,7 +2,7 @@
   "name": "math-harmonics",
   "productName": "Harmonic.OS",
   "private": true,
-  "version": "2.16.0",
+  "version": "2.17.0",
   "type": "module",
   "main": "electron.js",
   "scripts": {
@@ -27,7 +27,11 @@
     "validate:prism-channels": "tsx scripts/validate-prism-channels.ts",
     "validate:glb-flight": "tsx scripts/validate-glb-flight.ts",
     "validate:static-flight": "tsx scripts/validate-static-flight.ts",
-    "validate:mixed-flight": "tsx scripts/validate-mixed-flight.ts"
+    "validate:mixed-flight": "tsx scripts/validate-mixed-flight.ts",
+    "validate:flight-effects": "tsx scripts/validate-flight-effects.ts",
+    "validate:flight-fireworks": "tsx scripts/validate-flight-fireworks.ts",
+    "validate:flight-motion": "tsx scripts/validate-flight-motion.ts",
+    "validate:flight-scenes": "tsx scripts/validate-flight-scenes.ts"
   },
   "build": {
     "appId": "com.d10g.math-harmonics",

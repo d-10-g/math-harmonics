@@ -16,6 +16,8 @@ import GraphView from './components/GraphView';
 import Controls from './components/Controls';
 import PrismFlightControls, { type PrismFlightSettings, type PrismLook } from './components/PrismFlightControls';
 import ErrorBoundary from './components/ErrorBoundary';
+import { normalizeFlightEffects, type FlightShowcase } from './lib/flightEffects';
+import { flightScene } from './lib/flightScenes';
 
 // The WebGPU path (three/webgpu + TSL) is a large chunk; load it only when
 // the WebGPU renderer is actually selected. Headsets default to WebGL.
@@ -489,6 +491,7 @@ export default function App() {
     prismTrailLength: initialShared.prismTrailLength ?? 0,
     prismMesh: initialShared.prismMesh ?? 'Star',
     prismChannels: initialShared.prismChannels ?? {},
+    prismEffects: normalizeFlightEffects(initialShared.prismEffects),
   });
   const applyPrismLook = (look: PrismLook) => {
     setNoteSource('prism');
@@ -513,7 +516,37 @@ export default function App() {
       prismTrailLength: look === 'spectral' ? 45 : 25,
       prismMesh: 'Star',
       prismChannels: prismFlight.prismChannels,
+      prismEffects: prismFlight.prismEffects,
     });
+  };
+  const applyFlightShowcase = (id: FlightShowcase) => {
+    const scene = flightScene(id);
+    setPageMode('audio');
+    try { localStorage.setItem(MODE_KEY, 'audio'); } catch { /* Non-fatal. */ }
+    setAudioSync(true);
+    setAudioSource('midi');
+    if (!midiInfo) loadLibraryEntry('mercury');
+    setAutoCycleFormula(false);
+    setAutoCycleShader(false);
+    setNoteSource('prism');
+    setShow3D(true);
+    setShowWireframe(false);
+    setNoteMeshes(true);
+    setPrismPerChannel(true);
+    setPrismColor(scene.color);
+    setPrismSlice(0.14);
+    setAutoStyle(false);
+    setAutoCycleWebgpuMaterial(false);
+    setAutoCycleWebgpuLighting(false);
+    setAutoCycleWebgpuGeometry(false);
+    setWebgpuMaterial('auto');
+    setWebgpuLightingPreset(scene.lighting);
+    setWebgpuLighting(1.15);
+    setShowEnvironment(true);
+    setPostFX(true);
+    setBloomIntensity(scene.bloom);
+    setPrismFlight({ prismShape: 'mixed', prismFinish: scene.finish, prismPathSpread: scene.spread,
+      prismTrailLength: scene.memory, prismMesh: 'Star', prismChannels: scene.channels, prismEffects: scene.effects });
   };
   const [meshChannelMap, setMeshChannelMap] = useState<string[]>(() => {
     try {
@@ -1892,6 +1925,7 @@ export default function App() {
                 prismTrailLength={prismFlight.prismTrailLength}
                 prismMesh={prismFlight.prismMesh}
                 prismChannels={prismFlight.prismChannels}
+                prismEffects={prismFlight.prismEffects}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
@@ -2066,7 +2100,7 @@ export default function App() {
           setPrismSlice={setPrismSlice}
           prismPerChannel={prismPerChannel}
           setPrismPerChannel={setPrismPerChannel}
-          prismFlightControls={<PrismFlightControls value={prismFlight} onChange={patch => setPrismFlight(prev => ({ ...prev, ...patch }))} onLook={applyPrismLook} meshLibrary={MESH_LIBRARY} perChannel={prismPerChannel} midiChannels={modelChannels} materialProfile={webgpuMaterial} />}
+          prismFlightControls={<PrismFlightControls value={prismFlight} onChange={patch => setPrismFlight(prev => ({ ...prev, ...patch }))} onLook={applyPrismLook} onShowcase={applyFlightShowcase} meshLibrary={MESH_LIBRARY} perChannel={prismPerChannel} midiChannels={modelChannels} materialProfile={webgpuMaterial} />}
           collapsed={controlsCollapsed}
           onCollapse={() => setControlsCollapsed(true)}
           pageMode={pageMode}

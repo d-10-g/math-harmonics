@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { WebGPUMaterialProfile } from '../constants';
 import { createPhysicalMaterial } from './materials';
 import type { PrismFinish, PrismShape } from './prismTrail';
+import type { FlightEffectsSettings } from './flightEffects';
+import { FLIGHT_MOTION_GLSL, flightMotionIndex } from './flightMotion';
 
 // The score is baked once into world-space instances. The camera rides the
 // guide plane while independent channel planes leave their geometry behind.
@@ -35,6 +37,7 @@ attribute float aCrowd;
 uniform float uPrismTime;
 uniform float uPrismFx;
 ${VARYINGS}
+${FLIGHT_MOTION_GLSL}
 `;
 const FRAGMENT_DECLARATIONS = /* glsl */ `
 uniform float uPrismFx;
@@ -71,7 +74,9 @@ void main() {
   ${SET_VARYINGS}
   vec3 transformed = position;
   ${GROWTH}
-  vPrismNormal = normalize(normalMatrix * mat3(instanceMatrix) * normal);
+  vec3 flightNormal = normal;
+  flightDeform(transformed, flightNormal, aBirth, aHue);
+  vPrismNormal = normalize(normalMatrix * mat3(instanceMatrix) * flightNormal);
   gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(transformed, 1.0);
 }
 `;
@@ -110,7 +115,14 @@ void main() {
 export type PrismUniforms = ReturnType<typeof makePrismUniforms>;
 export function makePrismUniforms() {
   return { uPrismTime: { value: 0 }, uPrismFx: { value: 1 }, uPrismSlice: { value: 0 },
-    uPrismSliceWidth: { value: 0.14 }, uPrismLength: { value: 0 }, uPrismFan: { value: 1 } };
+    uPrismSliceWidth: { value: 0.14 }, uPrismLength: { value: 0 }, uPrismFan: { value: 1 },
+    uFlightMotion: { value: 0 }, uFlightMotionAmount: { value: 1 }, uFlightMorph: { value: 0 } };
+}
+
+export function updatePrismEffectsUniforms(uniforms: PrismUniforms, effects?: FlightEffectsSettings) {
+  uniforms.uFlightMotion.value = flightMotionIndex(effects?.motion);
+  uniforms.uFlightMotionAmount.value = Number.isFinite(effects?.motionAmount) ? THREE.MathUtils.clamp(effects!.motionAmount, 0, 2) : 1;
+  uniforms.uFlightMorph.value = Number.isFinite(effects?.morph) ? THREE.MathUtils.clamp(effects!.morph, 0, 1) : 0;
 }
 
 export function createPrismMaterial(finish: PrismFinish, profile: WebGPUMaterialProfile, wireframe: boolean, uniforms: PrismUniforms) {
@@ -127,8 +139,12 @@ export function createPrismMaterial(finish: PrismFinish, profile: WebGPUMaterial
         float prismNormalAge = max(uPrismTime - aBirth, 0.0);
         objectNormal.xy /= 1.0 + 0.55 * aVelocity * uPrismFx * exp(-prismNormalAge / 0.13);
         objectNormal.z /= mix(0.08, 1.0, clamp(prismNormalAge / max(aDuration, 0.02), 0.0, 1.0));
+        vec3 flightNormalPosition = position;
+        flightNormalPosition.xy *= 1.0 + 0.55 * aVelocity * uPrismFx * exp(-prismNormalAge / 0.13);
+        flightNormalPosition.z *= mix(0.08, 1.0, clamp(prismNormalAge / max(aDuration, 0.02), 0.0, 1.0));
+        flightDeform(flightNormalPosition, objectNormal, aBirth, aHue);
       `)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${SET_VARYINGS}\n${GROWTH}`);
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${SET_VARYINGS}\n${GROWTH}\nvec3 flightUnusedNormal = normal;\nflightDeform(transformed, flightUnusedNormal, aBirth, aHue);`);
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${FRAGMENT_DECLARATIONS}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${LIFETIME}
         float prismHue = mix(vPrismLocal.y + 0.5, clamp(vPrismHue + vPrismLocal.y * uPrismSliceWidth, 0.0, 1.0), uPrismSlice);
@@ -138,7 +154,7 @@ export function createPrismMaterial(finish: PrismFinish, profile: WebGPUMaterial
         if (prismLife < fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453)) discard;
       `);
   };
-  material.customProgramCacheKey = () => `prism-physical-${finish}-v2`;
+  material.customProgramCacheKey = () => `prism-physical-${finish}-v3`;
   return material;
 }
 

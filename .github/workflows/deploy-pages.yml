@@ -31,6 +31,10 @@ jobs:
       - run: npm run validate:glb-flight
       - run: npm run validate:static-flight
       - run: npm run validate:mixed-flight
+      - run: npm run validate:flight-effects
+      - run: npm run validate:flight-fireworks
+      - run: npm run validate:flight-motion
+      - run: npm run validate:flight-scenes
       - run: npm run validate:materials
       - run: npm run validate:state
       - run: npm run validate:menus

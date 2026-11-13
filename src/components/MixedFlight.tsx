@@ -1,3 +1,4 @@
+import { DEFAULT_FLIGHT_EFFECTS, type FlightEffectsSettings } from '../lib/flightEffects';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useXR } from '@react-three/xr';
@@ -25,9 +26,9 @@ function loadGlb(url: string) {
 
 type Source = { geometry?: THREE.BufferGeometry; template?: THREE.Object3D; clips?: THREE.AnimationClip[]; vertices: number };
 type Actor = { root: THREE.Group; assign: (data: PrismScoreData, index: number) => void;
-  update: (data: PrismScoreData, index: number, time: number, length: number, fx: number) => void; dispose: () => void };
+  update: (data: PrismScoreData, index: number, time: number, length: number, fx: number, effects?: FlightEffectsSettings) => void; dispose: () => void };
 type Slot = { channel: number; index: number; actor: Actor };
-type Pool = { update: (time: number, length: number, fx: number) => void; dispose: () => void };
+type Pool = { update: (time: number, length: number, fx: number, effects: FlightEffectsSettings) => void; dispose: () => void };
 
 function sourceKey(choice: ResolvedMixedPrismChannel) {
   return choice.kind === 'shape' ? null : `${choice.kind}:${choice.asset.file}:${choice.material === 'original' ? 'original' : 'app'}`;
@@ -61,10 +62,11 @@ async function loadSource(choice: ResolvedMixedPrismChannel): Promise<Source> {
 }
 
 export default function MixedFlight({ data, getMusicTime, channelMap, materialProfile, finish,
-  showWireframe, trailLength, colorMode = 'full', sliceWidth = 0.14, onStatus }: {
+  showWireframe, trailLength, effects = DEFAULT_FLIGHT_EFFECTS, colorMode = 'full', sliceWidth = 0.14, onStatus }: {
   data: PrismScoreData; getMusicTime?: () => { time: number; duration: number };
   channelMap: PrismChannelMap; materialProfile: WebGPUMaterialProfile; finish: PrismFinish;
   showWireframe: boolean; trailLength: number; colorMode?: PrismColorMode; sliceWidth?: number;
+  effects?: FlightEffectsSettings;
   onStatus?: (status: string) => void;
 }) {
   const group = useMemo(() => new THREE.Group(), []);
@@ -142,7 +144,7 @@ export default function MixedFlight({ data, getMusicTime, channelMap, materialPr
       return { channel, index: -1, actor };
     };
     const current: Pool = {
-      update(time, length, fx) {
+      update(time, length, fx, currentEffects) {
         const key = glbFlightRangeKey(data, time, length, releases);
         if (key !== selectionKey) {
           const selected = selectMixedFlightNotes(data, channelIndex, time, length, costs, budget);
@@ -163,7 +165,7 @@ export default function MixedFlight({ data, getMusicTime, channelMap, materialPr
           }
           selectionKey = key;
         }
-        for (const slot of slots) if (slot.index >= 0) slot.actor.update(data, slot.index, time, length, fx);
+        for (const slot of slots) if (slot.index >= 0) slot.actor.update(data, slot.index, time, length, fx, currentEffects);
       },
       dispose() { slots.forEach(slot => slot.actor.dispose()); },
     };
@@ -176,7 +178,7 @@ export default function MixedFlight({ data, getMusicTime, channelMap, materialPr
     const time = Number.isFinite(rawTime) ? Math.max(0, rawTime) : 0;
     const clock = clockStore.getState();
     pool.current?.update(time, Number.isFinite(trailLength) ? Math.max(0, trailLength) : 0,
-      clock.noteFxMode === 'off' ? 0 : Math.min(3, clock.noteFxAmount) / 2);
+      clock.noteFxMode === 'off' ? 0 : Math.min(3, clock.noteFxAmount) / 2, effects);
   });
   return <primitive object={group} dispose={null} />;
 }
