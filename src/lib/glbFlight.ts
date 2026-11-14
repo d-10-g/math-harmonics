@@ -7,6 +7,7 @@ import { prismLowerBound, type PrismScoreData } from './prismTrail';
 import type { WebGPUMaterialProfile } from '../constants';
 import type { FlightEffectsSettings } from './flightEffects';
 import { createFlightMotionSample, sampleFlightMotion } from './flightMotion';
+import { FLIGHT_CAST_GLSL, flightObjectFit, makeFlightCastUniforms, setFlightCastTransition, type FlightCastRole } from './flightActor';
 
 export const GLB_FLIGHT_LIMIT = 48;
 export const GLB_FLIGHT_XR_LIMIT = 24;
@@ -79,17 +80,21 @@ export type GlbFlightActor = {
   skeletons: Set<THREE.Skeleton>;
   assign: (data: PrismScoreData, index: number) => void;
   update: (data: PrismScoreData, index: number, time: number, length: number, fx: number, effects?: FlightEffectsSettings) => void;
+  setCastTransition: (progress: number, role: FlightCastRole) => void;
   dispose: () => void;
 };
 
 // Geometry and image maps stay owned by the cached GLTF template. Every actor
 // owns its skeletons, mixer and material instances, including authored ones.
+const normalizedTemplateFits = new WeakMap<THREE.Object3D, ReturnType<typeof flightObjectFit>>();
+
 export function createGlbFlightActor(template: THREE.Object3D, clips: THREE.AnimationClip[], materialChoice: GlbFlightMaterial,
-  wireframe: boolean, movement?: string): GlbFlightActor {
+  wireframe: boolean, movement?: string, normalizedSize = false): GlbFlightActor {
   const model = clone(template);
   const materials = new Set<THREE.Material>(), skeletons = new Set<THREE.Skeleton>();
   const originalMaterials = new Map<THREE.Material, THREE.Material>();
   const fade = { value: 1 };
+  const cast = makeFlightCastUniforms();
   const decorate = (source: THREE.Material) => {
     const existing = originalMaterials.get(source);
     if (existing) return existing;
@@ -97,12 +102,14 @@ export function createGlbFlightActor(template: THREE.Object3D, clips: THREE.Anim
     if ('wireframe' in material) material.wireframe = wireframe;
     material.onBeforeCompile = shader => {
       shader.uniforms.uGlbFlightFade = fade;
-      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uGlbFlightFade;')
+      Object.assign(shader.uniforms, cast);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\nuniform float uGlbFlightFade;\n${FLIGHT_CAST_GLSL}`)
         .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
+          flightCastDiscard();
           if (uGlbFlightFade < fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453)) discard;
         `);
     };
-    material.customProgramCacheKey = () => 'glb-flight-dither-v1';
+    material.customProgramCacheKey = () => 'glb-flight-dither-v2';
     originalMaterials.set(source, material); materials.add(material);
     return material;
   };
@@ -113,14 +120,27 @@ export function createGlbFlightActor(template: THREE.Object3D, clips: THREE.Anim
     mesh.material = Array.isArray(mesh.material) ? mesh.material.map(decorate) : decorate(mesh.material);
     if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) skeletons.add((mesh as THREE.SkinnedMesh).skeleton);
   });
+  const catPose = createCatPoseLayer(model);
   model.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(model);
-  const size = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
-  const normalization = 1 / Math.max(0.001, size.x, size.y, size.z);
+  const size = bounds.getSize(new THREE.Vector3());
+  let center = bounds.getCenter(new THREE.Vector3());
+  let normalization = 1 / Math.max(0.001, size.x, size.y, size.z);
+  if (normalizedSize) {
+    let fit = normalizedTemplateFits.get(template);
+    if (!fit) {
+      // Measure the lifted, curved tail, not the old horizontal export pose.
+      // Only the private clone is posed, then restored before mixer binding.
+      catPose?.apply({ time: 0, phase: 0, weight: 0, seed: 0 });
+      fit = flightObjectFit(model);
+      catPose?.reset(true);
+      normalizedTemplateFits.set(template, fit);
+    }
+    center = fit.center; normalization = fit.scale;
+  }
   const root = new THREE.Group(), body = new THREE.Group(), fit = new THREE.Group();
   fit.scale.setScalar(normalization); fit.position.copy(center).multiplyScalar(-normalization); fit.add(model);
   body.add(fit); root.add(body); root.visible = false;
-  const catPose = createCatPoseLayer(model);
   const clip = clips.find(c => c.name === movement) ?? clips[0];
   const mixer = clip ? new THREE.AnimationMixer(model) : null;
   const action = clip && mixer ? mixer.clipAction(clip).play() : null;
@@ -130,6 +150,7 @@ export function createGlbFlightActor(template: THREE.Object3D, clips: THREE.Anim
   let disposed = false;
   return {
     root, model, materials, skeletons,
+    setCastTransition(progress, role) { setFlightCastTransition(cast, progress, role); },
     assign(data, index) {
       matrix.fromArray(data.matrices, index * 16).decompose(root.position, root.quaternion, scale);
       // Held-note ribbon length is in matrix.z; GLB rigs keep their natural

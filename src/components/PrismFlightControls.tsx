@@ -7,6 +7,7 @@ import { normalizeFlightEffects, type FlightEffectsSettings, type FlightShowcase
 import { FLIGHT_CAMERA_STYLES, normalizeFlightCameraStyle, normalizeFlightCameraEnergy, type FlightCameraStyle } from '../lib/flightCameraStyles';
 import FlightAutoStatus from './FlightAutoStatus';
 import type { ParsedMidi } from '../lib/midi';
+import { FLIGHT_CAST_STYLES, normalizeFlightCastStyle, type FlightCastStyle } from '../lib/flightAutoCastSettings';
 
 export type PrismFlightSettings = {
   prismShape: PrismShape;
@@ -20,6 +21,8 @@ export type PrismFlightSettings = {
   prismCameraStyle: FlightCameraStyle;
   prismCameraEnergy: number;
   prismAutoDirector: boolean;
+  prismAutoCast: boolean;
+  prismCastStyle: FlightCastStyle;
 };
 
 export type PrismLook = 'spectral' | 'ornaments' | 'glass' | 'sculptures' | 'animated' | 'mixed';
@@ -70,8 +73,24 @@ export default function PrismFlightControls({ value, onChange, onLook, meshLibra
           onChange={event => onChange({ prismAutoDirector: event.target.checked })}
           className="h-4 w-4 accent-fuchsia-300" />
       </label>
-      <p className="mb-3 text-[10px] leading-relaxed text-white/45">Blend visual looks and camera styles in musical phrases. Keeps your channel meshes, materials, and backdrop choices. Manual camera or FX edits take over.</p>
-      {value.prismAutoDirector && <FlightAutoStatus midi={midi ?? null} getMusicTime={getMusicTime} />}
+      <p className="mb-3 text-[10px] leading-relaxed text-white/45">Blend visual looks and camera styles in musical phrases. Auto cast can change the channel visuals too. Manual camera or FX edits take over.</p>
+      <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-amber-100">
+        <span>Auto cast · meshes + materials</span>
+        <input aria-label="Flight auto cast" type="checkbox" checked={value.prismAutoCast}
+          disabled={!value.prismAutoDirector}
+          onChange={event => onChange({ prismAutoCast: event.target.checked })}
+          className="h-4 w-4 accent-amber-300 disabled:opacity-35" />
+      </label>
+      <p className="mt-2 text-[10px] leading-relaxed text-white/45">Each channel explores animated models, sculptures, shapes, and surfaces. Proportions stay natural and sizes match before dissolving. Off keeps your own channel cast.</p>
+      <label className="mb-3 mt-3 block text-[10px] text-white/70">Cast transition
+        <select aria-label="Flight cast transition" value={value.prismCastStyle}
+          disabled={!value.prismAutoDirector || !value.prismAutoCast}
+          onChange={event => onChange({ prismCastStyle: normalizeFlightCastStyle(event.target.value) })}
+          className={`${selectClass} disabled:opacity-35`}>
+          {FLIGHT_CAST_STYLES.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </select>
+      </label>
+      {value.prismAutoDirector && <FlightAutoStatus midi={midi ?? null} getMusicTime={getMusicTime} autoCast={value.prismAutoCast} />}
       <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-cyan-100">
         <span>Camera follow</span>
         <input aria-label="Camera follow" type="checkbox" checked={value.prismCameraFollow}
@@ -102,28 +121,29 @@ export default function PrismFlightControls({ value, onChange, onLook, meshLibra
     {value.prismAutoDirector && <p className="text-[10px] leading-relaxed text-fuchsia-100/65">The phrase above names the live look and shot. The FX dials below hold your manual mix; editing one returns to that mix.</p>}
     <FlightEffectsControls value={normalizeFlightEffects(value.prismEffects)} onChange={prismEffects => onChange({ prismEffects, ...(value.prismAutoDirector ? { prismAutoDirector: false } : {}) })} onShowcase={onShowcase} />
     <div className="grid grid-cols-2 gap-2">
-      <label className="text-[10px] text-white/65">Trail shape
+      <label className="text-[10px] text-white/65">{value.prismAutoDirector && value.prismAutoCast ? 'Manual trail shape · change to take over' : 'Trail shape'}
         <select aria-label="Prism trail shape" className={selectClass} value={value.prismShape}
-          onChange={e => onChange({ prismShape: e.target.value as PrismShape })}>
+          onChange={e => onChange({ prismShape: e.target.value as PrismShape, ...(value.prismAutoCast ? { prismAutoCast: false } : {}) })}>
           {SHAPES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
         </select>
       </label>
       <label className="text-[10px] text-white/65">{(value.prismShape === 'glb' || value.prismShape === 'mixed') ? 'Auto finish family' : 'Surface'}
         <select aria-label="Prism surface" className={selectClass} value={value.prismFinish}
-          onChange={e => onChange({ prismFinish: e.target.value as PrismFinish })}>
+          onChange={e => onChange({ prismFinish: e.target.value as PrismFinish, ...(value.prismAutoCast ? { prismAutoCast: false } : {}) })}>
           {FINISHES.map(([id, label]) => <option key={id} value={id}>{value.prismShape === 'glb' && id === 'spectrum' ? 'Spectral materials' : label}</option>)}
         </select>
       </label>
     </div>
     {value.prismShape === 'mesh' && <label className="block text-[10px] text-white/65">Sculpture from OBJ library
       <select aria-label="Prism sculpture" className={selectClass} value={value.prismMesh}
-        onChange={e => onChange({ prismMesh: e.target.value })}>
+        onChange={e => onChange({ prismMesh: e.target.value, ...(value.prismAutoCast ? { prismAutoCast: false } : {}) })}>
         {meshLibrary.map(name => <option key={name} value={name}>{name}</option>)}
       </select>
       <span className="mt-1 block text-white/40">Detailed meshes retain recent notes within the GPU budget.</span>
     </label>}
+    {value.prismAutoDirector && value.prismAutoCast && <p className="text-[10px] leading-relaxed text-amber-100/65">The phrase cast above is automatic. The settings below are your saved manual cast; editing a source, shape, or surface takes over casting.</p>}
     {(value.prismShape === 'glb' || value.prismShape === 'mixed') && <PrismChannelControls value={value.prismChannels ?? {}}
-      onChange={prismChannels => onChange({ prismChannels })} channels={midiChannels} materialProfile={materialProfile} finish={value.prismFinish} mixed={value.prismShape === 'mixed'} />}
+      onChange={prismChannels => onChange({ prismChannels, ...(value.prismAutoCast ? { prismAutoCast: false } : {}) })} channels={midiChannels} materialProfile={materialProfile} finish={value.prismFinish} mixed={value.prismShape === 'mixed'} />}
     <label className="block text-[10px] text-white/65">
       <span className="flex justify-between"><span>Flight divergence</span><span className="font-mono text-fuchsia-200">{value.prismPathSpread.toFixed(1)}×</span></span>
       <input aria-label="Prism flight divergence" type="range" min={0} max={2} step={0.1}

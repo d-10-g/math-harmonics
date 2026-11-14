@@ -27,5 +27,5 @@ export function useFlightAutoDirector(midi: ParsedMidi | null, getMusicTime: Mus
   // A newly loaded score or an enable action must show the current phrase on
   // its first paint, before this plan's first interval/effect callback fires.
   const time = clock.plan === plan ? clock.time : readTime(getMusicTime);
-  return useMemo(() => plan ? sampleFlightAutoPlan(plan, time) : null, [plan, time]);
+  return useMemo(() => plan ? { ...sampleFlightAutoPlan(plan, time), plan } : null, [plan, time]);
 }

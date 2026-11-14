@@ -4,6 +4,7 @@ import { createPhysicalMaterial } from './materials';
 import type { PrismFinish, PrismShape } from './prismTrail';
 import type { FlightEffectsSettings } from './flightEffects';
 import { FLIGHT_MOTION_GLSL, flightMotionIndex } from './flightMotion';
+import { FLIGHT_CAST_GLSL, makeFlightCastUniforms } from './flightActor';
 
 // The score is baked once into world-space instances. The camera rides the
 // guide plane while independent channel planes leave their geometry behind.
@@ -36,6 +37,9 @@ attribute float aHue;
 attribute float aCrowd;
 uniform float uPrismTime;
 uniform float uPrismFx;
+uniform float uPrismNormalized;
+uniform float uPrismLocalScale;
+uniform vec3 uPrismLocalOffset;
 ${VARYINGS}
 ${FLIGHT_MOTION_GLSL}
 `;
@@ -47,6 +51,7 @@ uniform float uPrismLength;
 uniform float uPrismFan;
 ${VARYINGS}
 ${SPECTRUM}
+${FLIGHT_CAST_GLSL}
 `;
 const SET_VARYINGS = /* glsl */ `
 vPrismAge = uPrismTime - aBirth;
@@ -54,13 +59,13 @@ vPrismVelocity = aVelocity;
 vPrismDuration = aDuration;
 vPrismHue = aHue;
 vPrismCrowd = aCrowd;
-vPrismLocal = position;
+vPrismLocal = position * uPrismLocalScale + uPrismLocalOffset;
 `;
 const GROWTH = /* glsl */ `
 float prismAge = max(vPrismAge, 0.0);
-float prismPop = 1.0 + 0.55 * aVelocity * uPrismFx * exp(-prismAge / 0.13);
+float prismPop = 1.0 + mix(0.55, 0.2, uPrismNormalized) * aVelocity * uPrismFx * exp(-prismAge / mix(0.13, 0.16, uPrismNormalized));
 transformed.xy *= prismPop;
-transformed.z *= mix(0.08, 1.0, clamp(prismAge / max(aDuration, 0.02), 0.0, 1.0));
+transformed.z *= mix(mix(0.08, 1.0, clamp(prismAge / max(aDuration, 0.02), 0.0, 1.0)), prismPop, uPrismNormalized);
 `;
 const LIFETIME = /* glsl */ `
 if (vPrismAge < 0.0) discard;
@@ -85,6 +90,7 @@ ${FRAGMENT_DECLARATIONS}
 varying vec3 vPrismNormal;
 void main() {
   ${LIFETIME}
+  flightCastDiscard();
   float x = vPrismLocal.x + 0.5;
   float y = vPrismLocal.y + 0.5;
   float halfW = 0.5 * (0.3 + 0.7 * smoothstep(0.0, 0.5, x));
@@ -92,7 +98,7 @@ void main() {
   float endFade = (1.0 - smoothstep(0.84, 1.0, x)) * smoothstep(0.0, 0.05, x);
   float fanHue = clamp((y - 0.5) / max(halfW * 2.0, 0.001) + 0.5, 0.0, 1.0);
   float hue = mix(mix(y, fanHue, uPrismFan), clamp(vPrismHue + (fanHue - 0.5) * uPrismSliceWidth, 0.0, 1.0), uPrismSlice);
-  vec3 col = prismSpectrum(pow(hue, 1.2));
+  vec3 col = prismSpectrum(pow(clamp(hue, 0.0, 1.0), 1.2));
   float age = max(vPrismAge, 0.0);
   float sounding = 1.0 - smoothstep(vPrismDuration, vPrismDuration + 0.35, age);
   float crowd = 1.0 / (1.0 + 0.3 * vPrismCrowd);
@@ -102,8 +108,9 @@ void main() {
   float brightness = (0.85 + 0.55 * vPrismVelocity) * settle * fade * crowd;
   float cap = step(0.995, vPrismLocal.z);
   float body = mix(0.3, mix(0.15, 1.0, cap), uPrismFan);
-  float rim = pow(1.0 - abs(normalize(vPrismNormal).z), 3.0);
-  float beam = exp(-pow((y - 0.5) * 9.0, 2.0)) * (1.0 - smoothstep(0.0, 0.25, x)) * uPrismFan;
+  float rim = pow(max(0.0, 1.0 - abs(normalize(vPrismNormal).z)), 3.0);
+  float beamCoord = (y - 0.5) * 9.0;
+  float beam = exp(-beamCoord * beamCoord) * (1.0 - smoothstep(0.0, 0.25, x)) * uPrismFan;
   vec3 rgb = min(col * (brightness * body + flash * 0.6 + rim * 0.35) + vec3(1.0) * beam * (0.25 * sounding + 0.4 * flash), vec3(2.5));
   float alpha = mix(0.7, inside * endFade * mix(0.22, 1.0, cap), uPrismFan) * (0.6 + 0.4 * sounding) * mix(0.5, 1.0, crowd) * prismLife;
   gl_FragColor = vec4(rgb, alpha);
@@ -116,7 +123,9 @@ export type PrismUniforms = ReturnType<typeof makePrismUniforms>;
 export function makePrismUniforms() {
   return { uPrismTime: { value: 0 }, uPrismFx: { value: 1 }, uPrismSlice: { value: 0 },
     uPrismSliceWidth: { value: 0.14 }, uPrismLength: { value: 0 }, uPrismFan: { value: 1 },
-    uFlightMotion: { value: 0 }, uFlightMotionAmount: { value: 1 }, uFlightMorph: { value: 0 } };
+    uFlightMotion: { value: 0 }, uFlightMotionAmount: { value: 1 }, uFlightMorph: { value: 0 },
+    uPrismNormalized: { value: 0 }, uPrismLocalScale: { value: 1 }, uPrismLocalOffset: { value: new THREE.Vector3() },
+    ...makeFlightCastUniforms() };
 }
 
 export function updatePrismEffectsUniforms(uniforms: PrismUniforms, effects?: FlightEffectsSettings) {
@@ -137,16 +146,18 @@ export function createPrismMaterial(finish: PrismFinish, profile: WebGPUMaterial
     shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${VERTEX_DECLARATIONS}`)
       .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
         float prismNormalAge = max(uPrismTime - aBirth, 0.0);
-        objectNormal.xy /= 1.0 + 0.55 * aVelocity * uPrismFx * exp(-prismNormalAge / 0.13);
-        objectNormal.z /= mix(0.08, 1.0, clamp(prismNormalAge / max(aDuration, 0.02), 0.0, 1.0));
+        float prismNormalPop = 1.0 + mix(0.55, 0.2, uPrismNormalized) * aVelocity * uPrismFx * exp(-prismNormalAge / mix(0.13, 0.16, uPrismNormalized));
+        objectNormal.xy /= prismNormalPop;
+        objectNormal.z /= mix(mix(0.08, 1.0, clamp(prismNormalAge / max(aDuration, 0.02), 0.0, 1.0)), prismNormalPop, uPrismNormalized);
         vec3 flightNormalPosition = position;
-        flightNormalPosition.xy *= 1.0 + 0.55 * aVelocity * uPrismFx * exp(-prismNormalAge / 0.13);
-        flightNormalPosition.z *= mix(0.08, 1.0, clamp(prismNormalAge / max(aDuration, 0.02), 0.0, 1.0));
+        flightNormalPosition.xy *= prismNormalPop;
+        flightNormalPosition.z *= mix(mix(0.08, 1.0, clamp(prismNormalAge / max(aDuration, 0.02), 0.0, 1.0)), prismNormalPop, uPrismNormalized);
         flightDeform(flightNormalPosition, objectNormal, aBirth, aHue);
       `)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${SET_VARYINGS}\n${GROWTH}\nvec3 flightUnusedNormal = normal;\nflightDeform(transformed, flightUnusedNormal, aBirth, aHue);`);
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${FRAGMENT_DECLARATIONS}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${LIFETIME}
+        flightCastDiscard();
         float prismHue = mix(vPrismLocal.y + 0.5, clamp(vPrismHue + vPrismLocal.y * uPrismSliceWidth, 0.0, 1.0), uPrismSlice);
         diffuseColor.rgb *= mix(vec3(0.035), prismSpectrum(prismHue), 0.92);
         // Dither expired solid surfaces so depth and glass stay physically
@@ -154,7 +165,7 @@ export function createPrismMaterial(finish: PrismFinish, profile: WebGPUMaterial
         if (prismLife < fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453)) discard;
       `);
   };
-  material.customProgramCacheKey = () => `prism-physical-${finish}-v3`;
+  material.customProgramCacheKey = () => `prism-physical-${finish}-v4`;
   return material;
 }
 

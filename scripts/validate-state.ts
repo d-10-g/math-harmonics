@@ -24,7 +24,7 @@ const state: Required<SharedState> = {
   prismColor: 'chroma', prismSlice: 0.14, prismPerChannel: true, prismShape: 'mesh', prismFinish: 'glass',
   prismPathSpread: 0.8, prismTrailLength: 25, prismMesh: 'Star',
   prismEffects: { bursts: 0.8, shockwaves: 1.2, lasers: 1.1, tracers: 0.7, auroras: 0.55, constellations: 1.1, gyroscopes: 0.8, lightning: 0.7, petals: 0.4, bubbles: 0.9, ribbons: 0.8, crystals: 0.7, vortexes: 0.4, motion: 'butterfly', motionAmount: 0.9, morph: 0.6 },
-  prismCameraFollow: true, prismCameraStyle: 'cinematic', prismCameraEnergy: 1.25, prismAutoDirector: true,
+  prismCameraFollow: true, prismCameraStyle: 'cinematic', prismCameraEnergy: 1.25, prismAutoDirector: true, prismAutoCast: true, prismCastStyle: 'together',
   prismChannels: {
     0: { asset: 'Ernie_model.glb', material: 'ornament', movement: '01_Head_nod' },
     1: { asset: 'Kira_model.glb', material: 'glass', movement: 'Kira_08_Little_chirp' },
@@ -45,6 +45,19 @@ persistSharedState(mixedState);
 assert.deepEqual(loadSharedState(), mixedState, 'Mixed source kinds, shape ids, meshes, materials, and GLB movements round-trip');
 window.localStorage.clear();
 assert.deepEqual(loadSharedState(), mixedState, 'Mixed flights reproduce from a link without prior storage');
+persistSharedState(state);
+
+window.location.hash = '#pac=0&pct=ripple';
+assert.equal(loadSharedState().prismAutoCast, false, 'A shared Off wins over saved automatic casting');
+assert.equal(loadSharedState().prismCastStyle, 'ripple');
+window.location.hash = '#pac=maybe&pct=unknown';
+assert.equal(loadSharedState().prismAutoCast, true, 'Invalid flags retain the saved cast preference');
+assert.equal(loadSharedState().prismCastStyle, 'together');
+persistSharedState({ ...state, prismAutoCast: false });
+window.localStorage.clear();
+assert.equal(loadSharedState().prismAutoCast, false, 'Cast Off survives a copied link without storage');
+window.location.hash = '#pad=1';
+assert.equal(loadSharedState().prismAutoCast, undefined, 'Existing director links keep their manual cast');
 persistSharedState(state);
 
 window.location.hash = '#pad=0';
@@ -136,6 +149,9 @@ assert.equal(item('Camera follow').kind, 'toggle');
 assert.equal(item('Camera follow').active, true, 'VR reads the exact desktop camera-follow state');
 assert.equal(item('Flight auto director').kind, 'toggle');
 assert.equal(item('Flight auto director').active, true, 'VR exposes the same music-driven director toggle');
+assert.equal(item('Flight auto cast').active, true, 'VR exposes the same automatic casting option');
+assert.deepEqual(item('Flight cast transition').options.map(option => option.value), ['ripple', 'together']);
+assert.equal(item('Flight cast transition').value, 'together');
 assert.deepEqual(item('Camera follow style').options.map(option => option.value), ['balanced', 'chase', 'orbit', 'cinematic']);
 assert.equal(item('Camera follow style').value, 'cinematic');
 assert.equal(item('Camera musical energy').min, 0);

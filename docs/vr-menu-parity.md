@@ -1,5 +1,9 @@
 # VR menus
 
+## Automatic cast transitions (v2.22.0)
+
+`Controls · Flight camera` adds **Flight auto cast** and **Flight cast transition** (Channel ripple / Ensemble dissolve). Casting requires Auto director; the style selector requires both toggles. Their native controls provide the same state, disabled behavior, and options to the spatial menu. Automatic casts use normalized meshes and the same note positions during crossfades, with two half-budget layers keeping combined XR work within the ordinary limits. Manual channel/shape/surface edits release automatic casting; camera/FX direction can continue. Both options persist in shared links (`pac`, `pct`). Validate with `validate:flight-auto-cast`, `validate:flight-actors`, `validate:state`, `validate:flight-effects`, `validate:menus`, and the mixed-flight regressions. Headset performance still needs hardware verification.
+
 ## Automatic performances and cat expression (v2.21.0)
 
 `Controls · Flight camera` includes the saved **Flight auto director** toggle and current musical phrase/look/shot status. The same control starts score-driven six-second FX dissolves and smoothly eased camera styles on desktop and in VR. Manual camera/FX edits disable auto direction; model/channel/material edits keep it running with the chosen cast. XR transforms only the virtual stage, preserving headset tracking and user placement. The three new physical profiles and Petrol Nebula, Mermaid Lagoon, and Solar Forge showcases appear in the existing shared selectors/buttons. Both cat rendering paths use the same natural stance and expressive bone layer; model-stage Gesture strength retains its range and behavior. Validate with `validate:state`, `validate:flight-effects`, `validate:flight-auto-director`, `validate:cat-poses`, and `validate:menus`; hardware comfort/performance still needs device testing.

@@ -6,6 +6,7 @@ import type { PrismScoreData } from './prismTrail';
 import type { FlightEffectsSettings } from './flightEffects';
 import { createFlightMotionSample, sampleFlightMotion } from './flightMotion';
 import { createPrismGeometry, createPrismMaterial, makePrismUniforms, updatePrismEffectsUniforms } from './prismRender';
+import { FLIGHT_CAST_GLSL, flightObjectFit, makeFlightCastUniforms, normalizeFlightGeometry, setFlightCastTransition, type FlightCastRole } from './flightActor';
 
 export type StaticFlightOptions = {
   shape: PrismStaticShape | 'mesh';
@@ -15,6 +16,7 @@ export type StaticFlightOptions = {
   wireframe: boolean;
   colorMode?: PrismColorMode;
   sliceWidth?: number;
+  normalizedSize?: boolean;
 };
 
 export type StaticFlightActor = {
@@ -22,6 +24,7 @@ export type StaticFlightActor = {
   vertexCount: number;
   assign: (data: PrismScoreData, index: number) => void;
   update: (data: PrismScoreData, index: number, time: number, length: number, fx: number, effects?: FlightEffectsSettings) => void;
+  setCastTransition: (progress: number, role: FlightCastRole) => void;
   dispose: () => void;
 };
 
@@ -38,10 +41,11 @@ export function staticFlightVertexCount(source: THREE.Object3D | THREE.BufferGeo
 // OBJ templates own their shared geometry and texture maps. An authored
 // actor clones only materials; transforms perform the same held-stroke
 // growth as the instanced shader without merging away material groups.
-function createAuthoredActor(template: THREE.Object3D, wireframe: boolean): StaticFlightActor {
+function createAuthoredActor(template: THREE.Object3D, wireframe: boolean, normalizedSize = false): StaticFlightActor {
   const model = template.clone(true);
   const materials = new Map<THREE.Material, THREE.Material>();
   const fade = { value: 1 };
+  const cast = makeFlightCastUniforms();
   model.traverse(object => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -53,13 +57,15 @@ function createAuthoredActor(template: THREE.Object3D, wireframe: boolean): Stat
       if ('wireframe' in material) material.wireframe = wireframe;
       material.onBeforeCompile = shader => {
         shader.uniforms.uStaticFlightFade = fade;
+        Object.assign(shader.uniforms, cast);
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', '#include <common>\nuniform float uStaticFlightFade;')
+          .replace('#include <common>', `#include <common>\nuniform float uStaticFlightFade;\n${FLIGHT_CAST_GLSL}`)
           .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
+            flightCastDiscard();
             if (uStaticFlightFade < fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453)) discard;
           `);
       };
-      material.customProgramCacheKey = () => 'static-flight-authored-v1';
+      material.customProgramCacheKey = () => 'static-flight-authored-v2';
       materials.set(source, material);
       return material;
     };
@@ -67,33 +73,39 @@ function createAuthoredActor(template: THREE.Object3D, wireframe: boolean): Stat
   });
   model.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(model);
-  const center = bounds.getCenter(new THREE.Vector3());
+  let center = bounds.getCenter(new THREE.Vector3());
   const size = bounds.getSize(new THREE.Vector3());
-  const normalization = 1 / Math.max(0.001, size.x, size.y, size.z);
+  let normalization = 1 / Math.max(0.001, size.x, size.y, size.z);
+  if (normalizedSize) {
+    const fit = flightObjectFit(model);
+    center = fit.center; normalization = fit.scale;
+  }
   const root = new THREE.Group(), body = new THREE.Group(), fit = new THREE.Group();
   fit.scale.setScalar(normalization);
   fit.position.copy(center).multiplyScalar(-normalization);
-  fit.position.z += 0.5;
+  if (!normalizedSize) fit.position.z += 0.5;
   fit.add(model); body.add(fit); root.add(body); root.visible = false;
   const matrix = new THREE.Matrix4();
   const motion = createFlightMotionSample();
   let disposed = false;
   return {
     root, vertexCount: staticFlightVertexCount(model),
+    setCastTransition(progress, role) { setFlightCastTransition(cast, progress, role); },
     assign(data, index) {
       matrix.fromArray(data.matrices, index * 16).decompose(root.position, root.quaternion, root.scale);
+      if (normalizedSize) root.scale.setScalar(root.scale.x);
       root.visible = true;
     },
     update(data, index, time, length, fx, effects) {
       const age = time - data.birth[index];
       root.visible = age >= 0 && (length <= 0 || age < length);
       if (!root.visible) return;
-      const pop = 1 + 0.55 * data.velocity[index] * fx * Math.exp(-age / 0.13);
+      const pop = 1 + (normalizedSize ? 0.2 : 0.55) * data.velocity[index] * fx * Math.exp(-age / (normalizedSize ? 0.16 : 0.13));
       const growth = THREE.MathUtils.lerp(0.08, 1, THREE.MathUtils.clamp(age / Math.max(data.duration[index], 0.02), 0, 1));
       sampleFlightMotion(data.birth[index], data.hue[index], time, effects, motion);
       body.position.copy(motion.offset);
       body.rotation.set(motion.rotation.x, motion.rotation.y, motion.rotation.z);
-      body.scale.set(pop * motion.scale.x, pop * motion.scale.y, growth * motion.scale.z);
+      body.scale.set(pop * motion.scale.x, pop * motion.scale.y, (normalizedSize ? pop : growth) * motion.scale.z);
       fade.value = length > 0 ? THREE.MathUtils.smoothstep(length - age, 0, Math.min(2, length)) : 1;
     },
     dispose() {
@@ -110,9 +122,17 @@ function createAuthoredActor(template: THREE.Object3D, wireframe: boolean): Stat
 // Each pooled actor owns its clone and attributes, so changing a channel's
 // model or finish never destroys a cached OBJ or leaks instance buffers.
 export function createStaticFlightActor(options: StaticFlightOptions): StaticFlightActor {
-  if (options.material === 'original' && options.template) return createAuthoredActor(options.template, options.wireframe);
+  if (options.material === 'original' && options.template) return createAuthoredActor(options.template, options.wireframe, options.normalizedSize);
   const geometry = createPrismGeometry(options.shape, options.geometry ?? null);
+  const normalization = options.normalizedSize ? normalizeFlightGeometry(geometry) : null;
   const uniforms = makePrismUniforms();
+  uniforms.uPrismNormalized.value = options.normalizedSize ? 1 : 0;
+  if (normalization) {
+    // Shading keeps its canonical 0..1 cap/hue coordinates after the actual
+    // vertices are fitted to the common centered actor footprint.
+    uniforms.uPrismLocalScale.value = 1 / normalization.scale;
+    uniforms.uPrismLocalOffset.value.copy(normalization.center);
+  }
   uniforms.uPrismSlice.value = options.colorMode && options.colorMode !== 'full' ? 1 : 0;
   uniforms.uPrismSliceWidth.value = options.sliceWidth ?? 0.14;
   uniforms.uPrismFan.value = options.shape === 'spectrum' ? 1 : 0;
@@ -124,11 +144,17 @@ export function createStaticFlightActor(options: StaticFlightOptions): StaticFli
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
   const root = new THREE.Group(); root.add(mesh); root.visible = false;
+  const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3();
   let disposed = false;
   return {
     root, vertexCount: staticFlightVertexCount(geometry),
+    setCastTransition(progress, role) { setFlightCastTransition(uniforms, progress, role); },
     assign(data, index) {
-      (mesh.instanceMatrix.array as Float32Array).set(data.matrices.subarray(index * 16, index * 16 + 16));
+      if (options.normalizedSize) {
+        matrix.fromArray(data.matrices, index * 16).decompose(position, quaternion, scale);
+        scale.setScalar(scale.x); matrix.compose(position, quaternion, scale);
+        matrix.toArray(mesh.instanceMatrix.array, 0);
+      } else (mesh.instanceMatrix.array as Float32Array).set(data.matrices.subarray(index * 16, index * 16 + 16));
       mesh.instanceMatrix.needsUpdate = true;
       const values = [data.birth, data.duration, data.velocity, data.hue, data.crowd];
       names.forEach((name, attributeIndex) => {

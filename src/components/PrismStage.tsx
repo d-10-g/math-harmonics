@@ -9,6 +9,7 @@ import { isValidMeshName, loadMeshGeometry } from '../lib/meshLibrary';
 import type { PrismColorMode } from '../lib/urlState';
 import AnimatedGlbFlight from './AnimatedGlbFlight';
 import MixedFlight from './MixedFlight';
+import AutoCastFlight from './AutoCastFlight';
 import FlightFireworks from './FlightFireworks';
 import FlightSculptures from './FlightSculptures';
 import FlightSpectacle from './FlightSpectacle';
@@ -18,23 +19,27 @@ import type { FlightCameraStyle } from '../lib/flightCameraStyles';
 import { DEFAULT_FLIGHT_EFFECTS, FLIGHT_SHOWCASES, type FlightEffectsSettings } from '../lib/flightEffects';
 import { blendFlightAutoEffects } from '../lib/flightAutoDirector';
 import { useFlightAutoDirector } from '../lib/useFlightAutoDirector';
+import type { FlightCastStyle } from '../lib/flightAutoCastSettings';
 import type { PrismChannelMap } from '../lib/prismChannels';
 import { buildPrismScore, prismInstanceBudget, prismVisibleRange, samplePrismPose, type PrismFinish, type PrismShape } from '../lib/prismTrail';
 
 const showcaseEffects = new Map(FLIGHT_SHOWCASES.map(scene => [scene.id, scene.effects]));
 
 export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode = 'full', sliceWidth = 0.14,
-  perChannel = false, shape = 'spectrum', finish = 'spectrum', pathSpread = 1, trailLength = 0,
+  perChannel = false, shape: manualShape = 'spectrum', finish = 'spectrum', pathSpread = 1, trailLength = 0,
   materialProfile = 'auto', meshId = 'Star', showWireframe = false, channelMap, onStatus, effects: manualEffects = DEFAULT_FLIGHT_EFFECTS,
-  cameraFollow = false, cameraStyle: manualCameraStyle = 'balanced', cameraEnergy = 1, manualUntilRef, autoDirector = false }: {
+  cameraFollow = false, cameraStyle: manualCameraStyle = 'balanced', cameraEnergy = 1, manualUntilRef, autoDirector = false,
+  autoCast = false, castStyle = 'ripple' }: {
   midi: ParsedMidi | null; getMusicTime?: () => { time: number; duration: number }; noteSpread: number;
   colorMode?: PrismColorMode; sliceWidth?: number; perChannel?: boolean; shape?: PrismShape; finish?: PrismFinish;
   pathSpread?: number; trailLength?: number; materialProfile?: WebGPUMaterialProfile; meshId?: string; showWireframe?: boolean; channelMap?: PrismChannelMap; onStatus?: (status: string) => void; effects?: FlightEffectsSettings;
   cameraFollow?: boolean; manualUntilRef?: RefObject<number>;
   cameraStyle?: FlightCameraStyle; cameraEnergy?: number;
   autoDirector?: boolean;
+  autoCast?: boolean; castStyle?: FlightCastStyle;
 }) {
   const auto = useFlightAutoDirector(midi, getMusicTime, autoDirector);
+  const shape = auto && autoCast ? 'mixed' : manualShape;
   const effects = useMemo(() => auto
     ? blendFlightAutoEffects(showcaseEffects.get(auto.previous.scene)!, showcaseEffects.get(auto.section.scene)!, auto.blend)
     : manualEffects, [auto, manualEffects]);
@@ -125,7 +130,10 @@ export default function PrismStage({ midi, getMusicTime, noteSpread, colorMode =
       {(effects.auroras > 0 || effects.constellations > 0 || effects.gyroscopes > 0) && <FlightSculptures data={data} getMusicTime={getMusicTime} settings={effects} />}
       {(effects.lightning > 0 || effects.petals > 0 || effects.bubbles > 0) && <FlightSpectacle data={data} getMusicTime={getMusicTime} settings={effects} />}
       {(effects.ribbons > 0 || effects.crystals > 0 || effects.vortexes > 0) && <FlightPhenomena data={data} getMusicTime={getMusicTime} settings={effects} />}
-      {shape === 'mixed' ? <MixedFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} colorMode={colorMode} sliceWidth={sliceWidth} /> : shape === 'glb' ? <AnimatedGlbFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} /> : mesh && <primitive object={mesh.instances} dispose={null} />}
+      {auto && autoCast && midi ? <AutoCastFlight midi={midi} data={data} plan={auto.plan} index={auto.index}
+        getMusicTime={getMusicTime} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe}
+        trailLength={trailLength} effects={effects} onStatus={onStatus} colorMode={colorMode} sliceWidth={sliceWidth} transitionStyle={castStyle} />
+        : shape === 'mixed' ? <MixedFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} colorMode={colorMode} sliceWidth={sliceWidth} /> : shape === 'glb' ? <AnimatedGlbFlight data={data} getMusicTime={getMusicTime} channelMap={channelMap ?? {}} materialProfile={materialProfile} finish={finish} showWireframe={showWireframe} trailLength={trailLength} effects={effects} onStatus={onStatus} /> : mesh && <primitive object={mesh.instances} dispose={null} />}
     </group>
   </group><FlightCameraDirector enabled={autoDirector || cameraFollow} style={cameraStyle} energy={cameraEnergy} data={data} trailRef={trailRef} stageRef={stageRef} framingRef={framingRef} getMusicTime={getMusicTime} effects={effects} manualUntilRef={manualUntilRef} /></group>;
 }

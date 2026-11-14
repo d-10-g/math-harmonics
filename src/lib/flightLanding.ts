@@ -14,6 +14,7 @@ export function flightLandingState(saved: SharedState): SharedState {
     prismTrailLength: scene.memory, prismMesh: 'Star', prismChannels: scene.channels, prismEffects: scene.effects,
     prismCameraFollow: true, prismCameraStyle: 'balanced', prismCameraEnergy: 1,
     prismAutoDirector: false,
+    prismAutoCast: false, prismCastStyle: 'ripple',
     ...saved,
   };
 }

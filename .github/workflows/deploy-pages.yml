@@ -37,6 +37,9 @@ jobs:
       - run: npm run validate:flight-spectacle
       - run: npm run validate:flight-camera
       - run: npm run validate:flight-auto-director
+      - run: npm run validate:flight-auto-cast
+      - run: npm run validate:flight-actors
+      - run: npm run validate:flight-cast-transition
       - run: npm run validate:cat-poses
       - run: npm run validate:flight-phenomena
       - run: npm run validate:flight-landing

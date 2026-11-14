@@ -1,5 +1,6 @@
 import type { FlightEffectsSettings } from '../lib/flightEffects';
 import type { FlightCameraStyle } from '../lib/flightCameraStyles';
+import type { FlightCastStyle } from '../lib/flightAutoCastSettings';
 import VisualCopies from './VisualCopies';
 import { channelPath, DEFAULT_NOTE_LAYOUT, type NoteLayoutSettings } from '../lib/noteLayout';
 import { useRef, useMemo, useState, useEffect } from 'react';
@@ -1003,6 +1004,8 @@ interface GraphViewProps {
   prismCameraStyle?: FlightCameraStyle;
   prismCameraEnergy?: number;
   prismAutoDirector?: boolean;
+  prismAutoCast?: boolean;
+  prismCastStyle?: FlightCastStyle;
   setNoteDisplay?: (mode: 'sounding' | 'all') => void;
   meshLibrary?: string[];
 }
@@ -2728,6 +2731,8 @@ export default function GraphView({
   prismCameraStyle = 'balanced',
   prismCameraEnergy = 1,
   prismAutoDirector = false,
+  prismAutoCast = false,
+  prismCastStyle = 'ripple',
 }: GraphViewProps) {
   const formulaGeometryMode = useMemo(() => resolveFormulaGeometryMode(formula), [formula]);
   const [prismStatus, setPrismStatus] = useState('');
@@ -2836,7 +2841,7 @@ export default function GraphView({
 
             <group ref={mirrorAnchorRef} />
             {noteSource === 'prism' && show3D ? (
-              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} effects={prismEffects} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} cameraFollow={prismCameraFollow} cameraStyle={prismCameraStyle} cameraEnergy={prismCameraEnergy} autoDirector={prismAutoDirector} manualUntilRef={flightManualUntilRef} />
+              <PrismStage midi={midi} getMusicTime={getMusicTime} noteSpread={noteSpread ?? 5} colorMode={prismColor} sliceWidth={prismSlice} perChannel={prismPerChannel} shape={prismShape} finish={prismFinish} pathSpread={prismPathSpread} trailLength={prismTrailLength} meshId={prismMesh} channelMap={prismChannels} effects={prismEffects} onStatus={setPrismStatus} materialProfile={webgpuMaterial} showWireframe={showWireframe} cameraFollow={prismCameraFollow} cameraStyle={prismCameraStyle} cameraEnergy={prismCameraEnergy} autoDirector={prismAutoDirector} autoCast={prismAutoCast} castStyle={prismCastStyle} manualUntilRef={flightManualUntilRef} />
             ) : noteMeshes && show3D ? (
               <VisualCopies settings={noteLayout}><NoteConstellation
                 noteLayout={noteLayout}
@@ -2965,7 +2970,7 @@ export default function GraphView({
               <div className="text-[10px] font-mono text-indigo-400 uppercase tracking-widest">{noteSource === 'prism' ? 'Prism Flight' : formula.name}</div>
             </div>
             <div className="bg-black/40 border border-white/5 backdrop-blur px-2 py-1 rounded text-[8px] font-mono text-white/30 truncate max-w-[200px]">
-              {noteSource === 'prism' ? `${prismShape} · ${prismFinish} · ${prismPerChannel ? 'channel planes' : 'shared plane'}` : formula.description}
+              {noteSource === 'prism' ? `${prismAutoDirector && prismAutoCast ? 'auto cast · equal-size dissolves' : `${prismShape} · ${prismFinish}`} · ${prismPerChannel ? 'channel planes' : 'shared plane'}` : formula.description}
             </div>
           </div>
 

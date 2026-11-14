@@ -1,5 +1,6 @@
 import { normalizeFlightEffects, type FlightEffectsSettings } from './flightEffects';
 import { FLIGHT_CAMERA_STYLES, type FlightCameraStyle } from './flightCameraStyles';
+import { FLIGHT_CAST_STYLES, type FlightCastStyle } from './flightAutoCastSettings';
 import { normalizePrismChannels, type PrismChannelMap } from './prismChannels';
 import type { PrismShape, PrismFinish } from './prismTrail';
 import { MESH_LIBRARY } from './meshManifest';
@@ -70,6 +71,8 @@ export type SharedState = {
   prismCameraStyle?: FlightCameraStyle;
   prismCameraEnergy?: number;
   prismAutoDirector?: boolean;
+  prismAutoCast?: boolean;
+  prismCastStyle?: FlightCastStyle;
   // Alphabet Sphere (the Letters page): stereo view, baseline, relief,
   // collimation, point size, tour and rings.
   alphabet?: Partial<AlphabetSettings>;
@@ -126,6 +129,8 @@ function parseParams(params: URLSearchParams): SharedState {
   state.prismPerChannel = flag('ppc');
   state.prismCameraFollow = flag('pcf');
   state.prismAutoDirector = flag('pad');
+  state.prismAutoCast = flag('pac');
+  state.prismCastStyle = oneOf(read('pct'), FLIGHT_CAST_STYLES.map(([id]) => id));
   state.prismCameraStyle = oneOf(read('pcs'), FLIGHT_CAMERA_STYLES.map(([id]) => id));
   const cameraEnergy = read('pce');
   if (cameraEnergy !== undefined && cameraEnergy.trim() !== '' && Number.isFinite(Number(cameraEnergy))) state.prismCameraEnergy = Math.max(0, Math.min(2, Number(cameraEnergy)));
@@ -187,7 +192,7 @@ function sanitizeStoredState(value: unknown): SharedState {
     lineWidth: 'lw', cycleFavoritesOnly: 'cf', autoPilotShuffle: 'sh', postFX: 'fx', bloomIntensity: 'bl',
     audioSource: 'asrc', noteMeshes: 'nm', noteFxAmount: 'nfa', noteFxMode: 'nfm', noteSpread: 'nsp',
     noteSource: 'nsc', meshUseMtl: 'nml', meshAssign: 'nas', noteDisplay: 'nds', prismColor: 'pcm',
-    prismSlice: 'psw', prismPerChannel: 'ppc', prismCameraFollow: 'pcf', prismCameraStyle: 'pcs', prismCameraEnergy: 'pce', prismAutoDirector: 'pad', prismShape: 'psh', prismFinish: 'pfi',
+    prismSlice: 'psw', prismPerChannel: 'ppc', prismCameraFollow: 'pcf', prismCameraStyle: 'pcs', prismCameraEnergy: 'pce', prismAutoDirector: 'pad', prismAutoCast: 'pac', prismCastStyle: 'pct', prismShape: 'psh', prismFinish: 'pfi',
     prismPathSpread: 'ppd', prismTrailLength: 'ptl', prismMesh: 'pms',
   };
   const params = new URLSearchParams();
@@ -272,6 +277,8 @@ export function persistSharedState(state: Required<Omit<SharedState, 'formulaId'
   params.set('ppc', state.prismPerChannel ? '1' : '0');
   params.set('pcf', state.prismCameraFollow ? '1' : '0');
   params.set('pad', state.prismAutoDirector ? '1' : '0');
+  params.set('pac', state.prismAutoCast ? '1' : '0');
+  params.set('pct', state.prismCastStyle);
   params.set('pcs', state.prismCameraStyle);
   params.set('pce', String(state.prismCameraEnergy));
   params.set('psh', state.prismShape);

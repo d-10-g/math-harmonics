@@ -21,6 +21,8 @@ assert.equal(defaults.prismCameraFollow, true);
 assert.equal(defaults.prismCameraStyle, 'balanced');
 assert.equal(defaults.prismCameraEnergy, 1);
 assert.equal(defaults.prismAutoDirector, false, 'Automatic directing is an optional performance mode');
+assert.equal(defaults.prismAutoCast, false, 'Existing flights keep their chosen cast');
+assert.equal(defaults.prismCastStyle, 'ripple');
 assert.equal(defaults.showStarfield, false);
 assert.equal(defaults.webgpuLightingPreset, jelly.lighting);
 assert.equal(defaults.autoStyle, false, 'Formula auto-style cannot replace the landing scene');

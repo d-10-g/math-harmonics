@@ -19,6 +19,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { normalizeFlightEffects, type FlightShowcase } from './lib/flightEffects';
 import { flightScene } from './lib/flightScenes';
 import { normalizeFlightCameraStyle, normalizeFlightCameraEnergy } from './lib/flightCameraStyles';
+import { normalizeFlightCastStyle } from './lib/flightAutoCastSettings';
 import { flightLandingState } from './lib/flightLanding';
 import { MIDI_LIBRARY, DEFAULT_LANDING_SCORE_ID } from './lib/musicLibrary';
 
@@ -459,6 +460,8 @@ export default function App() {
     prismCameraStyle: normalizeFlightCameraStyle(initialShared.prismCameraStyle),
     prismCameraEnergy: normalizeFlightCameraEnergy(initialShared.prismCameraEnergy),
     prismAutoDirector: initialShared.prismAutoDirector ?? false,
+    prismAutoCast: initialShared.prismAutoCast ?? false,
+    prismCastStyle: normalizeFlightCastStyle(initialShared.prismCastStyle),
   });
   const applyPrismLook = (look: PrismLook) => {
     setNoteSource('prism');
@@ -488,6 +491,7 @@ export default function App() {
       prismCameraStyle: prismFlight.prismCameraStyle,
       prismCameraEnergy: prismFlight.prismCameraEnergy,
       prismAutoDirector: false,
+      prismAutoCast: false, prismCastStyle: prismFlight.prismCastStyle,
     });
   };
   const applyFlightShowcase = (id: FlightShowcase) => {
@@ -518,7 +522,8 @@ export default function App() {
     setPrismFlight({ prismShape: 'mixed', prismFinish: scene.finish, prismPathSpread: scene.spread,
       prismTrailLength: scene.memory, prismMesh: 'Star', prismChannels: scene.channels, prismEffects: scene.effects,
       prismCameraFollow: prismFlight.prismCameraFollow, prismCameraStyle: prismFlight.prismCameraStyle,
-      prismCameraEnergy: prismFlight.prismCameraEnergy, prismAutoDirector: false });
+      prismCameraEnergy: prismFlight.prismCameraEnergy, prismAutoDirector: false,
+      prismAutoCast: false, prismCastStyle: prismFlight.prismCastStyle });
   };
   const changePrismFlight = (patch: Partial<PrismFlightSettings>) => {
     if (patch.prismAutoDirector === true) {
@@ -1924,6 +1929,8 @@ export default function App() {
                 prismCameraStyle={prismFlight.prismCameraStyle}
                 prismCameraEnergy={prismFlight.prismCameraEnergy}
                 prismAutoDirector={prismFlight.prismAutoDirector}
+                prismAutoCast={prismFlight.prismAutoCast}
+                prismCastStyle={prismFlight.prismCastStyle}
                 webgpuLighting={webgpuLighting}
                 webgpuLightingPreset={webgpuLightingPreset}
                 webgpuMaterial={webgpuMaterial}
@@ -2146,7 +2153,7 @@ export default function App() {
         <div className="hidden md:flex gap-8">
           <span>Phase t: [0, 4π]</span>
           <FooterVerts />
-          <span>Mode: {pageMode === 'letters' ? 'ALPHABET SPHERE' : noteSource === 'prism' ? `PRISM / ${prismFlight.prismShape.toUpperCase()}` : noteSource !== 'formula' ? noteSource.toUpperCase() : show3D ? (selectedFormula.parametric ? 'SURFACE(P,Q)' : (webgpuGeometry !== 'auto' ? webgpuGeometry : selectedFormula.geometryMode)?.toUpperCase() || 'VARIED_3D') : 'ORTHO_2D'}</span>
+          <span>Mode: {pageMode === 'letters' ? 'ALPHABET SPHERE' : noteSource === 'prism' ? (prismFlight.prismAutoDirector && prismFlight.prismAutoCast ? 'PRISM / AUTO CAST' : `PRISM / ${prismFlight.prismShape.toUpperCase()}`) : noteSource !== 'formula' ? noteSource.toUpperCase() : show3D ? (selectedFormula.parametric ? 'SURFACE(P,Q)' : (webgpuGeometry !== 'auto' ? webgpuGeometry : selectedFormula.geometryMode)?.toUpperCase() || 'VARIED_3D') : 'ORTHO_2D'}</span>
         </div>
         <FooterStats />
       </footer>
